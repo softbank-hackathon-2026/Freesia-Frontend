@@ -1,0 +1,37 @@
+# API contracts: current and proposed
+
+## Current FastAPI contract — implemented adapter
+Source: Freesia-backend/app/schemas.py and app/routers at HEAD 0d9061bbc3f74c260e4cceb32f72cb60cf1dae63. No prefix. Default Vite /api proxy forwards to localhost:8000.
+- GET /infra-spaces, GET /infra-spaces/{id}: ready foundation samples, fields id/name/description/network/computes/app_count. network ha is backend literal, not proof of private or Multi AZ topology.
+- GET/POST /app-spaces, GET /app-spaces/{id}. POST name/repo_url/branch/infra_id. IDs must come from API foundation list, never local source-generated designs.
+- POST/GET /app-spaces/{id}/analysis: requirements/evidence/candidates/mascot_message. Candidates selected/alternative/unsuitable remain server recommendation; user selection is separate.
+- POST /app-spaces/{id}/deployments: {compute}. GET /deployments/{id}. GET /deployments/{id}/events emits event: progress with status/step/message/progress/url/at; close terminal, errors, unmount/source change.
+- Structured errors {error,message}, 400/404/422/500. NonJSON/connection/schema failures become visible errors; no demo fallback.
+- All existing app/analysis/deploy handlers use samples/in-memory state. No actual GitHub analysis, AI, cloud deployment or customer app health check. /health is platform backend health only.
+
+## Current UI meeting flow — local DEMO only
+Main destinations: Infra / Application / Integration. Role switch is a screen demonstration, not authentication/RBAC.
+- Infra administrator creates named Space for an explicit sample enterprise/target and region, chooses Public-centric / Multi-AZ / DB-isolated template, then explicitly starts DEMO infrastructure deployment. Application administrator reads foundations without create/edit/deploy controls.
+- `source_generated` means unbuilt code. `demo_deployed` means only a browser foundation sample eligible for the local application demo. Neither state proves real provider resources or is sent to backend as provisioned. Three original sample foundation IDs remain stable for old v1 app records.
+- Current Infra Terraform is a fixed VPC/Subnet draft plus optional public route/gateway. DB isolation, Bastion, VPC Gateway Endpoint, ALB, ECS Cluster, IAM, NAT and full working deployment are not generated/validated/applied. Template metadata is an explanation, not discovered AWS state.
+- Integration simulates GitHub connection and lists fixed repository metadata. Users explicitly register repositories. Connected but unregistered repos are excluded from app creation. No OAuth, repository fetch, credentials, commit, push or Actions invocation is performed.
+- New App Space chooses a registered repository/branch and named enterprise/target Space. There is no Repository URL input in Application, including API mode. LINE/AWS labels are sample target categories; organization-to-provider mapping is unconfirmed and no network topology is inferred from them.
+- Deploy click displays fixed code evidence, mascot, read-only branching explanation and eligible candidate cards. Server/sample recommendation and user selection remain separate. Unsuitable or unsupported candidates are excluded rather than used as filler.
+- Selected candidate prepares a fixed, incomplete Terraform code snippet for `.freesia/app/main.tf`. The review displays selected repo, branch, path and compute. Code alone does not start a pipeline and is not executable as-is; artifacts/IAM/service/network details are omitted. No repository content is interpolated into executable source.
+- Explicit DEMO commit/push + CI/CD start stores one Deployment with optional `demo_pipeline` metadata (plan/phase/failCI/sample commit). Seven local steps show code preparation, commit, push, build, CI check, resource creation, app deployment/check. DEMO commit/run identifiers are not actual GitHub objects, no invented working Actions URL or app endpoint is created.
+- CI failure simulation reports failed status; retry creates a new DEMO run with the reviewed plan. Back/source change/unmount stops local progress; reopening/reloading resumes the remaining stored phase. Completed/failed runs do not silently restart. Existing API SSE cleanup and nonterminal reentry remain unchanged.
+- API mode retains existing app GET, analysis, deployment and named progress events. New creation is disabled because GitHub repository registration contract is absent. Infra create/provision and GitHub integration are visibly unsupported. There is no local demo ID submission, fake route or automatic demo fallback.
+- Logs/metrics remain fixed local samples; API unsupported. Backend `/health` is platform health, not customer application health.
+
+## Local persistence and boundaries
+Versioned localStorage key `freesia.demo.v1` retains existing designs/apps/deployments and optional meeting metadata (Infra Spaces, sample connection, registered repo IDs). Optional demo pipeline lives on the existing Deployment; no parallel shadow pipeline store.
+Legacy guided conversation remains a separate unbuilt design: free-text requirement retained as text, region/visibility/availability determine a fixed Terraform template. Extra natural-language requirements are not analyzed. Saved legacy designs remain excluded from ready foundations.
+Invalid stores, unknown template keys and malformed pipeline metadata produce a visible error and are not overwritten silently. Reset is explicit. Space/app drafts survive main navigation/source changes. Creation/start persistence errors retain the draft/preview. API lifecycle never writes demo IDs into local storage. Async results are scoped to selected app/navigation generation and discarded after Back, mode change or unmount.
+
+## PROPOSED backend contracts — discussion only, NOT implemented calls
+1. GitHub integration: authenticated installation/connection + accessible repository/branch list + explicit registration. Backend owns permissions and secret/token handling; browser never receives raw long-lived credentials. App create references registered repository ID and provisioned InfraSpace ID, not a pasted URL or browser sample ID.
+2. Infra AI conversation/session: initial requirement, message/answer history and pending questions; generated files with assumptions/unsupported requirements and actual validation outcome. Stable design version is separate from provider deployment request.
+3. Infrastructure deployment/reconciliation: explicit operation and authorization, statuses `source_generated / validating / provisioning / provisioned / failed`, real provider outputs and runtime capabilities. Only verified `provisioned` records can become real app targets. `demo_deployed` must never be accepted as provider readiness.
+4. Application analyze/recommend: actual repo revision/evidence, compatible candidates and read-only decision explanation. User choice does not overwrite recommendation. Terraform generation returns generation/revision ID, reviewed files and validation findings.
+5. Repository publication/CI/CD: explicit reviewed destination/branch/path/diff, request authorization, protected branch/conflict handling, real commit SHA/push outcome and Actions run ID/URL. Never mark commit/push/build/resource deployment successful from a frontend timer. Idempotent operation identity and persisted progress must survive reentry; failure/retry contract belongs to backend.
+6. Logs/metrics/alerts/customer healthcheck and authentication remain absent and require separate contracts. No proposed route in this document is called by the frontend.

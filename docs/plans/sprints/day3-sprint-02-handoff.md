@@ -1,0 +1,6 @@
+# Sprint02 handoff — source frozen
+Main3 destinations retained. App demo/API has no Repository URL input. Demo creation selects explicitly registered repository+branch and enterprise/target Space. Empty registry routes to Integrations. New API creation unsupported; existing GET/analyze/deploy/SSE adapter preserved.
+Deploy triggers analysis with fixed sample evidence/mascot/readonly branching tree. Only eligible candidates, explicit user choice before Terraform. Less than2 eligible displays insufficiency, never unsuitable filler. Review keeps selected repo/branch/.freesia/app/main.tf/compute. Fixed incomplete code clearly not AI generated/validated/executable as-is.
+Existing Deployment optional demo_pipeline stores reviewed plan+phase+failure sample. Explicit DEMO commit/push/build/CI/resource/app phases. Failure/retry/Back/reload/reentry and quota-preview persistence preserved; no actual external writes/endpoint/workingActionsURL.
+Parent fresh TypeScript/lint/native13/13/build exit0. Generator browser11 PASS; dedicated evaluation PASS7/7/7/7, no blocking issues; LOW branch-label clarity and mobile analysisheader wrapping recorded. Parent finalbrowser running; exportworker active after parentdistbuild.
+Current/proposed contracts updated. No backend/dependency/buildconfig mutation, no commit/push/PR.

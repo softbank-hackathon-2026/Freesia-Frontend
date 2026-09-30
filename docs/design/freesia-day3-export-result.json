@@ -1,0 +1,198 @@
+{
+  "exportedAt": "2026-09-30T16:02:39.571Z",
+  "source": "Freesia-Frontend/dist; actual React + TypeScript + Vite build",
+  "sourceAssets": [
+    {
+      "file": "dist\\assets\\index-B2jOn3v-.js",
+      "sha256": "cc59844f984e66dc55fa3e8cff4d053f27227c5db14cca038f64a5f01547dbbc"
+    },
+    {
+      "file": "dist\\assets\\index-DWuTcUFL.css",
+      "sha256": "a37e99fec880b7227262da9529d8da63a90815b1692dc669196af39fe71125f7"
+    },
+    {
+      "file": "dist\\freesia-mascot.jpg",
+      "sha256": "cec1333331ec9fb6e9cd0ffe5269c4bd6ca4121a4770d1ad6775a7426f904420"
+    }
+  ],
+  "opendesignRun": false,
+  "offlineApiUnsupported": true,
+  "file": "C:\\Users\\ADMIN\\Desktop\\Freesia\\Freesia-Frontend\\docs\\design\\freesia-day3-flow-20260930.html",
+  "bytes": 452756,
+  "sha256": "16dff100f2de7bfcca7696ee1b064ce74089d447cbc79c37bf43fb2003297903",
+  "verification": "passed",
+  "checkedAt": "2026-09-30T16:05:28.422Z",
+  "checks": [
+    {
+      "name": "desktop three main menu entries",
+      "pass": true
+    },
+    {
+      "name": "desktop offline provenance",
+      "pass": true
+    },
+    {
+      "name": "desktop demo is default",
+      "pass": true
+    },
+    {
+      "name": "desktop API option disabled",
+      "pass": true
+    },
+    {
+      "name": "desktop app role infra read-only",
+      "pass": true
+    },
+    {
+      "name": "desktop repository explicitly registered",
+      "pass": true
+    },
+    {
+      "name": "desktop no arbitrary repository URL input",
+      "pass": true
+    },
+    {
+      "name": "desktop branching tree read-only",
+      "pass": true
+    },
+    {
+      "name": "desktop two eligible candidates",
+      "pass": true
+    },
+    {
+      "name": "desktop mascot image inlined and loaded",
+      "pass": true
+    },
+    {
+      "name": "desktop explicit user selection required",
+      "pass": true
+    },
+    {
+      "name": "desktop Lambda Terraform code",
+      "pass": true
+    },
+    {
+      "name": "desktop Terraform repository and path explicit",
+      "pass": true
+    },
+    {
+      "name": "desktop demo pipeline commit push Actions",
+      "pass": true
+    },
+    {
+      "name": "desktop no horizontal overflow",
+      "pass": true
+    },
+    {
+      "name": "desktop local file persistence",
+      "pass": true
+    },
+    {
+      "name": "desktop direct fetch and SSE blocked",
+      "pass": true
+    },
+    {
+      "name": "desktop forced API event blocked with original error and offline notice",
+      "pass": true
+    },
+    {
+      "name": "mobile three main menu entries",
+      "pass": true
+    },
+    {
+      "name": "mobile offline provenance",
+      "pass": true
+    },
+    {
+      "name": "mobile demo is default",
+      "pass": true
+    },
+    {
+      "name": "mobile API option disabled",
+      "pass": true
+    },
+    {
+      "name": "mobile app role infra read-only",
+      "pass": true
+    },
+    {
+      "name": "mobile repository explicitly registered",
+      "pass": true
+    },
+    {
+      "name": "mobile no arbitrary repository URL input",
+      "pass": true
+    },
+    {
+      "name": "mobile branching tree read-only",
+      "pass": true
+    },
+    {
+      "name": "mobile two eligible candidates",
+      "pass": true
+    },
+    {
+      "name": "mobile mascot image inlined and loaded",
+      "pass": true
+    },
+    {
+      "name": "mobile explicit user selection required",
+      "pass": true
+    },
+    {
+      "name": "mobile Lambda Terraform code",
+      "pass": true
+    },
+    {
+      "name": "mobile Terraform repository and path explicit",
+      "pass": true
+    },
+    {
+      "name": "mobile demo pipeline commit push Actions",
+      "pass": true
+    },
+    {
+      "name": "mobile no horizontal overflow",
+      "pass": true
+    },
+    {
+      "name": "mobile local file persistence",
+      "pass": true
+    },
+    {
+      "name": "mobile direct fetch and SSE blocked",
+      "pass": true
+    },
+    {
+      "name": "mobile forced API event blocked with original error and offline notice",
+      "pass": true
+    },
+    {
+      "name": "no HTTP(S) requests",
+      "pass": true
+    },
+    {
+      "name": "no JavaScript errors",
+      "pass": true
+    }
+  ],
+  "httpRequests": [],
+  "errors": [],
+  "supplementary": [
+    {
+      "name": "local file code copy reports outcome",
+      "pass": true,
+      "detail": "Native Chrome copied code"
+    },
+    {
+      "name": "local file Terraform download",
+      "pass": true
+    },
+    {
+      "name": "restricted storage shows explicit error",
+      "pass": true,
+      "detail": "Simulated blocked Storage APIs; actual Notion iframe was not tested"
+    }
+  ],
+  "iframeLimitations": "Native file Chrome tested; actual Notion iframe clipboard/download/storage permissions were not verified. If restricted, download this HTML and open locally."
+}

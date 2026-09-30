@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Freesia Console Prototype</title>
+  <style>
+    :root {
+      --bg: oklch(98% 0.004 245);
+      --surface: oklch(100% 0 0);
+      --fg: oklch(19% 0.025 245);
+      --muted: oklch(48% 0.028 248);
+      --border: oklch(88% 0.011 245);
+      --accent: oklch(55% 0.19 265);
+      --sidebar: oklch(25% 0.018 250);
+      --sidebar-fg: oklch(97% 0.004 245);
+      --sidebar-muted: oklch(74% 0.015 250);
+      --success: oklch(53% 0.14 150);
+      --warn: oklch(63% 0.13 78);
+      --danger: oklch(55% 0.18 28);
+      --info: oklch(58% 0.12 220);
+      --font-display: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-body: 'Pretendard', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+      --radius: 8px;
+      --shadow: 0 18px 42px oklch(19% 0.025 245 / 0.15);
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--surface); color: var(--fg); font-family: var(--font-body); }
+    body { margin: 0; min-height: 100vh; font-size: 15px; line-height: 1.55; }
+    button, select, input { font: inherit; }
+    button, select { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .48; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .app { min-height: 100vh; display: grid; grid-template-columns: 285px minmax(0, 1fr); background: var(--surface); }
+    .sidebar {
+      height: 100vh; position: sticky; top: 0; padding: 18px 0 14px;
+      background: var(--sidebar); color: var(--sidebar-fg); display: flex; flex-direction: column;
+    }
+    .brand { padding: 0 16px 28px; display: flex; align-items: center; gap: 12px; font-size: 28px; line-height: 1; letter-spacing: -0.02em; font-weight: 750; }
+    .mark { width: 30px; height: 30px; border: 2px solid currentColor; border-radius: 7px; display: grid; place-items: center; font: 750 16px/1 var(--font-mono); }
+    .nav { display: grid; gap: 6px; padding: 0 8px; }
+    .nav button {
+      min-height: 44px; width: 100%; border: 0; border-radius: 7px; padding: 10px 14px;
+      background: transparent; color: var(--sidebar-fg); display: flex; align-items: center; gap: 12px; text-align: left; font-weight: 650;
+    }
+    .nav button[aria-current="page"] { background: oklch(100% 0 0 / 0.16); }
+    .nav svg { width: 18px; height: 18px; color: var(--sidebar-muted); flex: 0 0 auto; }
+    .side-bottom { margin-top: auto; padding: 10px 14px 0; }
+    .state-details {
+      border-top: 1px solid oklch(100% 0 0 / 0.12); padding-top: 12px; color: var(--sidebar-muted); font-size: 13px;
+    }
+    .state-details summary { min-height: 36px; display: flex; align-items: center; font-weight: 650; color: var(--sidebar-fg); }
+    .state-grid { display: grid; gap: 8px; padding-top: 8px; }
+    .state-grid label { display: grid; gap: 4px; }
+    .state-grid select { width: 100%; min-height: 34px; border: 1px solid oklch(100% 0 0 / 0.18); background: oklch(19% 0.018 250); color: var(--sidebar-fg); border-radius: 6px; padding: 5px 8px; }
+    .note { font-size: 12px; color: var(--sidebar-muted); margin-top: 8px; }
+
+    .main { min-width: 0; }
+    .topbar {
+      min-height: 52px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 0 30px; background: var(--surface); position: sticky; top: 0; z-index: 5;
+    }
+    .context, .top-actions, .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+    .context strong { font-weight: 650; }
+    .divider { color: var(--border); }
+    .sample-badge, .badge {
+      display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 4px 8px; border-radius: 999px;
+      border: 1px solid var(--border); background: oklch(97% 0.006 245); color: var(--muted); font-size: 12px; line-height: 1; font-weight: 650; white-space: nowrap;
+    }
+    .badge.ok { color: var(--success); background: color-mix(in oklch, var(--success), white 91%); border-color: color-mix(in oklch, var(--success), white 70%); }
+    .badge.warn { color: oklch(42% 0.11 78); background: color-mix(in oklch, var(--warn), white 88%); border-color: color-mix(in oklch, var(--warn), white 68%); }
+    .badge.danger { color: var(--danger); background: color-mix(in oklch, var(--danger), white 91%); border-color: color-mix(in oklch, var(--danger), white 70%); }
+    .badge.info { color: var(--info); background: color-mix(in oklch, var(--info), white 91%); border-color: color-mix(in oklch, var(--info), white 70%); }
+    .page { display: none; padding: 34px 30px 48px; min-width: 0; }
+    .page.active { display: block; }
+    .page-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; margin-bottom: 34px; }
+    h1, h2, h3 { margin: 0; font-family: var(--font-display); color: var(--fg); }
+    h1 { font-size: clamp(34px, 4vw, 48px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 720; }
+    h2 { font-size: 22px; line-height: 1.2; letter-spacing: -0.01em; font-weight: 680; }
+    h3 { font-size: 17px; line-height: 1.25; font-weight: 680; }
+    p { margin: 0; }
+    .muted { color: var(--muted); }
+    .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .btn {
+      min-height: 42px; border: 1px solid var(--border); border-radius: 999px; padding: 8px 16px; background: var(--surface); color: var(--fg);
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 680; letter-spacing: .02em;
+    }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 10px 22px oklch(55% 0.19 265 / 0.24); }
+    .btn.small { min-height: 34px; padding: 6px 11px; font-size: 13px; }
+    .btn.linkish { border: 0; border-radius: 6px; padding: 4px 2px; min-height: 32px; color: var(--fg); background: transparent; text-decoration: underline; text-underline-offset: 4px; }
+    .tabs { display: flex; gap: 34px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+    .tabs button {
+      border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted);
+      min-height: 48px; padding: 0 0 11px; font-weight: 700; white-space: nowrap;
+    }
+    .tabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
+    .tabs .count { color: var(--muted); margin-left: 6px; font-family: var(--font-mono); }
+    .panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .panel.pad { padding: 18px; }
+    .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); }
+    th, td { padding: 15px 16px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+    th { color: var(--muted); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; font-weight: 750; }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: oklch(98% 0.006 245); }
+    .name-btn { border: 0; background: transparent; color: var(--fg); font-weight: 720; padding: 0; text-align: left; text-decoration: underline; text-underline-offset: 4px; }
+    .state-card { display: none; min-height: 270px; place-items: center; text-align: center; padding: 34px; }
+    .state-card.active { display: grid; }
+    .spinner { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin 1s linear infinite; margin: 0 auto 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .app-list, .stack { display: grid; gap: 14px; min-width: 0; }
+    .app-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; background: var(--surface); }
+    .app-detail { display: none; }
+    .app-detail.active, .app-list-view.active { display: block; }
+    .app-list-view { display: none; }
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .status-item { border: 1px solid var(--border); border-radius: var(--radius); padding: 13px; min-width: 0; }
+    .status-item span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+    .url-row { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: oklch(98% 0.006 245); margin-bottom: 18px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .timeline { display: grid; gap: 10px; }
+    .timeline-item { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+    .overview-sections { display: grid; gap: 22px; margin-bottom: 22px; }
+    .overview-section { border-top: 1px solid var(--border); padding-top: 18px; display: grid; gap: 12px; }
+    .section-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .section-title h2 { display: flex; align-items: center; gap: 8px; }
+    .section-title svg { width: 18px; height: 18px; color: var(--muted); }
+    .overview-line { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .overview-line:last-child { border-bottom: 0; }
+    .mini-list { display: grid; gap: 8px; }
+    .empty-state { border: 1px dashed var(--border); border-radius: var(--radius); padding: 16px; color: var(--muted); background: oklch(98% 0.006 245); }
+    .log-toolbar { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    select, input[type="search"] { min-height: 36px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--fg); padding: 7px 10px; }
+    .log-list { display: grid; gap: 8px; }
+    .log-row { display: grid; grid-template-columns: 86px 86px minmax(0, 1fr); gap: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font: 12px/1.55 var(--font-mono); }
+    .log-row mark { background: color-mix(in oklch, var(--warn), white 70%); color: var(--fg); border-radius: 3px; padding: 0 3px; }
+    .chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .chart { border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: grid; gap: 10px; min-height: 240px; }
+    .chart-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .plot { min-height: 126px; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+    .axis { display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font: 11px/1 var(--font-mono); }
+    .bars { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); gap: 7px; align-items: end; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px 6px 0; }
+    .bar { position: relative; z-index: 1; min-height: 8px; background: color-mix(in oklch, var(--fg), white 70%); border-radius: 3px 3px 0 0; }
+    .bar.alt { background: color-mix(in oklch, var(--info), white 52%); }
+    .sparkline { position: absolute; inset: 6px 6px 0 6px; width: calc(100% - 12px); height: calc(100% - 6px); overflow: visible; pointer-events: none; z-index: 2; }
+    .sparkline polyline { fill: none; stroke: var(--fg); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .legend { display: flex; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: color-mix(in oklch, var(--fg), white 70%); margin-right: 5px; vertical-align: -1px; }
+    .legend i.alt { background: color-mix(in oklch, var(--info), white 52%); }
+    .chart-state { display: none; place-items: center; text-align: center; color: var(--muted); min-height: 126px; }
+    .chart.no-data .plot, .chart.collect-fail .plot, .chart.no-data .legend, .chart.collect-fail .legend, .chart.no-data [data-summary], .chart.collect-fail [data-summary] { display: none; }
+    .chart.no-data .chart-state.no-data, .chart.collect-fail .chart-state.collect-fail { display: grid; }
+    .time-axis { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font: 12px/1.4 var(--font-mono); border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px; }
+    .notice { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: oklch(98% 0.006 245); color: var(--muted); }
+    .hidden { display: none !important; }
+
+    .drawer, .deploy-panel { position: fixed; inset: 0; z-index: 30; display: none; }
+    .drawer.open, .deploy-panel.open { display: block; }
+    .backdrop { position: absolute; inset: 0; background: oklch(19% 0.025 245 / 0.24); }
+    .drawer-panel, .deploy-sheet {
+      position: absolute; right: 0; top: 0; bottom: 0; width: min(560px, 100%); background: var(--surface);
+      border-left: 1px solid var(--border); box-shadow: var(--shadow); overflow: auto; padding: 22px;
+    }
+    .deploy-sheet { width: min(760px, 100%); }
+    .drawer-title, .sheet-title { display: flex; justify-content: space-between; gap: 14px; align-items: start; margin-bottom: 18px; min-width: 0; }
+    .drawer-title > div, .sheet-title > div { min-width: 0; }
+    .drawer-title .btn, .sheet-title .btn { flex-shrink: 0; min-width: 44px; white-space: nowrap; }
+    .chip-row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+    .chip { display: inline-flex; min-height: 26px; align-items: center; border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; font-size: 12px; color: var(--muted); background: var(--surface); }
+    .stepper { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .step { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; background: var(--surface); color: var(--muted); text-align: left; min-height: 58px; }
+    .step.active { color: var(--fg); border-color: var(--accent); }
+    .step-panel { display: none; }
+    .step-panel.active { display: grid; gap: 14px; min-width: 0; }
+    .question { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 0.72fr); gap: 10px; align-items: center; min-width: 0; }
+    .question > span, .step-panel > *, .deploy-sheet select { min-width: 0; }
+    .question select { width: 100%; max-width: 100%; }
+    .candidate-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+    .candidate { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 14px; text-align: left; display: grid; gap: 10px; min-height: 160px; min-width: 0; }
+    .candidate.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent), transparent 70%); }
+    .candidate.excluded { opacity: .76; }
+    .summary-table th { width: 140px; }
+    details.reason { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; min-width: 0; }
+    details.reason summary { font-weight: 700; min-height: 32px; cursor: pointer; }
+    .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .infra-head-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .infra-design-page { max-width: 1540px; }
+    .design-notice { display: grid; gap: 6px; border: 1px solid color-mix(in oklch, var(--accent), var(--border) 66%); border-radius: var(--radius); padding: 14px 16px; background: color-mix(in oklch, var(--accent), white 95%); margin-bottom: 20px; }
+    .design-notice strong { color: var(--fg); }
+    .design-grid { display: grid; grid-template-columns: minmax(0, 1.16fr) minmax(340px, .84fr); gap: 18px; align-items: start; }
+    .design-conversation, .design-summary { display: grid; gap: 14px; min-width: 0; }
+    .conversation-feed { display: grid; gap: 12px; min-height: 260px; }
+    .message { max-width: 78%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: oklch(98% 0.006 245); }
+    .message.user { margin-left: auto; background: var(--surface); color: var(--fg); }
+    .message small { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12px; letter-spacing: .02em; }
+    .quick-replies { display: flex; flex-wrap: wrap; gap: 8px; }
+    .quick-replies .btn[aria-pressed="true"] { color: white; background: var(--accent); border-color: var(--accent); }
+    .field { display: grid; gap: 7px; min-width: 0; }
+    .field label { font-weight: 680; }
+    .field input, .field textarea, .field select { width: 100%; min-height: 42px; border: 1px solid var(--border); border-radius: 7px; padding: 10px 11px; background: var(--surface); color: var(--fg); }
+    .field textarea { min-height: 108px; resize: vertical; }
+    .field-error { color: var(--danger); font-size: 13px; min-height: 20px; }
+    .design-form-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .62fr); gap: 10px; }
+    .design-summary .panel { min-width: 0; }
+    .summary-list { display: grid; gap: 0; }
+    .summary-list div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .summary-list div:last-child { border-bottom: 0; }
+    .summary-list dt { color: var(--muted); }
+    .summary-list dd { margin: 0; overflow-wrap: anywhere; }
+    .terraform-detail { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .terraform-detail summary { min-height: 44px; padding: 11px 13px; cursor: pointer; font-weight: 680; }
+    .terraform-code { margin: 0; max-height: 480px; overflow: auto; padding: 14px; background: oklch(21% 0.022 250); color: oklch(94% 0.01 245); font: 12px/1.55 var(--font-mono); white-space: pre; }
+    .draft-note { font-size: 13px; color: var(--muted); }
+    .saved-design-detail { display: none; max-width: 980px; }
+    .saved-design-detail.active { display: grid; gap: 16px; }
+
+    @media (max-width: 1024px) {
+      .app { grid-template-columns: 232px minmax(0, 1fr); }
+      .sidebar { width: 232px; }
+      .chart-grid, .candidate-grid { grid-template-columns: 1fr; }
+      .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 768px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; width: auto; height: auto; }
+      .brand { padding-bottom: 14px; font-size: 24px; }
+      .nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .side-bottom { padding-bottom: 8px; }
+      .topbar { position: static; padding: 12px 18px; align-items: flex-start; flex-direction: column; }
+      .page { padding: 24px 18px 38px; }
+      .page-head, .app-card, .question { grid-template-columns: minmax(0, 1fr); align-items: start; }
+      .design-grid { grid-template-columns: 1fr; }
+      .timeline-item, .log-row { grid-template-columns: 1fr; }
+      th:nth-child(3), td:nth-child(3) { display: none; }
+    }
+    @media (max-width: 430px) {
+      .tabs { gap: 22px; }
+      .status-grid, .stepper { grid-template-columns: 1fr; }
+      .design-form-row { grid-template-columns: 1fr; }
+      .terraform-detail:not([open]) { max-height: 46px; }
+      .message { max-width: 92%; }
+      th:nth-child(2), td:nth-child(2) { display: none; }
+      .page-head .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" data-od-id="sidebar-navigation">
+      <div class="brand" data-od-id="freesia-wordmark"><span class="mark">F</span><span>Freesia</span></div>
+      <nav class="nav" aria-label="주요 화면">
+        <button data-page="infra" aria-current="page" data-testid="nav-infra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M6 7v10h12V7M9 11h6M9 15h6"/></svg>인프라</button>
+        <button data-page="applications" data-testid="nav-applications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><rect x="13" y="13" width="7" height="7"/></svg>애플리케이션</button>
+      </nav>
+      <div class="side-bottom">
+        <details class="state-details" data-od-id="prototype-state-panel">
+          <summary>시안 상태 보기</summary>
+          <div class="state-grid">
+            <label>인프라 상태<select id="infraMode"><option value="normal">정상</option><option value="loading">로딩</option><option value="empty">데이터 없음</option><option value="error">조회 실패</option></select></label>
+            <label>분석 상태<select id="analysisMode"><option value="normal">분석 정상</option><option value="none">후보 없음</option><option value="error">분석 실패</option></select></label>
+            <label>결과 상태<select id="resultMode"><option value="success">배포 성공 · 헬스 정상</option><option value="healthBad">배포 성공 · 헬스 비정상</option><option value="failure">배포 실패 · 헬스 미확인</option><option value="noData">모니터링 데이터 없음</option><option value="collectFail">모니터링 수집 실패</option></select></label>
+            <label>로그 상태<select id="logMode"><option value="normal">샘플 로그</option><option value="empty">로그 없음</option><option value="error">조회 실패</option></select></label>
+            <p class="note">샘플 데이터 기반 클릭 시안입니다. 실제 API 호출이나 인프라 작업은 없습니다.</p>
+          </div>
+        </details>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar" data-od-id="top-context-bar">
+        <div class="context"><strong>Demo Workspace</strong><span class="divider">/</span><strong>Demo Project</strong><span class="sample-badge">샘플 데이터</span></div>
+        <div class="top-actions"><span class="muted">현재 화면</span><strong id="contextPage">인프라</strong></div>
+      </header>
+
+      <section id="infraPage" class="page active" data-page="infra" data-testid="infra-list-page" data-od-id="screen-infrastructure">
+        <div class="page-head">
+          <div><h1>인프라</h1><p class="muted">관리자가 준비한 공통 기반 환경을 확인하고 앱 배포에 연결합니다.</p></div>
+          <div class="infra-head-actions"><button class="btn" id="openInfraDesign" data-testid="start-infra-design" data-od-id="start-infra-design">AI로 인프라 설계</button><button class="btn primary" data-action="open-deploy">앱 배포</button></div>
+        </div>
+        <div class="tabs" data-od-id="infra-tabs">
+          <button class="active" data-infra-tab="all">전체 <span class="count" id="infraCountAll">3</span></button>
+          <button data-infra-tab="ready">사용 가능 <span class="count" id="infraCountReady">2</span></button>
+        </div>
+        <div id="infraTableWrap" class="table-wrap" data-od-id="infra-table"></div>
+        <div id="infraLoading" class="state-card"><div><div class="spinner"></div><h3>인프라를 불러오는 중</h3><p class="muted">샘플 로딩 상태입니다.</p></div></div>
+        <div id="infraEmpty" class="state-card"><div><h3>등록된 인프라가 없습니다</h3><p class="muted">애플리케이션 화면에서 배포 흐름을 검토할 수 있습니다.</p><button class="btn small" data-page-jump="applications">애플리케이션 보기</button></div></div>
+        <div id="infraError" class="state-card"><div><span class="badge danger">조회 실패</span><h3>인프라 목록을 표시할 수 없습니다</h3><button class="btn small" id="infraRetry">다시 보기</button></div></div>
+      </section>
+
+      <section id="infraDesignPage" class="page infra-design-page" data-page="infra-design" data-testid="infra-design-page" data-od-id="screen-infra-design">
+        <div id="infraDesignWorkflow">
+          <button class="btn linkish" id="backInfraDesign" data-testid="back-infra-design">인프라 목록으로 돌아가기</button>
+          <div class="page-head" style="margin-top:16px">
+            <div><h1>AI로 인프라 설계</h1><p class="muted">대화형 샘플로 네트워크 설계 초안을 확인합니다.</p></div>
+            <span class="badge info">로컬 설계 초안</span>
+          </div>
+          <div class="design-notice" data-od-id="infra-demo-notice"><strong>데모 대화 · 실제 AI 호출 없음</strong><span>이 브라우저에만 저장됩니다. AWS 리소스를 생성하지 않습니다.</span></div>
+          <div class="design-grid">
+            <div class="design-conversation">
+              <div class="panel pad">
+                <div class="conversation-feed" id="infraConversation" aria-live="polite" aria-label="인프라 설계 대화"></div>
+                <div id="infraRequirementForm" class="field" style="margin-top:14px"><label for="infraRequirement">인프라 요구사항</label><textarea id="infraRequirement" name="infra-requirement" data-testid="infra-requirement" placeholder="예: 외부 공개 API를 Private 워크로드로 운영하고 싶어요."></textarea><p class="draft-note">입력 내용은 이 화면에만 유지되며, 새로고침하면 초기화됩니다.</p><button class="btn primary" id="startInfraConversation" data-testid="start-infra-conversation">대화 시작</button></div>
+                <div id="infraChoices" class="hidden" style="margin-top:14px"></div>
+                <div id="infraDetailFields" class="hidden" style="margin-top:14px">
+                  <div class="design-form-row"><div class="field"><label for="infraSpaceName">Infra Space 이름</label><input id="infraSpaceName" name="infra-space-name" data-testid="infra-space-name" minlength="3" maxlength="32" autocomplete="off"><p class="field-error" id="infraNameError" aria-live="polite"></p></div><div class="field"><label for="infraRegion">AWS 리전</label><select id="infraRegion" name="aws-region"><option value="ap-northeast-2">ap-northeast-2 (서울)</option><option value="ap-northeast-1">ap-northeast-1 (도쿄)</option><option value="us-east-1">us-east-1 (버지니아 북부)</option></select></div></div>
+                  <div class="field" style="margin-top:10px"><label for="infraFollowUp">추가 조건 (선택)</label><input id="infraFollowUp" placeholder="예: 사내 CIDR 대역 검토"></div>
+                  <div class="actions"><button class="btn primary" id="saveInfraSpace" data-testid="save-infra-space">설계 저장</button></div>
+                </div>
+              </div>
+            </div>
+            <aside class="design-summary" aria-label="설계 요약 및 Terraform 미리보기">
+              <div class="panel pad"><div class="section-title"><h2>설계 요약</h2><span class="badge warn" id="infraDraftStatus">초안 작성 중</span></div><dl class="summary-list" id="infraSummary" style="margin-top:10px"></dl><p class="draft-note">저장 전 초안은 브라우저 메모리에만 있습니다.</p></div>
+              <details class="terraform-detail" id="terraformDetail" open><summary>Terraform 미리보기</summary><pre class="terraform-code" id="infraTerraformPreview" data-testid="infra-terraform-preview" tabindex="0"></pre></details>
+            </aside>
+          </div>
+        </div>
+        <div id="savedInfraDesignDetail" class="saved-design-detail" data-testid="saved-infra-design-detail">
+          <button class="btn linkish" id="backSavedInfraDesign">인프라 목록으로 돌아가기</button>
+          <div class="page-head"><div><span class="badge warn">설계 저장</span><h1 id="savedInfraTitle" style="margin-top:10px"></h1><p class="muted">미프로비저닝 설계 · 배포되지 않음</p></div></div>
+          <div class="design-notice"><strong>실제 기반 인프라가 아직 준비되지 않았습니다.</strong><span>이 설계는 앱 배포 대상이 아니며 AWS 리소스를 생성하지 않습니다.</span></div>
+          <div class="design-grid"><div class="panel pad"><h2>요구사항과 설계</h2><dl class="summary-list" id="savedInfraSummary" style="margin-top:10px"></dl></div><details class="terraform-detail" open><summary>Terraform 미리보기</summary><pre class="terraform-code" id="savedInfraTerraform" tabindex="0"></pre></details></div>
+        </div>
+      </section>
+
+      <section id="applicationsPage" class="page" data-page="applications" data-testid="applications-page" data-od-id="screen-applications">
+        <div id="appListView" class="app-list-view active" data-testid="application-list">
+          <div class="page-head">
+            <div><h1>애플리케이션</h1><p class="muted">배포된 샘플 앱과 최근 상태를 확인합니다.</p></div>
+            <button class="btn primary" data-action="open-deploy">앱 배포</button>
+          </div>
+          <div class="app-list">
+            <div class="app-card" data-testid="application-row-sample-notes-api">
+              <div>
+                <button class="name-btn" id="openAppDetail" data-testid="open-application-detail">sample-notes-api</button>
+                <p class="muted">기반: <span id="appInfraName">public-dev</span> · runtime: <span id="appRuntimeName">ECS Fargate</span> · 최근 배포: 14:22 샘플</p>
+              </div>
+              <div class="row"><span class="badge ok" id="appListDeployBadge">배포 성공</span><span class="badge ok" id="appListHealthBadge">헬스 정상</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="appDetailView" class="app-detail" data-testid="application-detail-sample-notes-api">
+          <button class="btn linkish" id="backToApps" data-testid="back-to-application-list">애플리케이션 목록으로 돌아가기</button>
+          <div class="page-head" style="margin-top:16px">
+            <div><h1>sample-notes-api</h1><p class="muted">Demo Project의 샘플 애플리케이션 상세입니다.</p></div>
+            <button class="btn primary" data-action="open-deploy">앱 배포</button>
+          </div>
+          <div class="status-grid" data-od-id="app-status-grid">
+            <div class="status-item"><span>App</span><strong>sample-notes-api</strong></div>
+            <div class="status-item"><span>Foundation</span><strong id="monitorInfra">public-dev</strong></div>
+            <div class="status-item"><span>Runtime</span><strong id="monitorRuntime">ECS Fargate</strong></div>
+            <div class="status-item"><span>Deployment</span><strong id="deployStatus">성공</strong></div>
+            <div class="status-item"><span>Health</span><strong id="healthStatus">정상</strong></div>
+          </div>
+          <div class="url-row" data-od-id="access-url-row"><span class="badge info">sample url</span><span class="mono" id="appUrl">https://sample-notes.demo.freesia.local</span><button class="btn small" id="copyUrl">복사</button><span id="copyNote" class="muted"></span></div>
+          <div class="tabs" data-od-id="app-detail-tabs">
+            <button class="active" data-tab="overview">개요</button>
+            <button data-tab="logs">로그</button>
+            <button data-tab="metrics">모니터링</button>
+          </div>
+          <div id="overviewTab" class="tab-panel active" data-testid="app-overview-tab">
+            <div class="overview-sections" data-od-id="overview-observability-summary">
+              <section class="overview-section" aria-labelledby="overview-health-title">
+                <div class="section-title"><h2 id="overview-health-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7 9 18l-5-5"/></svg>현재 상태</h2></div>
+                <div id="overviewHealthSummary">
+                  <div class="overview-line"><span class="muted">배포</span><strong>성공</strong></div>
+                  <div class="overview-line"><span class="muted">헬스</span><strong>정상</strong></div>
+                  <div class="overview-line"><span class="muted">수집 상태</span><strong>지표/로그 샘플 수집됨</strong></div>
+                </div>
+              </section>
+              <section class="overview-section" aria-labelledby="overview-metrics-title">
+                <div class="section-title"><h2 id="overview-metrics-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15l3-3 3 2 5-7"/></svg>지표</h2><button class="btn small" id="viewAllMetrics">View all</button></div>
+                <div id="overviewMetricsSummary" class="mini-list"></div>
+              </section>
+              <section class="overview-section" aria-labelledby="overview-logs-title">
+                <div class="section-title"><h2 id="overview-logs-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h3"/></svg>최근 로그</h2><button class="btn small" id="viewAllLogs">View all</button></div>
+                <div id="overviewLogsSummary" class="muted"></div>
+                <div id="overviewRecentLogs" class="mini-list"></div>
+              </section>
+            </div>
+            <div class="timeline">
+              <div class="timeline-item"><span class="mono">준비</span><strong>저장소와 조건 확인</strong><span id="stagePrepBadge" class="badge ok">완료</span></div>
+              <div class="timeline-item"><span class="mono">빌드</span><strong>샘플 빌드 로그 생성</strong><span id="stageBuildBadge" class="badge ok">완료</span></div>
+              <div class="timeline-item"><span class="mono">배포</span><strong>선택 인프라에 릴리스 반영</strong><span id="stageDeployBadge" class="badge ok">완료</span></div>
+              <div class="timeline-item"><span class="mono">헬스확인</span><strong id="healthStepText">HTTP 응답 확인</strong><span id="healthStepBadge" class="badge ok">정상</span></div>
+            </div>
+            <div id="failureNotice" class="notice hidden" style="margin-top:12px">배포 실패 원인: <span class="mono">DATABASE_URL</span> 누락으로 실행 단계에서 중단된 샘플 상태입니다. <button class="btn small" id="gotoErrorLog">관련 오류 로그 보기</button></div>
+            <div class="panel pad" style="margin-top:12px">
+              <h3>배포 결과 리소스</h3>
+              <table class="summary-table" style="margin-top:10px"><tr><th>재사용 기반</th><td id="resultReusedResources"></td></tr><tr><th>앱 신규 리소스</th><td id="resultCreatedResources"></td></tr></table>
+            </div>
+          </div>
+          <div id="logsTab" class="tab-panel" data-testid="app-logs-tab">
+            <div class="log-toolbar"><div class="row"><select id="logKind" aria-label="로그 종류"><option value="all">전체 로그</option><option value="build">빌드</option><option value="runtime">실행</option><option value="error">오류</option></select><input id="logSearch" type="search" placeholder="로그 검색" aria-label="로그 검색"></div><span class="badge">샘플 로그</span></div>
+            <div id="logList" class="log-list" data-od-id="log-list"></div>
+          </div>
+          <div id="metricsTab" class="tab-panel" data-testid="app-metrics-tab">
+            <div class="row" style="justify-content:space-between;margin-bottom:12px"><div><h2>샘플 모니터링</h2><p class="muted">시간 범위별 예시 수치입니다.</p></div><div class="row"><select id="timeRange" aria-label="시간 범위"><option value="15m">15분</option><option value="1h">1시간</option><option value="6h">6시간</option></select><span class="badge" id="metricsUpdated">마지막 갱신 14:22</span></div></div>
+            <div class="time-axis" id="metricsTimeAxis"><span>14:07</span><span>14:14</span><span>14:22</span></div>
+            <div class="chart-grid" data-od-id="metrics-chart-grid">
+              <div class="chart" data-chart="latency"><div class="chart-head"><h3>응답 시간</h3><span class="badge" data-summary>p95 214ms</span></div><div class="plot"><div class="axis"><span>400</span><span>200</span><span>0</span></div><div class="bars"><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i></div></div><div class="chart-state no-data">선택한 기간에 수집된 지표가 없습니다. 기간을 변경해 보세요.</div><div class="chart-state collect-fail">지표 수집 상태를 불러오지 못했습니다. 샘플 다시보기를 선택할 수 있습니다.</div><div class="legend"><span><i></i>p95 응답 시간</span><span>축: 0-400ms</span></div></div>
+              <div class="chart" data-chart="traffic"><div class="chart-head"><h3>요청 / 오류</h3><span class="badge" data-summary>요청 312 · 오류 5</span></div><div class="plot"><div class="axis"><span>80</span><span>40</span><span>0</span></div><div class="bars"><i class="bar"></i><i class="bar alt"></i><i class="bar"></i><i class="bar alt"></i><i class="bar"></i><i class="bar alt"></i><i class="bar"></i><i class="bar alt"></i></div></div><div class="chart-state no-data">선택한 기간에 수집된 지표가 없습니다. 기간을 변경해 보세요.</div><div class="chart-state collect-fail">지표 수집 상태를 불러오지 못했습니다. 샘플 다시보기를 선택할 수 있습니다.</div><div class="legend"><span><i></i>요청</span><span><i class="alt"></i>오류</span><span>축: 0-80건</span></div></div>
+              <div class="chart" data-chart="resource"><div class="chart-head"><h3>CPU / 메모리</h3><span class="badge" data-summary>CPU 41% · MEM 55%</span></div><div class="plot"><div class="axis"><span>100%</span><span>50%</span><span>0</span></div><div class="bars"><i class="bar"></i><i class="bar alt"></i><i class="bar"></i><i class="bar alt"></i><i class="bar"></i><i class="bar alt"></i><i class="bar"></i><i class="bar alt"></i></div></div><div class="chart-state no-data">선택한 기간에 수집된 지표가 없습니다. 기간을 변경해 보세요.</div><div class="chart-state collect-fail">지표 수집 상태를 불러오지 못했습니다. 샘플 다시보기를 선택할 수 있습니다.</div><div class="legend"><span><i></i>CPU</span><span><i class="alt"></i>Memory</span><span>축: 0-100%</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="drawer" id="infraDrawer" aria-hidden="true" data-od-id="infra-detail-panel">
+    <div class="backdrop" id="drawerBackdrop"></div>
+    <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+      <div class="drawer-title"><div><span id="drawerStatus" class="badge ok">준비됨</span><h2 id="drawerTitle">public-dev</h2><p id="drawerDesc" class="muted">샘플 기반 상세</p></div><button class="btn small" id="closeDrawer" aria-label="상세 패널 닫기">닫기</button></div>
+      <div class="stack"><div class="panel pad"><h3>기반 상세</h3><div id="drawerDetails" class="chip-row" style="margin-top:10px"></div></div><div class="panel pad"><h3>지원 실행 방식</h3><div id="drawerSupports" class="chip-row" style="margin-top:10px"></div></div><div class="panel pad"><h3>연결된 앱</h3><p id="drawerApps" class="muted"></p></div><button class="btn primary" id="drawerDeploy">이 기반으로 앱 배포</button></div>
+    </aside>
+  </div>
+
+  <div class="deploy-panel" id="deployPanel" aria-hidden="true" data-od-id="deploy-flow-panel">
+    <div class="backdrop" id="deployBackdrop"></div>
+    <aside class="deploy-sheet" role="dialog" aria-modal="true" aria-labelledby="deployTitle">
+      <div class="sheet-title"><div><span class="badge info">고정 샘플 추천</span><h2 id="deployTitle">앱 배포</h2><p class="muted">소스 확인, 분석 조건, 후보 선택을 순서대로 검토합니다.</p></div><button class="btn small" id="closeDeploy" aria-label="배포 패널 닫기">닫기</button></div>
+      <div class="stepper"><button class="step active" data-step="0"><strong>1. 소스 확인</strong><br><span>샘플 저장소</span></button><button class="step" data-step="1"><strong>2. 분석/질문</strong><br><span>확인 조건</span></button><button class="step" data-step="2"><strong>3. 후보 선택</strong><br><span>추천 근거</span></button></div>
+      <div class="panel pad">
+        <div class="step-panel active" data-panel="0"><h3>사전 지정 샘플 GitHub 저장소</h3><p class="muted">로그인이나 실제 저장소 연결 없이 고정 샘플 입력을 사용합니다.</p><table class="summary-table"><tr><th>Repository</th><td class="mono">github.com/freesia/sample-notes-api</td></tr><tr><th>Detected</th><td>Node.js HTTP server, SQL schema, optional uploads path</td></tr></table></div>
+        <div class="step-panel" data-panel="1"><h3>분석 결과와 질문</h3><div class="chip-row" style="margin:10px 0 14px"><span class="chip">HTTP service</span><span class="chip">PORT 환경변수</span><span class="chip">SQL DB 필요</span><span class="chip">파일 저장 질문 필요</span></div><label class="question"><span><strong>앱을 외부 공개 URL로 열까요?</strong><br><span class="muted" data-answer-summary="access">검토 답변: 공개 URL 필요</span></span><select data-question="access"><option>공개 URL 필요</option><option>내부 검토만</option></select></label><label class="question"><span><strong>업로드 파일을 배포 후에도 보존해야 하나요?</strong><br><span class="muted" data-answer-summary="storage">검토 답변: 이번 데모에서는 불필요</span></span><select data-question="storage"><option>이번 데모에서는 불필요</option><option>보존 필요</option></select></label><div id="analysisNone" class="state-card"><div><span class="badge warn">후보 없음</span><h3>조건을 만족하는 후보가 없습니다</h3></div></div><div id="analysisError" class="state-card"><div><span class="badge danger">분석 실패</span><h3>저장소 분석 결과를 표시할 수 없습니다</h3></div></div></div>
+        <div class="step-panel" data-panel="2"><div id="candidateNormal" class="stack"><label class="question"><span><strong>기반 환경 선택</strong><br><span class="muted">접근·워크로드 배치·가용성은 별도 축입니다. Public ALB + Private task도 함께 가능합니다.</span></span><select id="foundationSelect"></select></label><div class="candidate-grid"><button class="candidate selected" data-candidate="container"><span class="badge ok">추천</span><h3>ECS Fargate</h3><p>HTTP 서버와 PORT 조건이 직접 맞습니다.</p></button><button class="candidate" data-candidate="serverless"><span class="badge warn">조건부</span><h3>AWS Lambda</h3><p>서버 구조 조정이 필요합니다.</p></button><button class="candidate excluded" data-candidate="vm"><span class="badge danger">제외 · 근거 조회만</span><h3>EC2</h3><p>데모 운영 범위 대비 운영 부담이 큽니다.</p></button></div><p id="reasonBody" class="notice">추천 요약: public-dev 기반에서 ECS Fargate는 package.json/server.js 근거와 가장 잘 맞습니다.</p><details class="reason"><summary>읽기 전용 결정 트리 펼쳐보기</summary><div class="stack" style="margin-top:10px"><button class="btn small" data-node="runtime">실행 방식: 지속 실행 HTTP 서버</button><button class="btn small" data-node="db">DB 요구: SQL 스키마 확인</button><button class="btn small" data-node="storage">Storage 요구: 업로드 경로만 확인</button><button class="btn small" data-node="ops">운영 부담: 3일 내 데모 우선</button></div></details><table class="summary-table"><tr><th>선택 기반</th><td id="selectedInfraName">public-dev</td></tr><tr><th>선택 실행 방식</th><td id="selectedRuntimeName">ECS Fargate</td></tr><tr><th>검토 요약</th><td id="reviewSummary">고정 샘플 추천 기준: 공개 URL 필요, 이번 데모에서는 불필요, SQL DB, 샘플 seed 사용</td></tr><tr><th>재사용 기반</th><td id="reusedResources"></td></tr><tr><th>앱 신규 리소스</th><td id="createdResources"></td></tr></table><p class="muted">이 조합은 시안 지원 정책이며 AWS 일반 제약을 의미하지 않습니다.</p></div><div id="candidateNone" class="state-card"><div><span class="badge warn">후보 없음</span><h3>선택 가능한 후보가 없습니다</h3></div></div><div id="candidateError" class="state-card"><div><span class="badge danger">분석 실패</span><h3>후보 비교를 표시할 수 없습니다</h3></div></div></div>
+        <div class="actions"><button class="btn" id="prevStep">이전</button><button class="btn" id="nextStep">다음</button><button class="btn primary hidden" id="demoDeploy">배포</button></div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const infraData = [
+      { id: 'public-dev', name: 'public-dev', network: '공개 진입점', workload: 'Public 워크로드', availability: '워크로드 Single AZ', status: '준비됨', ready: true, apps: 'sample-notes-api', runtimes: ['container', 'serverless', 'vm'], details: ['VPC: vpc-public-dev', 'Subnet: ALB: public-a/public-c · 워크로드: public-a', 'Routing: internet route', 'NAT: 없음', 'ALB: public-dev-alb', 'ECS Cluster: public-dev-cluster'], desc: '공개 진입점과 Public 워크로드 배치를 쓰는 개발용 기반입니다.' },
+      { id: 'private-staging', name: 'private-staging', network: '공개 ALB', workload: 'Private 워크로드', availability: '워크로드 Single AZ', status: '준비됨', ready: true, apps: '연결 앱 없음', runtimes: ['container'], details: ['VPC: vpc-private-staging', 'Subnet: ALB: public-a/public-c · 워크로드: private-a', 'Routing: ALB to private task', 'NAT: nat-staging-a', 'ALB: staging-public-alb', 'ECS Cluster: staging-cluster'], desc: '공개 ALB 뒤에 Private 워크로드를 두는 스테이징 기반입니다.' },
+      { id: 'private-ha-prod', name: 'private-ha-prod', network: '내부 ALB', workload: 'Private 워크로드', availability: '워크로드 Multi AZ', status: '준비중', ready: false, apps: '연결 앱 없음', runtimes: [], details: ['VPC: vpc-private-ha-prod', 'Subnet: ALB: private-a/private-c · 워크로드: private-a/private-c', 'Routing: internal only', 'NAT: nat-prod-a/c', 'ALB: prod-internal-alb', 'ECS Cluster: prod-ha-cluster'], desc: '내부 ALB와 Multi AZ 구성을 준비 중인 운영형 기반입니다.' }
+    ];
+    const runtimeData = {
+      container: { name: 'ECS Fargate', reused: ['VPC', 'Subnet', 'Routing', 'NAT', 'ALB', 'ECS Cluster'], created: ['Task Definition', 'ECS Service', 'Target Group', 'Listener rule'] },
+      serverless: { name: 'AWS Lambda', reused: [], created: ['Function', 'IAM role', 'API Gateway'] },
+      vm: { name: 'EC2', reused: ['VPC', 'Subnet', 'Routing'], created: ['EC2 instance', 'Security Group'] }
+    };
+    const logs = [
+      ['14:20:01', 'build', 'INFO', 'install skipped for prototype preview'],
+      ['14:20:18', 'build', 'INFO', 'package.json start script detected: node server.js'],
+      ['14:21:03', 'build', 'WARN', 'uploads path detected; persistent storage answer required'],
+      ['14:21:44', 'runtime', 'INFO', 'PORT environment variable mapped for sample release'],
+      ['14:22:18', 'runtime', 'INFO', 'health check returned HTTP 200 for sample endpoint'],
+      ['14:22:24', 'error', 'ERROR', 'deployment failed at release step: DATABASE_URL is missing'],
+      ['14:22:31', 'error', 'ERROR', 'linked cause: missing DATABASE_URL would fail runtime startup']
+    ];
+    const metricSamples = {
+      '15m': { updated: '마지막 갱신 14:22', latency: { summary: 'p95 214ms', axis: ['400', '200', '0'], max: 400, unit: 'ms', values: [144,176,152,208,184,244,168,192], line: [150,170,160,205,190,238,174,188] }, traffic: { summary: '요청 312 · 오류 5', axis: ['80','40','0'], max: 80, unit: '건', values: [43,5,50,3,58,7,46,4], line: [43,50,58,46] }, resource: { summary: 'CPU 41% · MEM 55%', axis: ['100%','50%','0'], max: 100, unit: '%', values: [32,49,36,51,40,55,37,53], line: [32,36,40,37] } },
+      '1h': { updated: '마지막 갱신 14:22', latency: { summary: 'p95 268ms', axis: ['500','250','0'], max: 500, unit: 'ms', values: [190,220,260,210,248,302,268,232], line: [188,215,254,218,242,296,268,238] }, traffic: { summary: '요청 1,184 · 오류 19', axis: ['320','160','0'], max: 320, unit: '건', values: [140,10,178,7,230,18,196,13], line: [140,178,230,196] }, resource: { summary: 'CPU 46% · MEM 61%', axis: ['100%','50%','0'], max: 100, unit: '%', values: [40,56,44,59,51,64,47,61], line: [40,44,51,47] } },
+      '6h': { updated: '마지막 갱신 14:20', latency: { summary: 'p95 331ms', axis: ['600','300','0'], max: 600, unit: 'ms', values: [260,310,284,360,338,420,372,314], line: [255,304,292,350,340,410,368,320] }, traffic: { summary: '요청 6,742 · 오류 84', axis: ['1600','800','0'], max: 1600, unit: '건', values: [720,42,860,31,1120,74,980,52], line: [720,860,1120,980] }, resource: { summary: 'CPU 52% · MEM 68%', axis: ['100%','50%','0'], max: 100, unit: '%', values: [46,62,51,66,58,71,54,68], line: [46,51,58,54] } }
+    };
+    const timeAxisSamples = {
+      '15m': ['14:07', '14:14', '14:22'],
+      '1h': ['13:22', '13:52', '14:22'],
+      '6h': ['08:20', '11:20', '14:20']
+    };
+    const candidateReasons = {
+      container: '추천 요약: ECS Fargate는 package.json/server.js 근거와 가장 잘 맞습니다.',
+      serverless: '조건부 요약: AWS Lambda는 VPC가 필수는 아니며 public-dev 샘플은 VPC 미연결입니다. 현재 샘플의 지속 실행 서버 구조를 함수형 진입점으로 바꿔야 합니다.',
+      vm: '제외 요약: EC2는 데모 운영 범위상 선택하지 않고 근거만 표시합니다.',
+      runtime: '결정 트리: server.js가 PORT를 열고 지속 실행되는 HTTP 서버입니다.',
+      db: '결정 트리: db/schema.sql이 확인되어 SQL DB 연결 가능 여부가 필요합니다.',
+      storage: '결정 트리: uploads 경로는 있지만 영구 보존은 이번 샘플 답변에서 제외했습니다.',
+      ops: '결정 트리: 3일 내 데모 완성을 위해 운영 절차가 작은 후보를 우선합니다.'
+    };
+    let currentPage = 'infra', infraTab = 'all', deployStep = 0, selectedFoundation = 'public-dev', selectedCandidate = 'container', drawerInfraId = null, isDeploying = false;
+    let appDeployment = { foundationId: 'public-dev', runtimeId: 'container' };
+    let lastDrawerTrigger = null, lastDeployTrigger = null, deployTimers = [];
+    const infraStorageKey = 'freesia.infra-space-designs.v1';
+    let infraDesignDraft = { started: false, requirement: '', network: '', az: '', name: '', region: 'ap-northeast-2', followUp: '' };
+    let activeSavedInfraId = null;
+    const $ = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
+    const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+    const savedInfraDesigns = () => {
+      try {
+        const value = JSON.parse(localStorage.getItem(infraStorageKey) || '[]');
+        return Array.isArray(value) ? value.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string') : [];
+      } catch { return []; }
+    };
+    const infraSlug = value => value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'infra-space';
+
+    function terraformFor(design) {
+      if (!design.network || !design.az) return '# 요구사항을 시작하고 샘플 선택지로 설계를 확인하면\n# VPC, Subnet, Routing Terraform 미리보기를 표시합니다.\n# terraform apply는 이 프로토타입에서 실행하지 않습니다.';
+      const privateWorkload = design.network === 'private';
+      const multiAz = design.az === 'multi';
+      const workloadCidrs = multiAz ? ['10.42.16.0/20', '10.42.32.0/20'] : ['10.42.16.0/20'];
+      const azNames = multiAz ? ['a', 'c'] : ['a'];
+      const subnetBlocks = workloadCidrs.map((cidr, index) => `resource "aws_subnet" "workload_${azNames[index]}" {\n  vpc_id            = aws_vpc.design.id\n  cidr_block        = "${cidr}"\n  availability_zone = "${design.region}${azNames[index]}"\n  map_public_ip_on_launch = ${privateWorkload ? 'false' : 'true'}\n}`).join('\n\n');
+      const workloadAssociations = azNames.map(az => `resource "aws_route_table_association" "workload_${az}" {\n  subnet_id      = aws_subnet.workload_${az}.id\n  route_table_id = aws_route_table.workload.id\n}`).join('\n\n');
+      const routeTarget = privateWorkload ? 'nat_gateway_id = aws_nat_gateway.design.id' : 'gateway_id = aws_internet_gateway.design.id';
+      const nat = privateWorkload ? `\n# 비용 참고: Private 워크로드의 아웃바운드 경로에는 NAT Gateway 비용이 발생합니다.\n${multiAz ? '# Multi AZ 워크로드 · NAT 단일 AZ (HA 보장 아님)\n' : ''}resource "aws_eip" "nat" { domain = "vpc" }\nresource "aws_nat_gateway" "design" {\n  allocation_id = aws_eip.nat.id\n  subnet_id     = aws_subnet.public_a.id\n  depends_on    = [aws_internet_gateway.design]\n}\n` : '';
+      return `# 네트워크 설계 샘플 전용 · 미프로비저닝 상태\nterraform {\n  required_providers { aws = { source = "hashicorp/aws" } }\n}\n\nprovider "aws" { region = "${design.region}" }\n\nresource "aws_vpc" "design" {\n  cidr_block           = "10.42.0.0/16"\n  enable_dns_hostnames = true\n}\n\nresource "aws_internet_gateway" "design" { vpc_id = aws_vpc.design.id }\n\nresource "aws_subnet" "public_a" {\n  vpc_id                  = aws_vpc.design.id\n  cidr_block              = "10.42.0.0/20"\n  availability_zone       = "${design.region}a"\n  map_public_ip_on_launch = true\n}\n\nresource "aws_route_table" "public" {\n  vpc_id = aws_vpc.design.id\n  route {\n    cidr_block = "0.0.0.0/0"\n    gateway_id = aws_internet_gateway.design.id\n  }\n}\n\nresource "aws_route_table_association" "public_a" {\n  subnet_id      = aws_subnet.public_a.id\n  route_table_id = aws_route_table.public.id\n}\n\n${subnetBlocks}${nat}\nresource "aws_route_table" "workload" {\n  vpc_id = aws_vpc.design.id\n  route {\n    cidr_block = "0.0.0.0/0"\n    ${routeTarget}\n  }\n}\n\n${workloadAssociations}\n\n# ALB와 ECS Cluster는 이 네트워크 설계의 후속 선택 옵션이며,\n# 이 템플릿은 해당 리소스를 생성하지 않습니다.\n# terraform apply는 이 프로토타입에서 실행하지 않습니다.`;
+    }
+
+    function setPage(page) {
+      currentPage = page;
+      $$('.page').forEach(p => p.classList.toggle('active', p.dataset.page === page));
+      $$('.nav button').forEach(b => b.setAttribute('aria-current', b.dataset.page === page || (page === 'infra-design' && b.dataset.page === 'infra') ? 'page' : 'false'));
+      $('#contextPage').textContent = page === 'infra' ? '인프라' : page === 'infra-design' ? '인프라 설계' : '애플리케이션';
+    }
+    function showAppDetail(show = true) {
+      $('#appListView').classList.toggle('active', !show);
+      $('#appDetailView').classList.toggle('active', show);
+    }
+    function renderInfra() {
+      const mode = $('#infraMode').value, designs = savedInfraDesigns();
+      const list = infraTab === 'ready' ? infraData.filter(i => i.ready) : [...infraData, ...designs.map(item => ({ ...item, design: true, network: '미프로비저닝 설계', workload: item.network === 'private' ? 'Private 워크로드' : 'Public 워크로드', availability: item.az === 'multi' ? '워크로드 Multi AZ' : '워크로드 Single AZ', status: '설계 저장', ready: false }))];
+      $('#infraCountAll').textContent = infraData.length + designs.length;
+      $('#infraCountReady').textContent = infraData.filter(i => i.ready).length;
+      $('#infraTableWrap').innerHTML = `<table><thead><tr><th>네트워크</th><th>가용성</th><th>상태</th><th>연결앱</th></tr></thead><tbody>${list.map(item => item.design ? `<tr data-testid="registered-infra-row"><td><button class="name-btn" data-infra-design="${escapeHtml(item.id)}">${escapeHtml(item.name)}</button><p class="muted">${item.network} · ${item.workload}</p></td><td>${item.availability}</td><td><span class="badge warn">설계 저장</span></td><td>배포 대상 아님</td></tr>` : `<tr><td><button class="name-btn" data-infra="${item.id}">${item.name}</button><p class="muted">${item.network} · ${item.workload}</p></td><td>${item.availability}</td><td><span class="badge ${item.ready ? 'ok' : 'warn'}">${item.status}</span></td><td>${foundationApps(item.id)}</td></tr>`).join('')}</tbody></table>`;
+      $$('#infraTableWrap [data-infra]').forEach(btn => btn.addEventListener('click', e => openDrawer(e.currentTarget.dataset.infra, e.currentTarget)));
+      $$('#infraTableWrap [data-infra-design]').forEach(btn => btn.addEventListener('click', e => openSavedInfraDesign(e.currentTarget.dataset.infraDesign, e.currentTarget)));
+      $('#infraTableWrap').classList.toggle('hidden', mode !== 'normal');
+      $('#infraLoading').classList.toggle('active', mode === 'loading');
+      $('#infraEmpty').classList.toggle('active', mode === 'empty');
+      $('#infraError').classList.toggle('active', mode === 'error');
+    }
+    function addConversationMessage(kind, label, text) {
+      const message = document.createElement('div');
+      message.className = `message ${kind}`;
+      const meta = document.createElement('small');
+      meta.textContent = label;
+      const body = document.createElement('p');
+      body.textContent = text;
+      message.append(meta, body);
+      $('#infraConversation').append(message);
+    }
+    function setDesignSummary(target, draft) {
+      const entries = [
+        ['요구사항', draft.requirement || '대화 시작 전'],
+        ['워크로드', draft.network === 'private' ? 'Private 워크로드' : draft.network === 'public' ? 'Public 워크로드' : '선택 대기'],
+        ['가용성', draft.az === 'multi' ? (draft.network === 'private' ? 'Multi AZ 워크로드 · NAT 단일 AZ (HA 보장 아님)' : 'Multi AZ') : draft.az === 'single' ? 'Single AZ' : '선택 대기'],
+        ['AWS 리전', draft.region || 'ap-northeast-2'],
+        ['추가 조건', draft.followUp || '없음'],
+        ['앱 계층', 'ALB / ECS Cluster는 후속 선택 옵션']
+      ];
+      target.replaceChildren(...entries.map(([term, description]) => {
+        const row = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
+        dt.textContent = term;
+        dd.textContent = description;
+        row.append(dt, dd);
+        return row;
+      }));
+    }
+    function renderInfraWorkflow() {
+      const draft = infraDesignDraft;
+      $('#infraDesignWorkflow').classList.remove('hidden');
+      $('#savedInfraDesignDetail').classList.remove('active');
+      const feed = $('#infraConversation');
+      feed.replaceChildren();
+      addConversationMessage('assistant', 'Freesia Infra Space', '요구사항을 먼저 기록한 뒤, 샘플 선택지로 네트워크 설계를 확인합니다.');
+      if (draft.started) {
+        addConversationMessage('user', '나의 요구사항', draft.requirement);
+        addConversationMessage('assistant', '데모 안내', '샘플 선택지로 요구사항을 확인합니다. 실제 AI가 입력을 이해하거나 AWS를 변경하지 않습니다.');
+      }
+      if (draft.network) {
+        addConversationMessage('user', '선택한 워크로드', draft.network === 'private' ? 'Private 워크로드' : 'Public 워크로드');
+        addConversationMessage('assistant', 'Freesia Infra Space', '가용성을 선택해 주세요.');
+      }
+      if (draft.az) addConversationMessage('user', '선택한 가용성', draft.az === 'multi' ? 'Multi AZ' : 'Single AZ');
+      const requirementForm = $('#infraRequirementForm'), choices = $('#infraChoices'), detailFields = $('#infraDetailFields');
+      requirementForm.classList.toggle('hidden', draft.started);
+      choices.classList.toggle('hidden', !draft.started || Boolean(draft.az));
+      detailFields.classList.toggle('hidden', !draft.az);
+      if (!draft.started) $('#infraRequirement').value = draft.requirement;
+      if (draft.started && !draft.network) {
+        choices.innerHTML = '<p class="muted">워크로드를 선택하세요.</p><div class="quick-replies"><button class="btn" data-infra-choice="network-public" aria-pressed="false">Public 워크로드</button><button class="btn" data-infra-choice="network-private" aria-pressed="false">Private 워크로드</button></div>';
+      } else if (draft.network && !draft.az) {
+        choices.innerHTML = '<p class="muted">가용성을 선택하세요.</p><div class="quick-replies"><button class="btn" data-infra-choice="az-single" aria-pressed="false">Single AZ</button><button class="btn" data-infra-choice="az-multi" aria-pressed="false">Multi AZ</button></div>';
+      }
+      $$('#infraChoices [data-infra-choice]').forEach(button => button.addEventListener('click', () => {
+        const choice = button.dataset.infraChoice;
+        if (choice === 'network-public') draft.network = 'public';
+        if (choice === 'network-private') draft.network = 'private';
+        if (choice === 'az-single') draft.az = 'single';
+        if (choice === 'az-multi') draft.az = 'multi';
+        renderInfraWorkflow();
+      }));
+      if (draft.az) {
+        $('#infraSpaceName').value = draft.name;
+        $('#infraRegion').value = draft.region;
+        $('#infraFollowUp').value = draft.followUp;
+      }
+      setDesignSummary($('#infraSummary'), draft);
+      $('#infraTerraformPreview').textContent = terraformFor(draft);
+      $('#infraDraftStatus').textContent = draft.az ? '저장 가능' : '초안 작성 중';
+      $('#infraDraftStatus').className = 'badge ' + (draft.az ? 'info' : 'warn');
+      if (window.matchMedia('(max-width: 430px)').matches) $('#terraformDetail').open = false;
+    }
+    function openInfraDesign(trigger) {
+      activeSavedInfraId = null;
+      renderInfraWorkflow();
+      setPage('infra-design');
+      if (trigger) trigger.blur();
+      if (!infraDesignDraft.started) $('#infraRequirement').focus();
+    }
+    function openSavedInfraDesign(id, trigger) {
+      const design = savedInfraDesigns().find(item => item.id === id);
+      if (!design) { renderInfra(); return; }
+      activeSavedInfraId = id;
+      $('#infraDesignWorkflow').classList.add('hidden');
+      $('#savedInfraDesignDetail').classList.add('active');
+      $('#savedInfraTitle').textContent = design.name;
+      setDesignSummary($('#savedInfraSummary'), design);
+      $('#savedInfraTerraform').textContent = terraformFor(design);
+      setPage('infra-design');
+      if (trigger) trigger.blur();
+    }
+    function returnToInfraList() {
+      activeSavedInfraId = null;
+      setPage('infra');
+      renderInfra();
+      $('#openInfraDesign').focus();
+    }
+    function startInfraConversation() {
+      const value = $('#infraRequirement').value.trim();
+      if (!value) { $('#infraRequirement').setCustomValidity('인프라 요구사항을 입력해 주세요.'); $('#infraRequirement').reportValidity(); return; }
+      $('#infraRequirement').setCustomValidity('');
+      infraDesignDraft.requirement = value;
+      infraDesignDraft.started = true;
+      renderInfraWorkflow();
+    }
+    function saveInfraDesign() {
+      const draft = infraDesignDraft;
+      draft.name = $('#infraSpaceName').value.trim();
+      draft.region = $('#infraRegion').value;
+      draft.followUp = $('#infraFollowUp').value.trim();
+      const error = $('#infraNameError');
+      const names = [...infraData.map(item => item.name), ...savedInfraDesigns().map(item => item.name)].map(name => name.toLocaleLowerCase('ko-KR'));
+      if (draft.name.length < 3 || draft.name.length > 32) { error.textContent = '이름은 3~32자로 입력해 주세요.'; return; }
+      if (names.includes(draft.name.toLocaleLowerCase('ko-KR'))) { error.textContent = '이미 사용 중인 Infra Space 이름입니다.'; return; }
+      error.textContent = '';
+      const idBase = infraSlug(draft.name);
+      const existing = savedInfraDesigns();
+      const record = { id: `${idBase}-${Date.now()}`, name: draft.name, requirement: draft.requirement, network: draft.network, az: draft.az, region: draft.region, followUp: draft.followUp, status: '설계 저장' };
+      try { localStorage.setItem(infraStorageKey, JSON.stringify([...existing, record])); }
+      catch { error.textContent = '브라우저에 설계를 저장할 수 없습니다. 저장 공간을 확인해 주세요.'; return; }
+      infraDesignDraft = { started: false, requirement: '', network: '', az: '', name: '', region: 'ap-northeast-2', followUp: '' };
+      returnToInfraList();
+    }
+    function openDrawer(id, trigger) {
+      const item = infraData.find(v => v.id === id) || infraData[0];
+      drawerInfraId = item.id;
+      lastDrawerTrigger = trigger || document.activeElement;
+      $('#drawerTitle').textContent = item.name;
+      $('#drawerDesc').textContent = item.desc;
+      $('#drawerStatus').textContent = item.status;
+      $('#drawerStatus').className = 'badge ' + (item.ready ? 'ok' : 'warn');
+      $('#drawerDetails').innerHTML = item.details.map(v => `<span class="chip">${v}</span>`).join('');
+      $('#drawerSupports').innerHTML = (item.runtimes.length ? item.runtimes : ['준비중']).map(v => `<span class="chip">${runtimeData[v]?.name || v}</span>`).join('');
+      $('#drawerApps').textContent = foundationApps(item.id);
+      $('#drawerDeploy').disabled = !item.ready;
+      $('#drawerDeploy').textContent = item.ready ? '이 기반으로 앱 배포' : '준비중 기반은 배포 불가';
+      $('#infraDrawer').classList.add('open');
+      $('#infraDrawer').setAttribute('aria-hidden', 'false');
+      $('#closeDrawer').focus();
+    }
+    function closeDrawer(restore = true) {
+      $('#infraDrawer').classList.remove('open');
+      $('#infraDrawer').setAttribute('aria-hidden', 'true');
+      if (restore && lastDrawerTrigger && document.contains(lastDrawerTrigger)) lastDrawerTrigger.focus();
+    }
+    function openDeploy(trigger) {
+      lastDeployTrigger = trigger || document.activeElement;
+      deployStep = 0;
+      syncFoundationSelect();
+      renderDeployStep();
+      $('#deployPanel').classList.add('open');
+      $('#deployPanel').setAttribute('aria-hidden', 'false');
+      $('#closeDeploy').focus();
+    }
+    function closeDeploy(restore = true) {
+      $('#deployPanel').classList.remove('open');
+      $('#deployPanel').setAttribute('aria-hidden', 'true');
+      if (restore && lastDeployTrigger && document.contains(lastDeployTrigger)) lastDeployTrigger.focus();
+    }
+    function trapFocus(event, root) {
+      if (event.key !== 'Tab' || !root.classList.contains('open')) return;
+      const focusable = $$('button, [href], select, input, textarea, [tabindex]:not([tabindex="-1"])').filter(el => root.contains(el) && !el.disabled && el.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    function renderDeployStep() {
+      $$('.step').forEach((s, i) => s.classList.toggle('active', i === deployStep));
+      $$('.step-panel').forEach((p, i) => p.classList.toggle('active', i === deployStep));
+      $('#prevStep').disabled = deployStep === 0;
+      $('#nextStep').classList.toggle('hidden', deployStep === 2);
+      $('#demoDeploy').classList.toggle('hidden', deployStep !== 2);
+      updateReviewSummary();
+      renderAnalysis();
+    }
+    function foundation() {
+      return infraData.find(v => v.id === selectedFoundation) || infraData[0];
+    }
+    function foundationApps(id) {
+      return appDeployment.foundationId === id ? 'sample-notes-api' : '연결 앱 없음';
+    }
+    function selectedReason(base = foundation(), id = selectedCandidate) {
+      const access = $('[data-question="access"]').value;
+      if (!base.ready) return access === '공개 URL 필요' && base.network.includes('내부') ? `${base.name}은 준비중이며 내부 전용 기반이라 공개 URL 요구와 맞지 않습니다.` : `${base.name}은 준비중이라 배포할 수 없습니다.`;
+      if (access === '공개 URL 필요' && base.network.includes('내부')) return `${base.name}은 내부 전용 기반이라 공개 URL 요구와 맞지 않습니다.`;
+      if (id === 'serverless') return `${base.name}: ${candidateReasons[id]} VPC 연결을 선택할 때만 VPC/Subnet 연결을 검토합니다.`;
+      return `${base.name}: ${candidateReasons[id]}`;
+    }
+    function syncFoundationSelect() {
+      $('#foundationSelect').innerHTML = infraData.map(item => `<option value="${item.id}">${item.name} · ${item.status}</option>`).join('');
+      $('#foundationSelect').value = selectedFoundation;
+      updateFoundationSummary();
+    }
+    function updateFoundationSummary() {
+      const select = $('#foundationSelect');
+      let summary = $('#foundationSummary');
+      if (!summary) {
+        summary = document.createElement('p');
+        summary.id = 'foundationSummary';
+        summary.className = 'notice';
+        select.closest('.question').after(summary);
+      }
+      const base = foundation();
+      summary.textContent = `${base.network} / ${base.workload} / ${base.availability}`;
+      let designNote = $('#foundationDesignNote');
+      if (!designNote) {
+        designNote = document.createElement('p');
+        designNote.id = 'foundationDesignNote';
+        designNote.className = 'draft-note';
+        summary.after(designNote);
+      }
+      designNote.textContent = '설계 저장 상태입니다. 실제 기반 인프라가 준비된 후 배포할 수 있습니다.';
+    }
+    function updateReviewSummary() {
+      const access = $('[data-question="access"]').value;
+      const storage = $('[data-question="storage"]').value;
+      const base = foundation();
+      updateFoundationSummary();
+      $('[data-answer-summary="access"]').textContent = `검토 답변: ${access}`;
+      $('[data-answer-summary="storage"]').textContent = `검토 답변: ${storage}`;
+      $('#selectedInfraName').textContent = base.name;
+      $('#selectedRuntimeName').textContent = runtimeData[selectedCandidate].name;
+      $('#reviewSummary').textContent = `고정 샘플 추천 기준: ${access}, ${storage}, SQL DB, 샘플 seed 사용 · 기반 ${base.name} · runtime ${runtimeData[selectedCandidate].name}`;
+      renderResourceSummary();
+    }
+    function renderAnalysis() {
+      const mode = $('#analysisMode').value;
+      const base = foundation();
+      const compatible = base.ready && base.runtimes.includes(selectedCandidate);
+      $$('[data-panel="1"] .question, [data-panel="1"] .chip-row').forEach(el => el.classList.toggle('hidden', mode !== 'normal'));
+      $('#analysisNone').classList.toggle('active', mode === 'none');
+      $('#analysisError').classList.toggle('active', mode === 'error');
+      $('#candidateNormal').classList.toggle('hidden', mode !== 'normal');
+      $('#candidateNone').classList.toggle('active', mode === 'none');
+      $('#candidateError').classList.toggle('active', mode === 'error');
+      $('#demoDeploy').disabled = isDeploying || mode !== 'normal' || !compatible;
+    }
+    function selectCandidate(id) {
+      const base = foundation();
+      if (id === 'vm') { $('#reasonBody').textContent = candidateReasons.vm; return; }
+      if (!base.runtimes.includes(id)) {
+        $('#reasonBody').textContent = `${runtimeData[id].name}은 ${base.name}의 시안 지원 조합이 아닙니다. 선택은 ${runtimeData[selectedCandidate].name}으로 유지됩니다.`;
+        return;
+      }
+      selectedCandidate = id;
+      $$('.candidate').forEach(card => card.classList.toggle('selected', card.dataset.candidate === id));
+      $('#reasonBody').textContent = selectedReason(base, id);
+      updateReviewSummary();
+      renderAnalysis();
+    }
+    function selectFoundation(id) {
+      selectedFoundation = id;
+      const base = foundation();
+      if (!base.runtimes.includes(selectedCandidate)) {
+        selectedCandidate = 'container';
+        $('#reasonBody').textContent = base.ready ? `${base.name}은 이전 runtime을 지원하지 않아 ECS Fargate로 전환했습니다.` : selectedReason(base);
+      } else {
+        $('#reasonBody').textContent = selectedReason(base);
+      }
+      $$('.candidate').forEach(card => card.classList.toggle('selected', card.dataset.candidate === selectedCandidate));
+      if ($('#foundationSelect')) $('#foundationSelect').value = selectedFoundation;
+      updateReviewSummary();
+      renderAnalysis();
+    }
+    function resourceSummary(foundationId = selectedFoundation, runtimeId = selectedCandidate) {
+      const base = infraData.find(v => v.id === foundationId) || infraData[0];
+      const runtime = runtimeData[runtimeId] || runtimeData.container;
+      if (runtimeId === 'serverless') {
+        return {
+          reused: '공통 배포 정책(네트워크 재사용 없음 · VPC 미연결 샘플)',
+          created: `${runtime.name}: ${runtime.created.join(', ')}`
+        };
+      }
+      const reused = runtime.reused.filter(name => name !== 'NAT' || base.details.some(v => v.startsWith('NAT:') && !v.includes('없음')));
+      return {
+        reused: `${base.name}: ${reused.join(', ')}`,
+        created: `${runtime.name}: ${runtime.created.join(', ')}`
+      };
+    }
+    function renderResourceSummary() {
+      const summary = resourceSummary();
+      $('#reusedResources').textContent = summary.reused;
+      $('#createdResources').textContent = summary.created;
+    }
+    function renderAppDeployment() {
+      const base = infraData.find(v => v.id === appDeployment.foundationId) || infraData[0];
+      const runtime = runtimeData[appDeployment.runtimeId] || runtimeData.container;
+      const summary = resourceSummary(base.id, appDeployment.runtimeId);
+      $('#monitorInfra').textContent = base.name;
+      $('#monitorRuntime').textContent = runtime.name;
+      $('#appInfraName').textContent = base.name;
+      $('#appRuntimeName').textContent = runtime.name;
+      $('#resultReusedResources').textContent = summary.reused;
+      $('#resultCreatedResources').textContent = summary.created;
+      renderInfra();
+      if (drawerInfraId) $('#drawerApps').textContent = foundationApps(drawerInfraId);
+    }
+    function setStage(id, text, tone = '') {
+      const badge = $('#' + id);
+      badge.textContent = text;
+      badge.className = `badge ${tone}`.trim();
+    }
+    function updateOverview() {
+      const resultMode = $('#resultMode').value;
+      const logMode = $('#logMode').value;
+      const range = metricSamples[$('#timeRange').value] || metricSamples['15m'];
+      const metricState = resultMode === 'noData' ? 'noData' : resultMode === 'collectFail' ? 'collectFail' : 'normal';
+      const collectText = metricState === 'noData' ? '선택한 기간에 수집된 지표 없음' : metricState === 'collectFail' ? '지표 수집 실패' : logMode === 'empty' ? '로그 없음 · 지표 수집됨' : logMode === 'error' ? '로그 조회 실패 · 지표 수집됨' : '지표/로그 샘플 수집됨';
+      $('#overviewHealthSummary').innerHTML = `<div class="overview-line"><span class="muted">배포</span><strong>${$('#deployStatus').textContent}</strong></div><div class="overview-line"><span class="muted">헬스</span><strong>${$('#healthStatus').textContent}</strong></div><div class="overview-line"><span class="muted">수집 상태</span><strong>${collectText}</strong></div>`;
+      if (metricState === 'noData') {
+        $('#overviewMetricsSummary').innerHTML = '<div class="empty-state">선택한 기간에 수집된 지표가 없습니다. 모니터링 탭에서 기간을 변경해 보세요.</div>';
+      } else if (metricState === 'collectFail') {
+        $('#overviewMetricsSummary').innerHTML = '<div class="empty-state">지표 수집 상태를 불러오지 못했습니다. 샘플 상태 선택에서 정상으로 되돌릴 수 있습니다.</div>';
+      } else {
+        $('#overviewMetricsSummary').innerHTML = `<div class="overview-line"><span class="muted">응답 시간</span><strong>${range.latency.summary}</strong></div><div class="overview-line"><span class="muted">요청 / 오류</span><strong>${range.traffic.summary}</strong></div><div class="overview-line"><span class="muted">CPU / 메모리</span><strong>${range.resource.summary}</strong></div>`;
+      }
+      if (logMode === 'empty') {
+        $('#overviewLogsSummary').textContent = '아직 수집된 로그가 없습니다.';
+        $('#overviewRecentLogs').innerHTML = '<div class="empty-state">아직 수집된 로그가 없습니다.</div>';
+      } else if (logMode === 'error') {
+        $('#overviewLogsSummary').textContent = '로그 조회 실패';
+        $('#overviewRecentLogs').innerHTML = '<div class="empty-state">샘플 로그 조회에 실패했습니다.</div>';
+      } else {
+        $('#overviewLogsSummary').textContent = `샘플 로그 ${logs.length}건`;
+        $('#overviewRecentLogs').innerHTML = logs.slice(-3).reverse().map(([time, part, level, msg]) => `<div class="overview-line"><span class="mono">${time}</span><span><strong>${level}</strong> · ${part} · ${msg}</span></div>`).join('');
+      }
+    }
+    function renderResult() {
+      const mode = $('#resultMode').value, failed = mode === 'failure', healthBad = mode === 'healthBad', noData = mode === 'noData', collectFail = mode === 'collectFail';
+      $('#deployStatus').textContent = failed ? '실패' : '성공';
+      $('#healthStatus').textContent = failed ? '미확인' : healthBad ? '비정상' : '정상';
+      $('#appListDeployBadge').textContent = failed ? '배포 실패' : '배포 성공';
+      $('#appListDeployBadge').className = 'badge ' + (failed ? 'danger' : 'ok');
+      $('#appListHealthBadge').textContent = failed ? '헬스 미확인' : healthBad ? '헬스 비정상' : '헬스 정상';
+      $('#appListHealthBadge').className = 'badge ' + (failed || healthBad ? 'danger' : 'ok');
+      setStage('stagePrepBadge', '완료', 'ok');
+      setStage('stageBuildBadge', '완료', 'ok');
+      setStage('stageDeployBadge', failed ? '실패' : '완료', failed ? 'danger' : 'ok');
+      $('#healthStepText').textContent = failed ? '배포 실패로 헬스 체크를 실행하지 않았습니다' : healthBad ? 'HTTP 응답은 있지만 앱 헬스 조건이 비정상입니다' : 'HTTP 응답 확인';
+      $('#healthStepBadge').textContent = failed ? '미확인' : healthBad ? '비정상' : '정상';
+      $('#healthStepBadge').className = 'badge ' + (failed || healthBad ? 'danger' : 'ok');
+      $('#failureNotice').classList.toggle('hidden', !failed);
+      $('#copyUrl').disabled = failed;
+      $('#appUrl').textContent = failed ? '배포 실패로 URL 없음' : 'https://sample-notes.demo.freesia.local';
+      $$('[data-chart]').forEach(chart => {
+        chart.classList.toggle('no-data', noData);
+        chart.classList.toggle('collect-fail', collectFail);
+      });
+      updateOverview();
+    }
+    function renderCharts() {
+      const rangeKey = $('#timeRange').value;
+      const range = metricSamples[rangeKey] || metricSamples['15m'];
+      const axisLabels = timeAxisSamples[rangeKey] || timeAxisSamples['15m'];
+      $('#metricsUpdated').textContent = range.updated;
+      $('#metricsTimeAxis').innerHTML = axisLabels.map(label => `<span>${label}</span>`).join('');
+      $$('[data-chart]').forEach(chart => {
+        const sample = range[chart.dataset.chart], axis = chart.querySelectorAll('.axis span'), bars = chart.querySelectorAll('.bar'), legend = chart.querySelector('.legend span:last-child');
+        chart.querySelector('[data-summary]').textContent = sample.summary;
+        axis.forEach((label, i) => label.textContent = sample.axis[i]);
+        bars.forEach((bar, i) => bar.style.height = `${Math.max(6, (sample.values[i] / sample.max) * 100)}%`);
+        legend.textContent = `축: 0-${sample.max}${sample.unit}`;
+        let svg = chart.querySelector('.sparkline');
+        if (!svg) {
+          svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('class', 'sparkline');
+          svg.setAttribute('viewBox', '0 0 100 100');
+          svg.innerHTML = '<polyline></polyline>';
+          chart.querySelector('.bars').append(svg);
+        }
+        svg.querySelector('polyline').setAttribute('points', sample.line.map((v, i, a) => `${(i / (a.length - 1)) * 100},${100 - ((v / sample.max) * 100)}`).join(' '));
+      });
+      updateOverview();
+    }
+    function renderLogs() {
+      const mode = $('#logMode').value;
+      if (mode === 'empty') {
+        $('#logList').innerHTML = '<div class="empty-state">아직 수집된 로그가 없습니다.</div>';
+        updateOverview();
+        return;
+      }
+      if (mode === 'error') {
+        $('#logList').innerHTML = '<div class="empty-state"><strong>로그 조회 실패</strong><br>샘플 로그 상태를 불러오지 못했습니다. 실제 재수집은 수행하지 않습니다.<br><button class="btn small" id="restoreSampleLogs" style="margin-top:10px">샘플 다시보기</button></div>';
+        $('#restoreSampleLogs').addEventListener('click', () => { $('#logMode').value = 'normal'; renderLogs(); });
+        updateOverview();
+        return;
+      }
+      const kind = $('#logKind').value, query = $('#logSearch').value.trim().toLowerCase();
+      const rows = logs.filter(([, part, level, msg]) => (kind === 'all' || kind === part || (kind === 'error' && level === 'ERROR')) && (!query || msg.toLowerCase().includes(query) || level.toLowerCase().includes(query)));
+      $('#logList').innerHTML = rows.length ? rows.map(([time, part, level, msg]) => {
+        const cls = level === 'ERROR' ? 'danger' : level === 'WARN' ? 'warn' : 'info';
+        const text = query ? msg.replace(new RegExp(escapeRegExp(query), 'ig'), m => `<mark>${m}</mark>`) : msg;
+        return `<div class="log-row"><span>${time}</span><span><span class="badge ${cls}">${part}</span></span><span>${level} · ${text}</span></div>`;
+      }).join('') : '<div class="empty-state">검색 결과 없음<br><button class="btn small" id="clearLogFilters" style="margin-top:10px">필터 초기화</button></div>';
+      $('#clearLogFilters')?.addEventListener('click', () => { $('#logKind').value = 'all'; $('#logSearch').value = ''; renderLogs(); });
+      updateOverview();
+    }
+    function setTab(tab) {
+      $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      $$('.tab-panel').forEach(p => p.classList.remove('active'));
+      $('#' + tab + 'Tab').classList.add('active');
+    }
+    function runDemoDeploy() {
+      if (isDeploying) return;
+      const snapshot = { foundationId: selectedFoundation, runtimeId: selectedCandidate };
+      isDeploying = true;
+      deployTimers.forEach(clearTimeout);
+      deployTimers = [];
+      closeDeploy(false);
+      setPage('applications');
+      showAppDetail(true);
+      setTab('overview');
+      $('#demoDeploy').disabled = true;
+      $('#demoDeploy').textContent = '진행 중';
+      $('#resultMode').disabled = true;
+      appDeployment = snapshot;
+      renderAppDeployment();
+      $('#deployStatus').textContent = '진행 중';
+      $('#healthStatus').textContent = '대기';
+      $('#failureNotice').classList.add('hidden');
+      setStage('stagePrepBadge', '진행 중', 'info');
+      setStage('stageBuildBadge', '대기');
+      setStage('stageDeployBadge', '대기');
+      $('#healthStepBadge').textContent = '대기';
+      $('#healthStepBadge').className = 'badge';
+      $('#healthStepText').textContent = '배포 완료 후 확인합니다';
+      updateOverview();
+      [
+        () => { setStage('stagePrepBadge', '완료', 'ok'); setStage('stageBuildBadge', '진행 중', 'info'); updateOverview(); },
+        () => { setStage('stageBuildBadge', '완료', 'ok'); setStage('stageDeployBadge', '진행 중', 'info'); updateOverview(); },
+        () => { setStage('stageDeployBadge', '완료', 'ok'); $('#healthStepBadge').textContent = '진행 중'; $('#healthStepBadge').className = 'badge info'; updateOverview(); },
+        () => { isDeploying = false; $('#resultMode').value = 'success'; $('#resultMode').disabled = false; $('#demoDeploy').textContent = '배포'; renderResult(); renderDeployStep(); }
+      ].forEach((step, i) => deployTimers.push(setTimeout(step, (i + 1) * 450)));
+    }
+
+    $$('.nav button').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.page)));
+    $('#openInfraDesign').addEventListener('click', e => openInfraDesign(e.currentTarget));
+    $('#backInfraDesign').addEventListener('click', returnToInfraList);
+    $('#backSavedInfraDesign').addEventListener('click', returnToInfraList);
+    $('#startInfraConversation').addEventListener('click', startInfraConversation);
+    $('#saveInfraSpace').addEventListener('click', saveInfraDesign);
+    $('#infraRequirement').addEventListener('input', e => {
+      infraDesignDraft.requirement = e.currentTarget.value;
+      if (e.currentTarget.value.trim()) e.currentTarget.setCustomValidity('');
+      setDesignSummary($('#infraSummary'), infraDesignDraft);
+    });
+    $('#infraSpaceName').addEventListener('input', e => {
+      infraDesignDraft.name = e.currentTarget.value;
+      e.currentTarget.setCustomValidity('');
+      $('#infraNameError').textContent = '';
+    });
+    $('#infraRegion').addEventListener('change', e => { infraDesignDraft.region = e.currentTarget.value; setDesignSummary($('#infraSummary'), infraDesignDraft); $('#infraTerraformPreview').textContent = terraformFor(infraDesignDraft); });
+    $('#infraFollowUp').addEventListener('input', e => { infraDesignDraft.followUp = e.currentTarget.value; setDesignSummary($('#infraSummary'), infraDesignDraft); });
+    $$('[data-action="open-deploy"]').forEach(btn => btn.addEventListener('click', e => openDeploy(e.currentTarget)));
+    $$('[data-page-jump]').forEach(btn => btn.addEventListener('click', () => setPage(btn.dataset.pageJump)));
+    $$('.tabs [data-infra-tab]').forEach(btn => btn.addEventListener('click', () => { infraTab = btn.dataset.infraTab; $$('.tabs [data-infra-tab]').forEach(b => b.classList.toggle('active', b === btn)); renderInfra(); }));
+    $('#openAppDetail').addEventListener('click', () => showAppDetail(true));
+    $('#backToApps').addEventListener('click', () => showAppDetail(false));
+    $('#closeDrawer').addEventListener('click', () => closeDrawer());
+    $('#drawerBackdrop').addEventListener('click', () => closeDrawer());
+    $('#drawerDeploy').addEventListener('click', () => {
+      const item = infraData.find(v => v.id === drawerInfraId);
+      if (!item?.ready) return;
+      selectFoundation(drawerInfraId);
+      closeDrawer(false);
+      openDeploy(lastDrawerTrigger);
+    });
+    $('#closeDeploy').addEventListener('click', () => closeDeploy());
+    $('#deployBackdrop').addEventListener('click', () => closeDeploy());
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        if (currentPage === 'infra-design') returnToInfraList();
+        else if ($('#deployPanel').classList.contains('open')) closeDeploy();
+        else if ($('#infraDrawer').classList.contains('open')) closeDrawer();
+      }
+      trapFocus(e, $('#infraDrawer'));
+      trapFocus(e, $('#deployPanel'));
+    });
+    $('#infraMode').addEventListener('change', renderInfra);
+    $('#infraRetry').addEventListener('click', () => { $('#infraMode').value = 'normal'; renderInfra(); });
+    $('#analysisMode').addEventListener('change', renderDeployStep);
+    $('#resultMode').addEventListener('change', () => { if (!isDeploying) renderResult(); });
+    $('#logMode').addEventListener('change', renderLogs);
+    $$('.step').forEach(step => step.addEventListener('click', () => { deployStep = Number(step.dataset.step); renderDeployStep(); }));
+    $('#prevStep').addEventListener('click', () => { deployStep = Math.max(0, deployStep - 1); renderDeployStep(); });
+    $('#nextStep').addEventListener('click', () => { deployStep = Math.min(2, deployStep + 1); renderDeployStep(); });
+    $$('[data-question]').forEach(select => select.addEventListener('change', () => { updateReviewSummary(); $('#reasonBody').textContent = selectedReason(); }));
+    $('#foundationSelect').addEventListener('change', e => selectFoundation(e.currentTarget.value));
+    $$('.candidate').forEach(card => card.addEventListener('click', () => selectCandidate(card.dataset.candidate)));
+    $$('[data-node]').forEach(node => node.addEventListener('click', () => { $('#reasonBody').textContent = candidateReasons[node.dataset.node]; }));
+    $('#demoDeploy').addEventListener('click', runDemoDeploy);
+    $$('.tabs [data-tab]').forEach(tab => tab.addEventListener('click', () => setTab(tab.dataset.tab)));
+    $('#logKind').addEventListener('change', renderLogs);
+    $('#logSearch').addEventListener('input', renderLogs);
+    $('#timeRange').addEventListener('change', renderCharts);
+    $('#viewAllMetrics').addEventListener('click', () => setTab('metrics'));
+    $('#viewAllLogs').addEventListener('click', () => { setTab('logs'); $('#logKind').value = 'all'; $('#logSearch').value = ''; renderLogs(); });
+    $('#gotoErrorLog').addEventListener('click', () => { setTab('logs'); $('#logMode').value = 'normal'; $('#logKind').value = 'error'; $('#logSearch').value = 'DATABASE_URL'; renderLogs(); });
+    $('#copyUrl').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($('#appUrl').textContent); $('#copyNote').textContent = '복사됨'; }
+      catch { $('#copyNote').textContent = '복사 API를 사용할 수 없습니다'; }
+      setTimeout(() => $('#copyNote').textContent = '', 1800);
+    });
+
+    renderInfraWorkflow();
+    syncFoundationSelect();
+    renderInfra();
+    renderAppDeployment();
+    renderDeployStep();
+    renderLogs();
+    renderCharts();
+    renderResult();
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# Sprint02 contract
+Ownerfrontend_generator; parentrecordsdifferentfiles. GoalcreateAppusingtargetSpace+connectedrepo;deploy->analyze->recommendtree->TF/repochanges->sampleCIresult.
+Criteria:creationrequiresconnection, selectedrepo/branch/eligibleSpace; Deployclick analysis trigger,2-3eligiblecandidatecardsnotunsuitable filler; mascot+branchingreadonlytreewithconditionnodes/branchlabels/candidateresults; selectedcomputerepo/pathconsistentthroughTF preview/samplecommit-push/Actions steps; actualGit/cloudnevercalled; absentAPIdisabled/unsupported; existingstate/API/storage/races/SSEcleanup/reopenmaintained; newpipelinefailure/retry/reentryhonest.
+Verify meaningfulnativechecks candidateeligibility/repo-planconsistencyandnopromotionbycodealone. Browser fullflowwithrole/connection/read-only/analysisorder/tree/candidate/Terraform/pipelineand1440/390keyboard/overflow/JS0; previouscriticalregressions. checktypes/lint/tests/build, independent4scores>=6. Sourcefreeze beforeexport/Notioncaptures.
+
+2026-10-01 acceptance addendum: Main has Infra / Application / Integration destinations. Integration connects/registers Repository. App forms select registered repos only, without URL input. Unregistered repositories are not selectable; empty registry routes to Integrations.
