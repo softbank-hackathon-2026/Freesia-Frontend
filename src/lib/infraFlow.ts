@@ -33,13 +33,13 @@ export function normalizeInfraSpace(space: MeetingInfraSpace): MeetingInfraSpace
   return { ...space, flow: { ...rest, choices, ...(selected ? { legacySelection: selected } : {}) } };
 }
 export function reviseInfra(space: MeetingInfraSpace, request: string, choices: Choices, step: number): MeetingInfraSpace {
-  return { ...space, status: "draft", code: "", flow: { ...newInfraFlow(space.region), request, choices, step } };
+  return { ...space, region: choices.region, status: "draft", code: "", flow: { ...newInfraFlow(space.region), request, choices, step } };
 }
 export function generateInfra(space: MeetingInfraSpace): MeetingInfraSpace {
   if (!space.flow || space.flow.step !== 2 || !complete(space.flow.choices))
     throw new Error("필수 질문에 먼저 답변하세요.");
   return {
-    ...space, status: "source_generated", code: generateTerraform(space.flow.choices),
+    ...space, region: space.flow.choices.region, status: "source_generated", code: generateTerraform(space.flow.choices),
     flow: { ...space.flow, reviewed: false, apply: null },
   };
 }
@@ -66,14 +66,14 @@ export function validInfraFlow(space: MeetingInfraSpace): boolean {
       || f.request.length > 4000
       || ![-1, 0, 1, 2].includes(f.step)
       || !f.choices
-      || !["ap-northeast-1", "ap-northeast-2"].includes(space.region)
+      || !["", "ap-northeast-1", "ap-northeast-2"].includes(space.region)
       || f.choices.region !== space.region
       || !["", "public", "private"].includes(f.choices.visibility)
       || !["", "single", "multi"].includes(f.choices.availability)
       || typeof f.reviewed !== "boolean")
     return false;
   if (f.step >= 0 && !f.request.trim()
-      || f.step >= 1 && !f.choices.visibility
+      || f.step >= 1 && (!f.choices.region || !f.choices.visibility)
       || f.step === 2 && !complete(f.choices))
     return false;
   if (f.selected !== undefined || (f.legacySelection !== undefined && !["matched", "availability", "access"].includes(f.legacySelection)))
@@ -93,4 +93,11 @@ export function validInfraFlow(space: MeetingInfraSpace): boolean {
       || (f.apply.status === "success" && f.apply.fail)))
     return false;
   return space.status === (f.apply?.status === "success" ? "demo_deployed" : space.code ? "source_generated" : "draft");
+}
+
+export function canDiscardInfra(space: MeetingInfraSpace, apps: readonly { infra_id: string }[]): boolean {
+  return !!space.flow
+    && space.status !== "demo_deployed"
+    && !["pending", "applying", "success"].includes(space.flow.apply?.status ?? "")
+    && !apps.some((app) => app.infra_id === space.id);
 }

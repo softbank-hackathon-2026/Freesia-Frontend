@@ -28,7 +28,7 @@ export const templates: Record<
 export type MeetingInfraSpace = {
   id: string;
   name: string;
-  target: Target;
+  target?: Target;
   region: string;
   template?: InfraTemplate;
   flow?: InfraFlow;
@@ -58,32 +58,34 @@ export function newMeetingState(): MeetingState {
 }
 export function makeInfraSpace(input: {
   name: string;
-  target: Target;
-  region: string;
+  target?: Target;
+  region?: string;
   template?: InfraTemplate;
 }): MeetingInfraSpace {
   if (!input.name.trim() || input.name.length > 80)
     throw new Error("Space 이름을 1~80자로 입력하세요.");
   if (
-    !targets.includes(input.target) ||
+    (input.target !== undefined && !targets.includes(input.target)) ||
     (input.template !== undefined && !Object.hasOwn(templates, input.template)) ||
-    !["ap-northeast-2", "ap-northeast-1"].includes(input.region)
+    (input.region !== undefined && !["ap-northeast-2", "ap-northeast-1"].includes(input.region)) ||
+    (input.template !== undefined && (!input.target || !input.region))
   )
     throw new Error("대상·리전·템플릿을 선택하세요.");
   if (input.template === undefined) return {
-    ...input, name: input.name.trim(), id: `demo-space-${crypto.randomUUID()}`,
+    ...input, region: input.region ?? "", name: input.name.trim(), id: `demo-space-${crypto.randomUUID()}`,
     status: "draft", computes: ["ecs-fargate", "lambda", "ec2"], code: "",
     limitations: ["실제 AWS 리소스 없음", "고정 VPC/Subnet 샘플 · 실제 AI 생성/검증/적용 없음"],
-    flow: newInfraFlow(input.region),
+    flow: newInfraFlow(input.region ?? ""),
   };
   return {
     ...input,
+    region: input.region!,
     name: input.name.trim(),
     id: `demo-space-${crypto.randomUUID()}`,
     status: "source_generated",
     computes: ["ecs-fargate", "lambda", "ec2"],
     code: generateTerraform({
-      region: input.region,
+      region: input.region!,
       visibility: input.template === "public" ? "public" : "private",
       availability: input.template === "public" ? "single" : "multi",
     }),
@@ -135,7 +137,7 @@ export function validMeetingState(value: unknown): value is MeetingState {
           (k) =>
             typeof (i as unknown as Record<string, unknown>)[k] !== "string",
         ) ||
-        !targets.includes(i.target) ||
+        (i.target !== undefined ? !targets.includes(i.target) : !i.flow) ||
         (i.flow ? !validInfraFlow(i) : (!i.template || !Object.hasOwn(templates, i.template) || !["source_generated", "demo_deployed"].includes(i.status))) ||
         !Array.isArray(i.computes) ||
         !i.computes.every((c) => typeof c === "string") ||
@@ -188,7 +190,7 @@ export function readyMeetingSpaces(state: MeetingState): InfraSpace[] {
     .map((s) => ({
       id: s.id,
       name: s.name,
-      description: `${s.target} · 데모 배포된 기반 샘플. 실제 AWS 리소스가 아닙니다.`,
+      description: `${s.target ? s.target + " · " : ""}데모 배포된 기반 샘플. 실제 AWS 리소스가 아닙니다.`,
       network:
         (s.flow ? s.flow.choices.visibility === "public" : s.template === "public")
           ? "public"
@@ -199,9 +201,29 @@ export function readyMeetingSpaces(state: MeetingState): InfraSpace[] {
       app_count: 0,
     }));
 }
-export function foundationTarget(id: string, state: MeetingState): Target {
-  return (
-    state.spaces.find((s) => s.id === id)?.target ??
-    (id === "demo-private" ? "LINE 샘플 대상" : "AWS 샘플 대상")
-  );
+export function foundationTarget(id: string, state: MeetingState): Target | undefined {
+  const space = state.spaces.find((s) => s.id === id);
+  if (space) return space.target;
+  return id === "demo-private" ? "LINE 샘플 대상" : id === "demo-public" || id === "demo-ha" ? "AWS 샘플 대상" : undefined;
+}
+
+export function registerRepository(connection: GitHubConnection | null, input: string): GitHubConnection {
+  const normalized = input.trim().replace(/\/+$/, "").replace(/\.git$/i, "");
+  const match = /^https:\/\/github\.com\/([a-z0-9][a-z0-9-]*)\/([\w.-]+)$/i.exec(normalized);
+  if (!match || input.length > 2048 || [".", ".."].includes(match[2]))
+    throw new Error("https://github.com/owner/repository 형식의 Repository URL을 입력하세요.");
+  const repoUrl = `https://github.com/${match[1]}/${match[2]}`;
+  const sameMain = connection?.repositories.find((repo) =>
+    repo.repo_url.replace(/\.git$/i, "").toLowerCase() === repoUrl.toLowerCase() && repo.branch === "main");
+  if (sameMain && connection?.registeredIds?.includes(sameMain.id))
+    throw new Error("이미 등록한 Repository입니다.");
+  const repo: RemoteRepository = sameMain ?? {
+    id: `repo-${crypto.randomUUID()}`, name: `${match[1]}/${match[2]}`,
+    repo_url: repoUrl, branch: "main", visibility: "sample",
+  };
+  return {
+    account: connection?.account ?? "",
+    repositories: sameMain ? connection!.repositories : [...(connection?.repositories ?? []), repo],
+    registeredIds: [...(connection?.registeredIds ?? []), repo.id],
+  };
 }

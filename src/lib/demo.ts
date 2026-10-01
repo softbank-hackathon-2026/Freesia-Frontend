@@ -10,7 +10,7 @@ import type {
   InfraSpace,
 } from "./types.ts";
 import { validMeetingState } from "./meeting.ts";
-import type { MeetingState } from "./meeting.ts";
+import type { MeetingState, MeetingInfraSpace } from "./meeting.ts";
 export const STORE_KEY = "freesia.demo.v1";
 export type Choices = {
   region: string;
@@ -36,7 +36,7 @@ export type DemoState = {
 export const foundations: InfraSpace[] = [
   {
     id: "demo-public",
-    name: "공개 웹 서비스용",
+    name: "쇼핑몰 서비스",
     description:
       "준비된 기반 샘플입니다. 실제 리소스 정보는 연결되지 않았습니다.",
     network: "public",
@@ -45,7 +45,7 @@ export const foundations: InfraSpace[] = [
   },
   {
     id: "demo-private",
-    name: "내부 API용",
+    name: "사내 업무 서비스",
     description: "준비된 내부 API 기반 샘플입니다.",
     network: "private",
     computes: ["ecs-fargate", "lambda"],
@@ -53,14 +53,39 @@ export const foundations: InfraSpace[] = [
   },
   {
     id: "demo-ha",
-    name: "고가용성 서비스용",
+    name: "결제 서비스",
     description:
-      "고가용성 기반 샘플입니다. API의 ha 값만 표시하며 네트워크·AZ를 추론하지 않습니다.",
+      "외부 직접 경로 없이 두 가용 영역에 배치한 네트워크 데모 예시입니다.",
     network: "ha",
     computes: ["ecs-fargate", "ec2"],
     app_count: 0,
   },
 ];
+
+const preparedConfigurations: Record<string, { request: string; choices: Choices }> = {
+  "demo-public": {
+    request: "쇼핑몰용 공개 네트워크의 단일 가용 영역 구성 예시입니다.",
+    choices: { region: "ap-northeast-2", visibility: "public", availability: "single" },
+  },
+  "demo-private": {
+    request: "사내 업무용으로 외부 직접 경로가 없는 단일 가용 영역 구성 예시입니다.",
+    choices: { region: "ap-northeast-2", visibility: "private", availability: "single" },
+  },
+  "demo-ha": {
+    request: "결제용 네트워크를 두 가용 영역에 배치하는 내부 경로 구성 예시입니다.",
+    choices: { region: "ap-northeast-2", visibility: "private", availability: "multi" },
+  },
+};
+export const preparedInfraSpaces: MeetingInfraSpace[] = foundations.map((infra) => {
+  const { request, choices } = preparedConfigurations[infra.id];
+  return {
+    id: infra.id, name: infra.name, region: choices.region, computes: infra.computes,
+    status: "demo_deployed", code: generateTerraform(choices),
+    limitations: ["미리 준비한 읽기 전용 데모 예시", "실제 AI 대화·Terraform 검증·AWS 적용 이력 없음"],
+    flow: { request, step: 2, choices, reviewed: true, apply: { status: "success", phase: 3, fail: false } },
+  };
+});
+
 export const sampleAnalysis: Analysis = {
   status: "done",
   requirements: [
