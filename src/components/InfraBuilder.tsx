@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { advanceInfraApply, generateInfra, reviseInfra, startInfraApply } from "../lib/infraFlow.ts";
 import type { MeetingInfraSpace } from "../lib/meeting.ts";
-export default function InfraBuilder({ space, onSave, onCancel }: {
+export default function InfraBuilder({ space, onSave, onCancel, canDiscard, onDiscard, readOnly = false }: {
   space: MeetingInfraSpace;
   onSave: (space: MeetingInfraSpace) => void;
   onCancel: () => void;
+  canDiscard: boolean;
+  readOnly?: boolean;
+  onDiscard: () => void;
 }) {
   const flow = space.flow!;
   const [request, setRequest] = useState(flow.request);
@@ -14,6 +17,7 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
   const operation = flow.apply;
   const busy = operation?.status === "pending" || operation?.status === "applying";
   function save(next: MeetingInfraSpace) {
+    if (readOnly) return false;
     try {
       onSave(next);
       setError("");
@@ -26,7 +30,7 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
     }
   }
   useEffect(() => {
-    if (!running || !busy)
+    if (readOnly || !running || !busy)
       return;
     const timer = setTimeout(() => {
       try {
@@ -38,7 +42,7 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [running, busy, space, onSave]);
+  }, [running, busy, space, onSave, readOnly]);
   function download() {
     const url = URL.createObjectURL(new Blob([space.code], { type: "text/plain;charset=utf-8" }));
     const a = document.createElement("a");
@@ -53,10 +57,18 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
         <div>
           <div className="eyebrow">INFRA SPACE / AI DESIGN</div>
           <h1>{space.name}</h1>
-          <p>{space.target} · {space.region}</p>
+          <p>{[space.target, space.region || "리전 미정 · 대화에서 설정"].filter(Boolean).join(" · ")}</p>
         </div>
-        <button onClick={onCancel}>목록으로</button>
+        <div className="heading-actions">
+          <button onClick={onCancel}>목록으로</button>
+          {space.status !== "demo_deployed" && <button disabled={!canDiscard} onClick={() => {
+            if (!canDiscard || !window.confirm(`“${space.name}” 작성을 취소하고 이 Space를 삭제할까요? 저장한 요구사항과 코드가 삭제되며 되돌릴 수 없습니다.`)) return;
+            try { onDiscard(); }
+            catch (e) { setError(e instanceof Error ? e.message : "작성 취소 실패"); }
+          }}>작성 취소</button>}
+        </div>
       </div>
+      {readOnly && <div className="notice">미리 준비한 데모 예시 · 읽기 전용입니다. 아래 대화·코드·완료 상태는 실제 사용자의 AI 대화나 AWS 배포 이력이 아닙니다.</div>}
       <div className="notice">
         AI 질의응답·Apply 데모 · 실제 AI와 클라우드를 호출하지 않습니다.
         자유 입력은 기록만 하며 분석하지 않습니다. 구조화된 답변으로 고정 VPC/Subnet 코드 초안을 만듭니다.
@@ -84,6 +96,15 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
         ) : (
           <>
             <div className="chat user">{flow.request}</div>
+            <div className="chat assistant">AWS 네트워크 샘플을 어느 리전에 구성할까요?</div>
+            {!flow.choices.region ? (
+              <div className="choice-buttons">
+                {[["ap-northeast-2", "서울 · ap-northeast-2"], ["ap-northeast-1", "도쿄 · ap-northeast-1"]].map(([region, label]) => (
+                  <button key={region} onClick={() => save(reviseInfra(space, flow.request, { ...flow.choices, region }, 0))}>{label}</button>
+                ))}
+              </div>
+            ) : <div className="chat user">{flow.choices.region}</div>}
+            {flow.choices.region && <>
             <div className="chat assistant">인터넷 경로가 필요한가요?</div>
             {flow.step === 0 ? (
               <div className="choice-buttons">
@@ -108,10 +129,11 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
                 ) : <div className="chat user">{flow.choices.availability === "multi" ? "Multi AZ · 2개" : "Single AZ · 1개"}</div>}
               </>
             )}
-            <button disabled={busy} className="text-button" onClick={() => {
+            </>}
+            {!readOnly && <button disabled={busy} className="text-button" onClick={() => {
               setRunning(false);
-              save(reviseInfra(space, flow.request, { region: space.region, visibility: "", availability: "" }, -1));
-            }}>답변 수정 · 이후 결과 초기화</button>
+              save(reviseInfra(space, flow.request, { region: "", visibility: "", availability: "" }, -1));
+            }}>답변 수정 · 이후 결과 초기화</button>}
           </>
         )}
       </section>
@@ -130,15 +152,15 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
           <button onClick={download}>.tf 다운로드</button>
           <pre tabIndex={0} aria-label="Terraform 코드"><code>{space.code}</code></pre>
           <label>
-            <input type="checkbox" checked={flow.reviewed} disabled={busy || operation?.status === "success"}
+            <input type="checkbox" checked={flow.reviewed} disabled={readOnly || busy || operation?.status === "success"}
               onChange={(e) => save({ ...space, flow: { ...flow, reviewed: e.target.checked, apply: null } })} />
-            선택한 코드와 데모 제한을 검토했습니다
+            {readOnly ? "미리 준비한 코드 검토 완료 상태 예시" : "선택한 코드와 데모 제한을 검토했습니다"}
           </label>
-          <label>
+          {!readOnly && <label>
             <input type="checkbox" checked={fail} disabled={busy} onChange={(e) => setFail(e.target.checked)} />
             Apply 실패 시연
-          </label>
-          {!busy && operation?.status !== "success" && (
+          </label>}
+          {!readOnly && !busy && operation?.status !== "success" && (
             <button className="primary" disabled={!flow.reviewed} onClick={() => {
               if (save(startInfraApply(space, fail))) setRunning(true);
             }}>{operation?.status === "failed" ? "Apply 다시 시도 · 데모" : "Apply 시작 · 데모"}</button>
@@ -151,7 +173,7 @@ export default function InfraBuilder({ space, onSave, onCancel }: {
           <progress aria-label="인프라 Apply 진행률" max={3} value={operation.phase} />
           <p role="status">
             {operation.status === "success"
-              ? "DEMO Apply 완료 · 앱에서 선택 가능한 기반 샘플입니다. 실제 AWS 리소스는 없습니다."
+              ? (readOnly ? "미리 준비한 DEMO Apply 완료 예시 · 실제 AWS 리소스와 적용 이력은 없습니다." : "DEMO Apply 완료 · 앱에서 선택 가능한 기반 샘플입니다. 실제 AWS 리소스는 없습니다.")
               : operation.status === "failed"
                 ? "Apply 실패 시연 · 준비된 기반으로 등록되지 않았습니다."
                 : `${operation.phase === 0 ? "대기" : "적용 진행"} · ${operation.phase} / 3 · 실제 Terraform 실행 없음`}

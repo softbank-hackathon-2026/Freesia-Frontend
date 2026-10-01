@@ -15,7 +15,7 @@ import type {
   DeploymentEvent,
   InfraSpace,
 } from "../lib/types.ts";
-import { foundationTarget, registeredRepositories } from "../lib/meeting.ts";
+import { registeredRepositories } from "../lib/meeting.ts";
 import type { MeetingState } from "../lib/meeting.ts";
 import {
   advancePipeline,
@@ -349,7 +349,7 @@ export default function Applications({
           <p>
             {selected
               ? "기반·분석 근거·배포 상태를 확인하세요."
-              : "통합에 등록한 Repository와 기업 / 대상 Space를 선택하세요."}
+              : "통합에 등록한 Repository와 준비된 Infra Space를 선택하세요."}
           </p>
         </div>
         {selected || creating ? (
@@ -394,7 +394,7 @@ export default function Applications({
       {creating && !registered.length ? (
         <section className="panel detail">
           <h2>등록한 Repository가 없습니다</h2>
-          <p>통합에서 GitHub를 연결하고 사용할 Repository를 등록하세요.</p>
+          <p>통합에서 사용할 public GitHub Repository URL을 먼저 등록하세요.</p>
           <button className="primary" onClick={onIntegration}>
             통합에서 Repository 등록
           </button>
@@ -412,10 +412,10 @@ export default function Applications({
           <label htmlFor="registered-repo">등록한 Repository</label>
           <select
             id="registered-repo"
-            value={form.repo_url}
+            value={registered.find((repo) => repo.repo_url === form.repo_url && repo.branch === form.branch)?.id ?? ""}
             onChange={(e) => {
               const repo = registered.find(
-                (r) => r.repo_url === e.target.value,
+                (r) => r.id === e.target.value,
               );
               setForm((f) => ({
                 ...f,
@@ -426,15 +426,15 @@ export default function Applications({
           >
             <option value="">Repository 선택</option>
             {registered.map((repo) => (
-              <option key={repo.id} value={repo.repo_url}>
-                {repo.name}
+              <option key={repo.id} value={repo.id}>
+                {repo.name} · {repo.branch}
               </option>
             ))}
           </select>
           <p className="muted">
             등록된 브랜치: {form.branch} · 실제 GitHub 접근 미확인
           </p>
-          <label htmlFor="infra-select">기업 / 대상 Space</label>
+          <label htmlFor="infra-select">Infra Space</label>
           <select
             id="infra-select"
             value={form.infra_id}
@@ -445,7 +445,7 @@ export default function Applications({
             <option value="">기반 선택</option>
             {infras.map((i) => (
               <option key={i.id} value={i.id}>
-                {foundationTarget(i.id, meeting)} · {i.name}
+                {i.name}
               </option>
             ))}
             {mode === "demo" &&

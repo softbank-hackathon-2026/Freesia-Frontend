@@ -108,3 +108,45 @@ test("external template ids reject inherited Object keys", () => {
     );
   }
 });
+
+test("name-only creation keeps input and legacy boundaries validated", () => {
+  assert.throws(() => makeInfraSpace({ name: "   " }), /이름/);
+  assert.throws(() => makeInfraSpace({ name: "a".repeat(81) }), /이름/);
+  assert.throws(() => makeInfraSpace({ name: "bad", region: "unsupported" }), /리전/);
+  assert.throws(() => makeInfraSpace({ name: "bad", target: "other" as never }), /대상/);
+  assert.throws(() => makeInfraSpace({ name: "bad", template: "public" }), /템플릿/);
+  const draft = makeInfraSpace({ name: " trimmed " });
+  assert.equal(draft.name, "trimmed");
+  assert.equal(validMeetingState({ spaces: [{ ...draft, target: "other" }], github: null }), false);
+});
+
+test("URL registration normalizes GitHub URLs and preserves previous repository history", async () => {
+  const { registerRepository, registeredRepositories } = await import("../src/lib/meeting.ts");
+  let connection = registerRepository(null, "  https://github.com/Team/My-App.git/  ");
+  assert.equal(connection.account, "");
+  assert.equal(registeredRepositories(connection)[0].repo_url, "https://github.com/Team/My-App");
+  assert.equal(registeredRepositories(connection)[0].branch, "main");
+  assert.throws(() => registerRepository(connection, "https://GITHUB.com/team/my-app/"), /이미 등록/);
+  const id = registeredRepositories(connection)[0].id;
+  connection = { ...connection, registeredIds: [] };
+  connection = registerRepository(connection, "https://github.com/team/my-app");
+  assert.equal(registeredRepositories(connection)[0].id, id);
+  assert.equal(connection.repositories.length, 1);
+  const legacy = connectGitHubDemo();
+  legacy.repositories[0].branch = "develop";
+  legacy.registeredIds = legacy.repositories.map((repo) => repo.id);
+  const updated = registerRepository(legacy, legacy.repositories[0].repo_url);
+  assert.deepEqual(updated.repositories.slice(0,2),legacy.repositories);
+  assert.equal(registeredRepositories(updated).length,3);
+  assert.equal(registeredRepositories(updated).at(-1)!.branch,"main");
+  assert.deepEqual(parseDemo(JSON.stringify({...initialDemo(),meeting:{spaces:[],github:updated}})).meeting!.github,updated);
+});
+test("URL registration rejects non-repository URLs and never mutates existing state", async () => {
+  const { registerRepository } = await import("../src/lib/meeting.ts");
+  const connection = connectGitHubDemo();
+  const before = structuredClone(connection);
+  for (const url of ["", "http://github.com/a/b", "https://gitlab.com/a/b", "https://user@github.com/a/b", "https://github.com/a/b?token=x", "https://github.com/a/b#readme", "https://github.com/a/b/tree/main", "https://github.com/a", "https://github.com:443/a/b", "https://github.com/a/.."]) {
+    assert.throws(()=>registerRepository(connection,url),/URL/);
+  }
+  assert.deepEqual(connection,before);
+});
