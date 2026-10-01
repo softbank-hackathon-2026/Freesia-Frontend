@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createApi } from "./lib/api.ts";
-import { foundations, initialDemo, parseDemo, STORE_KEY } from "./lib/demo.ts";
-import type { DemoState, InfraDesign } from "./lib/demo.ts";
+import { foundations, preparedInfraSpaces, initialDemo, parseDemo, STORE_KEY } from "./lib/demo.ts";
+import type { DemoState } from "./lib/demo.ts";
 import type {
   AppSpace,
   AppSpaceCreate,
@@ -10,13 +10,12 @@ import type {
   InfraSpace,
 } from "./lib/types.ts";
 import InfraBuilder from "./components/InfraBuilder.tsx";
+import { canDiscardInfra } from "./lib/infraFlow.ts";
 import Applications from "./components/Applications.tsx";
 import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
 import type { InfraSpaceDraft } from "./components/InfraSpaceForm.tsx";
 import GitHubIntegration from "./components/GitHubIntegration.tsx";
 import {
-  connectGitHubDemo,
-  foundationTarget,
   newMeetingState,
   readyMeetingSpaces,
   templates,
@@ -51,7 +50,6 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<InfraSpace | null>(null);
-  const [design, setDesign] = useState<InfraDesign | null>(null);
   useEffect(() => {
     let active = true;
     if (mode === "api") {
@@ -146,7 +144,6 @@ export default function App() {
     setActiveSpaceId("");
     setMode(next);
     setSelected(null);
-    setDesign(null);
     setError("");
     setLoading(false);
     setInfras(next === "demo" ? foundations : []);
@@ -158,7 +155,6 @@ export default function App() {
     setActiveSpaceId("");
     setPage(next);
     setSelected(null);
-    setDesign(null);
   }
   function reset() {
     try {
@@ -166,7 +162,6 @@ export default function App() {
       setDemo(initialDemo());
       setStoreError("");
       setSelected(null);
-      setDesign(null);
     } catch {
       setStoreError("브라우저 저장소를 초기화할 수 없습니다.");
     }
@@ -175,7 +170,23 @@ export default function App() {
   const meeting = demo.meeting ?? newMeetingState();
   const availableInfras =
     mode === "demo" ? [...foundations, ...readyMeetingSpaces(meeting)] : infras;
-  const activeSpace = meeting.spaces.find((s) => s.id === activeSpaceId);
+  const savedSpace = meeting.spaces.find((s) => s.id === activeSpaceId);
+  const activeSpace = savedSpace ?? (mode === "demo" ? preparedInfraSpaces.find((s) => s.id === activeSpaceId) : undefined);
+  const preparedSpace = !!activeSpace && !savedSpace;
+  function networkSummary(infra: InfraSpace) {
+    const choices = mode === "demo"
+      ? (meeting.spaces.find((space) => space.id === infra.id) ?? preparedInfraSpaces.find((space) => space.id === infra.id))?.flow?.choices
+      : undefined;
+    if (choices) return [
+      choices.visibility === "public" ? "인터넷 경로 포함" : "외부 직접 경로 없음",
+      choices.availability === "multi" ? "다중 AZ" : "단일 AZ",
+    ].join(" · ");
+    return {
+      public: "인터넷 경로 포함",
+      private: "외부 직접 경로 없음",
+      ha: "고가용성 · 접근 방식/AZ 상세 미제공",
+    }[infra.network];
+  }
   function createSpace(space: MeetingInfraSpace) {
     persist({
       ...demo,
@@ -307,22 +318,7 @@ export default function App() {
             <GitHubIntegration
               mode={mode}
               connection={meeting.github}
-              onConnect={() =>
-                persist({
-                  ...demo,
-                  meeting: { ...meeting, github: connectGitHubDemo() },
-                })
-              }
-              onRegister={(ids) => {
-                if (meeting.github)
-                  persist({
-                    ...demo,
-                    meeting: {
-                      ...meeting,
-                      github: { ...meeting.github, registeredIds: ids },
-                    },
-                  });
-              }}
+              onSave={(github) => persist({ ...demo, meeting: { ...meeting, github } })}
             />
           ) : page === "apps" ? (
             <Applications
@@ -365,7 +361,17 @@ export default function App() {
           ) : activeSpace?.flow && mode === "demo" ? (
             <InfraBuilder key={activeSpace.id} space={activeSpace}
               onCancel={() => setActiveSpaceId("")}
-              onSave={(entry) => persist({...demo, meeting: {...meeting, spaces: meeting.spaces.map(s => s.id === entry.id ? entry : s)}})}
+              readOnly={preparedSpace}
+              canDiscard={!preparedSpace && canDiscardInfra(activeSpace, demo.apps)}
+              onDiscard={() => {
+                if (preparedSpace || !canDiscardInfra(activeSpace, demo.apps)) throw new Error("배포 중이거나 연결된 앱이 있는 Space는 삭제할 수 없습니다.");
+                persist({ ...demo, meeting: { ...meeting, spaces: meeting.spaces.filter((space) => space.id !== activeSpace.id) } });
+                setActiveSpaceId("");
+              }}
+              onSave={(entry) => {
+                if (preparedSpace) throw new Error("미리 준비한 데모 예시는 읽기 전용입니다.");
+                persist({...demo, meeting: {...meeting, spaces: meeting.spaces.map(s => s.id === entry.id ? entry : s)}});
+              }}
             />
           ) : (
             <>
@@ -374,7 +380,7 @@ export default function App() {
                   <div className="eyebrow">INFRA SPACE</div>
                   <h1>인프라</h1>
                   <p>
-                    공통 기반을 설계하고 앱 배포에 사용할 기반을 확인하세요.
+                    VPC·Subnet 등 공통 네트워크 기반을 설계하고, 연결된 앱을 확인하세요.
                   </p>
                 </div>
                 <div className="heading-actions">
@@ -392,7 +398,6 @@ export default function App() {
                         onClick={() => {
                           setNewInfra(true);
                           setSelected(null);
-                          setDesign(null);
                           setActiveSpaceId("");
                         }}
                       >
@@ -423,12 +428,11 @@ export default function App() {
                             onClick={() => {
                               setActiveSpaceId(s.id);
                               setSelected(null);
-                              setDesign(null);
                             }}
                           >
                             <strong>{s.name}</strong>
                             <span>
-                              {s.target} · {s.flow ? "AI 설계 진행 중" : "이전 템플릿 샘플"} · 미구축
+                              {s.flow ? "AI 설계 진행 중" : "이전 템플릿 샘플"} · 미구축
                             </span>
                           </button>
                         ))}
@@ -489,10 +493,9 @@ export default function App() {
                     <table>
                       <thead>
                         <tr>
-                          <th>기반 이름</th>
-                          <th>네트워크 유형</th>
-                          <th>배포 대상</th>
-                          <th>앱</th>
+                          <th>Infra Space 이름</th>
+                          <th>네트워크 구성</th>
+                          <th>연결된 앱</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -503,9 +506,9 @@ export default function App() {
                                 className="text-button"
                                 onClick={() => {
                                   if (
-                                    meeting.spaces.some(
+                                    mode === "demo" && (meeting.spaces.some(
                                       (s) => s.id === infra.id,
-                                    )
+                                    ) || preparedInfraSpaces.some((s) => s.id === infra.id))
                                   ) {
                                     setActiveSpaceId(infra.id);
                                     setSelected(null);
@@ -513,22 +516,15 @@ export default function App() {
                                     setSelected(infra);
                                     setActiveSpaceId("");
                                   }
-                                  setDesign(null);
                                 }}
                               >
                                 {infra.name}
                               </button>
-                              <small>
-                                {infra.id}
-                                {mode === "demo"
-                                  ? " · " + foundationTarget(infra.id, meeting)
-                                  : ""}
-                              </small>
+                              <small>{infra.id}</small>
                             </td>
                             <td>
-                              <span className="badge">{infra.network}</span>
+                              <span>{networkSummary(infra)}</span>
                             </td>
-                            <td>{infra.computes.join(", ")}</td>
                             <td>
                               {mode === "demo"
                                 ? demo.apps.filter(
@@ -546,38 +542,6 @@ export default function App() {
                   )}
                 </section>
               )}
-              {mode === "demo" && (
-                <section className="panel">
-                  <div className="section-heading">
-                    <h2>이전 별도 설계 · 읽기 전용</h2>
-                    <span className="badge caution">
-                      미구축 · {demo.designs.length}개
-                    </span>
-                  </div>
-                  {demo.designs.length ? (
-                    <div className="app-list">
-                      {demo.designs.map((d) => (
-                        <button
-                          key={d.id}
-                          onClick={() => {
-                            setDesign(d);
-                            setSelected(null);
-                          }}
-                        >
-                          <strong>{d.name}</strong>
-                          <span>설계 저장 · 미구축 · 앱 배포에 사용 불가</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="empty">
-                      <p>
-                        이전 버전에서 별도로 저장한 설계가 없습니다. 새 설계는 Infra Space 만들기에서 시작하세요.
-                      </p>
-                    </div>
-                  )}
-                </section>
-              )}
               {selected && (
                 <section className="panel detail" aria-label="인프라 상세">
                   <div className="section-heading">
@@ -586,9 +550,9 @@ export default function App() {
                   </div>
                   <p>{selected.description}</p>
                   <dl>
-                    <dt>유형</dt>
-                    <dd>{selected.network}</dd>
-                    <dt>지원 배포 대상</dt>
+                    <dt>네트워크 구성</dt>
+                    <dd>{networkSummary(selected)}</dd>
+                    <dt>앱 배포 시 선택 가능한 실행 환경</dt>
                     <dd>{selected.computes.join(", ")}</dd>
                     <dt>상태</dt>
                     <dd>
@@ -598,33 +562,10 @@ export default function App() {
                     </dd>
                   </dl>
                   <p className="muted">
-                    리전·VPC·Subnet·가용 영역 정보는 현재 API에서 제공하지
+                    실행 환경은 앱 배포 단계에서 선택하는 컴퓨팅 후보입니다.
+                    리전·VPC·Subnet·가용 영역의 상세 정보는 현재 API에서 제공하지
                     않습니다.
                   </p>
-                </section>
-              )}
-              {design && mode === "demo" && (
-                <section className="panel detail" aria-label="저장한 설계 상세">
-                  <div className="section-heading">
-                    <h2>{design.name}</h2>
-                    <button onClick={() => setDesign(null)}>닫기</button>
-                  </div>
-                  <p className="notice">
-                    설계 저장 · 미구축. 실제 AWS 리소스는 생성되지 않았고 앱
-                    배포에 사용할 수 없습니다.
-                  </p>
-                  <dl>
-                    <dt>요구사항</dt>
-                    <dd className="break-word">{design.requirement}</dd>
-                    <dt>선택 조건</dt>
-                    <dd>
-                      {design.choices.region} · {design.choices.visibility} ·{" "}
-                      {design.choices.availability}
-                    </dd>
-                  </dl>
-                  <pre tabIndex={0} aria-label="저장한 Terraform 코드">
-                    <code>{design.code}</code>
-                  </pre>
                 </section>
               )}
             </>

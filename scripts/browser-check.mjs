@@ -2,6 +2,8 @@ import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+import { initialDemo, makeDesign } from "../src/lib/demo.ts";
+import { makeInfraSpace, connectGitHubDemo, registerRepository } from "../src/lib/meeting.ts";
 const flowerBackup = await readFile(
   new URL("../public/freesia-flower.svg", import.meta.url),
   "utf8",
@@ -181,40 +183,34 @@ async function checkSidebar(page, mobile) {
 }
 async function createInfra(page,name) {
  await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
+ assert.equal(await page.locator(".app-form input").count(),1);
+ assert.equal(await page.locator(".app-form select").count(),0);
  await page.getByLabel("Space 이름",{exact:true}).fill(name);
  await page.getByRole("button",{name:"Space 생성 · 데모",exact:true}).click();
 }
 async function answerInfra(page,request,availability="Multi AZ · 2개") {
  await page.getByLabel("인프라 요구사항",{exact:true}).fill(request);
  await page.getByRole("button",{name:"질문 시작",exact:true}).click();
+ await page.getByRole("button",{name:"서울 · ap-northeast-2",exact:true}).click();
  await page.getByRole("button",{name:"Private · 외부 경로 제외",exact:true}).click();
  await page.getByRole("button",{name:availability,exact:true}).click();
 }
 async function appForm(page, name, infraId) {
   await navigate(page, "통합");
-  if (
-    await page
-      .getByRole("button", { name: "GitHub 연결 · 데모", exact: true })
-      .count()
-  )
-    await page
-      .getByRole("button", { name: "GitHub 연결 · 데모", exact: true })
-      .click();
-  const register = page.getByRole("button", {
-    name: "Repository 등록: softbank-hackathon-2026/Freesia-Frontend",
-    exact: true,
-  });
-  if (await register.count()) await register.click();
+  if (!(await page.getByRole("button",{name:"등록 해제: softbank-hackathon-2026/Freesia-Frontend (main)",exact:true}).count())) {
+    await page.getByLabel("Repository URL",{exact:true}).fill("https://github.com/softbank-hackathon-2026/Freesia-Frontend");
+    await page.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+  }
   await navigate(page, "애플리케이션");
   await page.getByRole("button", { name: "앱 연결", exact: true }).click();
   await page.getByLabel("앱 이름", { exact: true }).fill(name);
   await page
     .getByLabel("등록한 Repository", { exact: true })
     .selectOption(
-      "https://github.com/softbank-hackathon-2026/Freesia-Frontend",
+      { label: "softbank-hackathon-2026/Freesia-Frontend · main" },
     );
   await page
-    .getByLabel("기업 / 대상 Space", { exact: true })
+    .getByLabel("Infra Space", { exact: true })
     .selectOption(infraId);
   assert.equal(
     await page.locator('input[placeholder*="github"],#repo-url').count(),
@@ -262,11 +258,31 @@ try {
     await page.goto(url);
     await checkSidebar(page, name === "mobile");
     await page.getByRole("heading", { name: "인프라", exact: true }).waitFor();
-    await page
-      .getByRole("button", { name: "공개 웹 서비스용", exact: true })
-      .click();
-    await page.getByRole("region", { name: "인프라 상세" }).waitFor();
-    await page.getByRole("button", { name: "닫기", exact: true }).click();
+    assert.equal(await page.getByRole("columnheader",{name:"네트워크 유형",exact:true}).count(),0);
+    assert.equal(await page.getByRole("columnheader",{name:"배포 대상",exact:true}).count(),0);
+    assert.equal(await page.getByRole("columnheader",{name:"네트워크 구성",exact:true}).count(),1);
+    assert.match(await page.locator("table").innerText(),/인터넷 경로 포함/);
+
+    const seedStorage = await page.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
+    for (const [index, service] of ["쇼핑몰 서비스","사내 업무 서비스","결제 서비스"].entries()) {
+      await page.getByRole("button",{name:service,exact:true}).click();
+      await page.getByRole("region",{name:"인프라 질의응답",exact:true}).waitFor();
+      assert.equal(await page.getByRole("heading",{name:service,exact:true}).count(),1);
+      assert.match(await page.getByLabel("Terraform 코드").innerText(),/resource "aws_vpc"/);
+      assert.match(await page.getByRole("region",{name:"인프라 Apply 결과",exact:true}).innerText(),/미리 준비한 DEMO Apply 완료 예시/);
+      assert.match(await page.locator("main").innerText(),/미리 준비한 데모 예시 · 읽기 전용/);
+      assert.equal(await page.getByRole("region",{name:"인프라 상세",exact:true}).count(),0);
+      assert.equal(await page.getByRole("button",{name:"답변 수정 · 이후 결과 초기화",exact:true}).count(),0);
+      assert.equal(await page.getByRole("button",{name:"작성 취소",exact:true}).count(),0);
+      assert.equal(await page.getByLabel("Apply 실패 시연",{exact:true}).count(),0);
+      assert.equal(await page.getByRole("button",{name:".tf 다운로드",exact:true}).count(),1);
+      assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth > innerWidth),false);
+      await page.screenshot({path:"artifacts/prepared-infra-"+index+"-"+name+".png",fullPage:true});
+      await page.getByRole("button",{name:"목록으로",exact:true}).click();
+      assert.equal(await page.getByRole("row").count(),4);
+    }
+    assert.equal(await page.evaluate(()=>localStorage.getItem("freesia.demo.v1")),seedStorage);
+
     await createInfra(page, "conversation-foundation");
     await page.getByRole("button", {name:"질문 시작",exact:true}).click();
     assert.match(await page.getByRole("alert").innerText(), /요구사항/);
@@ -304,9 +320,11 @@ try {
     await page.reload();
     await page.getByRole("button",{name:"Space 상세: conversation-foundation",exact:true}).click();
     await page.getByRole("button",{name:"Apply 데모 이어하기",exact:true}).waitFor();
+    assert.equal(await page.getByRole("button",{name:"작성 취소",exact:true}).isDisabled(),true);
     assert.equal(await page.getByText(/DEMO Apply 완료/).count(),0);
     await page.getByRole("button",{name:"Apply 데모 이어하기",exact:true}).click();
     await page.getByText(/DEMO Apply 완료/).waitFor();
+    assert.equal(await page.getByRole("button",{name:"작성 취소",exact:true}).count(),0);
     for (const checkbox of await page.locator('.infra-flow-panel input[type="checkbox"]').all()) {
       const box = await checkbox.boundingBox();
       assert.ok(box && box.width > 0 && box.width <= 32, "Infra checkbox retains native control width");
@@ -337,7 +355,7 @@ try {
       "demo-web",
     );
     assert.match(
-      await page.getByLabel("등록한 Repository", { exact: true }).inputValue(),
+      await page.locator("#registered-repo option:checked").innerText(),
       /Freesia-Frontend/,
     );
     await page.screenshot({path:`artifacts/day3-app-form-${name}.png`,fullPage:true});
@@ -353,7 +371,7 @@ try {
     await page
       .getByLabel("등록한 Repository", { exact: true })
       .selectOption(
-        "https://github.com/softbank-hackathon-2026/Freesia-Frontend",
+        { label: "softbank-hackathon-2026/Freesia-Frontend · main" },
       );
     await page.getByRole("button", { name: "앱 만들기" }).click();
     await page.getByRole("button", { name: "배포", exact: true }).click();
@@ -419,6 +437,14 @@ try {
       path: `artifacts/sprint02-monitoring-${name}.png`,
       fullPage: true,
     });
+
+    const appStore = await page.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
+    await navigate(page,"인프라");
+    const shopRow = page.getByRole("row").filter({has:page.getByRole("button",{name:"쇼핑몰 서비스",exact:true})});
+    assert.equal(await shopRow.getByRole("cell").last().innerText(),String(JSON.parse(appStore).apps.filter(app=>app.infra_id==="demo-public").length));
+    await page.getByRole("button",{name:"쇼핑몰 서비스",exact:true}).click();
+    await page.getByRole("button",{name:"목록으로",exact:true}).click();
+    assert.equal(await page.evaluate(()=>localStorage.getItem("freesia.demo.v1")),appStore);
     await page.getByLabel("데이터 소스").selectOption("api");
     await checkSourceBanner(page);
     await page.getByRole("alert").waitFor();
@@ -429,7 +455,7 @@ try {
     await navigate(page, "인프라");
     assert.equal(
       await page
-        .getByRole("button", { name: "공개 웹 서비스용", exact: true })
+        .getByRole("button", { name: "쇼핑몰 서비스", exact: true })
         .count(),
       0,
     );
@@ -508,9 +534,12 @@ try {
     localStorage.getItem("freesia.demo.v1"),
   );
   await apiPage.getByLabel("데이터 소스").selectOption("api");
-  await apiPage
-    .getByRole("button", { name: "API 기반", exact: true })
-    .waitFor();
+
+  await apiPage.getByRole("button",{name:"API 기반",exact:true}).click();
+  await apiPage.getByRole("region",{name:"인프라 상세",exact:true}).waitFor();
+  assert.equal(await apiPage.getByLabel("Terraform 코드").count(),0);
+  assert.equal(await apiPage.getByRole("region",{name:"인프라 질의응답",exact:true}).count(),0);
+  await apiPage.getByRole("button",{name:"닫기",exact:true}).click();
   await navigate(apiPage, "애플리케이션");
   assert.equal(
     await apiPage
@@ -817,10 +846,16 @@ try {
     for (let i=0;i<3;i++) {
       if (i) await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
       await page.getByLabel("Space 이름",{exact:true}).fill("sample-"+i);
-      await page.getByLabel("기업 / 대상",{exact:true}).selectOption("LINE 샘플 대상");
+      assert.equal(await page.locator(".app-form input").count(),1);
+      assert.equal(await page.locator(".app-form select").count(),0);
       assert.equal(await page.getByRole("radio").count(),0);
       if(i===2) await page.screenshot({path:"artifacts/day3-infra-form-"+viewportName+".png",fullPage:true});
       await page.getByRole("button",{name:"Space 생성 · 데모",exact:true}).click();
+      assert.match(await page.locator(".page-heading").innerText(),/리전 미정/);
+      assert.doesNotMatch(await page.locator(".page-heading").innerText(),/AWS 샘플 대상|ap-northeast/);
+      const emptyDraft = await page.evaluate((name)=>JSON.parse(localStorage.getItem("freesia.demo.v1")).meeting.spaces.find((space)=>space.name===name),"sample-"+i);
+      assert.equal(emptyDraft.region,"");
+      assert.equal(emptyDraft.target,undefined);
       await answerInfra(page,"샘플 요구사항");
       await page.getByRole("button",{name:"답변으로 Terraform 생성",exact:true}).click();
       await page.getByLabel("선택한 코드와 데모 제한을 검토했습니다",{exact:true}).check();
@@ -828,25 +863,32 @@ try {
       await page.getByText(/DEMO Apply 완료/).waitFor();
       await page.getByRole("button",{name:"목록으로",exact:true}).click();
       assert.equal(await page.getByRole("button",{name:"sample-"+i,exact:true}).count(),1);
+      const row=page.getByRole("row").filter({has:page.getByRole("button",{name:"sample-"+i,exact:true})});
+      assert.match(await row.innerText(),/외부 직접 경로 없음 · 다중 AZ/);
+      assert.doesNotMatch(await row.innerText(),/ecs-fargate|lambda|ec2|AWS 샘플 대상/);
     }
     await page.screenshot({
       path: "artifacts/day3-infra-ready-" + viewportName + ".png",
       fullPage: true,
     });
     await navigate(page, "통합");
-    await page
-      .getByRole("button", { name: "GitHub 연결 · 데모", exact: true })
-      .click();
-    assert.equal(
-      await page.getByRole("button", { name: /Repository 등록:/ }).count(),
-      2,
-    );
-    await page
-      .getByRole("button", {
-        name: "Repository 등록: softbank-hackathon-2026/Freesia-Frontend",
-        exact: true,
-      })
-      .click();
+    assert.equal(await page.getByRole("button",{name:"GitHub 연결 · 데모",exact:true}).count(),0);
+    assert.equal(await page.locator(".app-form input").count(),1);
+    assert.equal(await page.locator(".app-form select").count(),0);
+    await page.getByLabel("Repository URL",{exact:true}).fill("https://github.com/owner/repo/tree/main");
+    await page.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+    assert.match(await page.getByRole("alert").innerText(),/URL/);
+    await page.getByLabel("Repository URL",{exact:true}).fill("  https://github.com/softbank-hackathon-2026/Freesia-Frontend.git/  ");
+    await page.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+    assert.equal(await page.getByLabel("Repository URL",{exact:true}).inputValue(),"");
+    await page.getByLabel("Repository URL",{exact:true}).fill("https://github.com/SOFTBANK-HACKATHON-2026/freesia-frontend");
+    await page.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+    assert.match(await page.getByRole("alert").innerText(),/이미 등록/);
+    assert.equal(await page.locator(".repository-row").count(),1);
+    await page.getByLabel("Repository URL",{exact:true}).fill("https://github.com/team/custom-app");
+    await page.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+    assert.equal(await page.locator(".repository-row").count(),2);
+    assert.match(await page.locator("main").innerText(),/존재·공개 여부·main 브랜치와 접근 권한은 확인하지 않습니다/);
     await page.screenshot({
       path: "artifacts/day3-integration-" + viewportName + ".png",
       fullPage: true,
@@ -857,14 +899,14 @@ try {
     await page
       .getByLabel("등록한 Repository", { exact: true })
       .selectOption(
-        "https://github.com/softbank-hackathon-2026/Freesia-Frontend",
+        { label: "softbank-hackathon-2026/Freesia-Frontend · main" },
       );
     const readyOption = page
       .locator("#infra-select option")
       .filter({ hasText: "sample-0" });
     assert.equal(await readyOption.getAttribute("disabled"), null);
     await page
-      .getByLabel("기업 / 대상 Space", { exact: true })
+      .getByLabel("Infra Space", { exact: true })
       .selectOption(await readyOption.getAttribute("value"));
     await page.getByRole("button", { name: "앱 만들기", exact: true }).click();
     await page
@@ -881,12 +923,26 @@ try {
     assert.equal(
       await page
         .getByRole("button", {
-          name: "등록 해제: softbank-hackathon-2026/Freesia-Frontend",
+          name: "등록 해제: softbank-hackathon-2026/Freesia-Frontend (main)",
           exact: true,
         })
         .count(),
       1,
     );
+    const previousApps = await page.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps);
+    await page.getByRole("button",{name:"등록 해제: softbank-hackathon-2026/Freesia-Frontend (main)",exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps),previousApps);
+    await page.reload();
+    await navigate(page,"통합");
+    assert.equal(await page.getByRole("button",{name:"등록 해제: softbank-hackathon-2026/Freesia-Frontend (main)",exact:true}).count(),0);
+    await page.getByLabel("Repository URL",{exact:true}).fill("https://github.com/softbank-hackathon-2026/Freesia-Frontend");
+    await page.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+    assert.equal(await page.locator(".repository-row").count(),2);
+    await page.evaluate(()=>{window.originalSetItem = Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new DOMException("quota","QuotaExceededError");};});
+    await page.getByRole("button",{name:"등록 해제: team/custom-app (main)",exact:true}).click();
+    assert.match(await page.getByRole("alert").innerText(),/저장하지 못/);
+    assert.equal(await page.locator(".repository-row").count(),2);
+    await page.evaluate(()=>{Storage.prototype.setItem=window.originalSetItem;delete window.originalSetItem;});
     const saved = await page.evaluate(() =>
       JSON.parse(localStorage.getItem("freesia.demo.v1")),
     );
@@ -902,7 +958,8 @@ try {
         .count(),
       0,
     );
-    assert.match(await page.locator("main").innerText(), /OAuth.*API가 아직/s);
+    assert.equal(await page.getByLabel("Repository URL",{exact:true}).count(),0);
+    assert.match(await page.locator("main").innerText(), /Repository 등록·조회 API가 아직/s);
     await navigate(page, "인프라");
     for (const name of [
       "Infra Space 만들기",
@@ -935,6 +992,80 @@ try {
         "three entry points, direct generation/review/apply->demo-ready, role-free infra/repo/app flow, draft retention, explicit repo registration, reload/API isolation passed",
     });
   }
+
+  for (const [name, width, height] of [["desktop",1440,1000],["mobile",390,844]]) {
+    const cancelPage = await browser.newPage({ viewport: { width, height } });
+    const preserved = makeInfraSpace({ name: "보존할 Space" });
+    const discarded = makeInfraSpace({ name: "취소할 Space" });
+    const fixture = {
+      ...initialDemo(),
+      designs: [makeDesign("이전 설계 보존", "legacy", {region:"ap-northeast-2",visibility:"private",availability:"single"})],
+      apps: [{ ...app, infra_id: preserved.id }],
+      meeting: { spaces: [discarded,preserved], github: null },
+    };
+    await cancelPage.goto(url);
+    await cancelPage.evaluate((value)=>localStorage.setItem("freesia.demo.v1",JSON.stringify(value)),fixture);
+    await cancelPage.reload();
+    assert.equal(await cancelPage.getByRole("heading",{name:"이전 별도 설계 · 읽기 전용",exact:true}).count(),0);
+    assert.equal(await cancelPage.getByRole("button",{name:"이전 설계 보존",exact:true}).count(),0);
+    await cancelPage.getByRole("button",{name:"Space 상세: 취소할 Space",exact:true}).click();
+    await cancelPage.getByLabel("인프라 요구사항",{exact:true}).fill("유지할 작성 내용");
+    const before = await cancelPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")));
+    await cancelPage.screenshot({path:"artifacts/infra-cancel-"+name+".png",fullPage:true});
+    const rejected = cancelPage.waitForEvent("dialog");
+    const dismissClick = cancelPage.getByRole("button",{name:"작성 취소",exact:true}).click();
+    const dismissDialog = await rejected;
+    assert.equal(dismissDialog.type(),"confirm");
+    assert.match(dismissDialog.message(),/취소할 Space/);
+    await dismissDialog.dismiss(); await dismissClick;
+    assert.equal(await cancelPage.getByLabel("인프라 요구사항",{exact:true}).inputValue(),"유지할 작성 내용");
+    assert.deepEqual(await cancelPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1"))),before);
+    const accepted = cancelPage.waitForEvent("dialog");
+    const acceptClick = cancelPage.getByRole("button",{name:"작성 취소",exact:true}).click();
+    await (await accepted).accept(); await acceptClick;
+    await cancelPage.getByRole("heading",{name:"인프라",exact:true}).waitFor();
+    const after = await cancelPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")));
+    assert.deepEqual(after,{...before,meeting:{...before.meeting,spaces:[preserved]}});
+    await cancelPage.reload();
+    assert.equal(await cancelPage.getByRole("button",{name:"Space 상세: 취소할 Space",exact:true}).count(),0);
+    await cancelPage.getByRole("button",{name:"Space 상세: 보존할 Space",exact:true}).click();
+    assert.equal(await cancelPage.getByRole("button",{name:"작성 취소",exact:true}).isDisabled(),true);
+    await cancelPage.getByRole("button",{name:"목록으로",exact:true}).click();
+    await createInfra(cancelPage,"저장 실패 보존");
+    const beforeFailure = await cancelPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")));
+    await cancelPage.evaluate(()=>{Storage.prototype.setItem=function(){throw new DOMException("quota","QuotaExceededError");};});
+    const failure = cancelPage.waitForEvent("dialog");
+    const failureClick = cancelPage.getByRole("button",{name:"작성 취소",exact:true}).click();
+    await (await failure).accept(); await failureClick;
+    assert.match(await cancelPage.getByRole("alert").innerText(),/저장하지 못/);
+    assert.equal(await cancelPage.getByRole("heading",{name:"저장 실패 보존",exact:true}).count(),1);
+    assert.deepEqual(await cancelPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1"))),beforeFailure);
+    await cancelPage.close();
+    results.push({name:"infra-cancel-"+name,checks:"confirm dismiss retains draft; accept removes only selected Space across reload; linked guard; legacy/apps retained; persistence failure retains draft passed"});
+  }
+
+  const branchPage = await browser.newPage();
+  const legacyRepositories = connectGitHubDemo();
+  legacyRepositories.repositories[0].branch = "develop";
+  legacyRepositories.registeredIds = [legacyRepositories.repositories[0].id];
+  const branchRepositories = registerRepository(legacyRepositories,legacyRepositories.repositories[0].repo_url);
+  await branchPage.goto(url);
+  await branchPage.evaluate((github)=>localStorage.setItem("freesia.demo.v1",JSON.stringify({version:1,designs:[],apps:[],deployments:[],meeting:{spaces:[],github}})),branchRepositories);
+  await branchPage.reload();
+  await navigate(branchPage,"애플리케이션");
+  await branchPage.getByRole("button",{name:"앱 연결",exact:true}).click();
+  const branchOptions = await branchPage.locator("#registered-repo option").evaluateAll(items=>items.map(item=>item.value));
+  assert.equal(new Set(branchOptions).size,branchOptions.length);
+  await branchPage.getByLabel("등록한 Repository",{exact:true}).selectOption({label:"softbank-hackathon-2026/Freesia-Frontend · develop"});
+  assert.match(await branchPage.locator("main").innerText(),/등록된 브랜치: develop/);
+  await branchPage.getByLabel("등록한 Repository",{exact:true}).selectOption({label:"softbank-hackathon-2026/Freesia-Frontend · main"});
+  assert.match(await branchPage.locator("main").innerText(),/등록된 브랜치: main/);
+  await branchPage.getByLabel("앱 이름",{exact:true}).fill("main-branch-app");
+  await branchPage.getByLabel("Infra Space",{exact:true}).selectOption("demo-public");
+  await branchPage.getByRole("button",{name:"앱 만들기",exact:true}).click();
+  assert.equal(await branchPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps[0].branch),"main");
+  await branchPage.close();
+  results.push({name:"legacy-repository-branches",checks:"registered legacy develop and same-URL main remain independently selectable; app persists main passed"});
   const quota = await browser.newPage();
   await quota.goto(url);
   await createInfra(quota,"retain-code"); await answerInfra(quota,"<script>window.bad=1</script> 저장 오류 확인용");
@@ -972,15 +1103,16 @@ try {
     "retain-space-draft",
   );
   await navigate(infraQuota, "통합");
-  await infraQuota
-    .getByRole("button", { name: "GitHub 연결 · 데모", exact: true })
-    .click();
+  await infraQuota.getByLabel("Repository URL",{exact:true}).fill("https://github.com/team/retained");
+  await infraQuota.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+  assert.equal(await infraQuota.getByLabel("Repository URL",{exact:true}).inputValue(),"https://github.com/team/retained");
+  assert.equal(await infraQuota.locator(".repository-row").count(),0);
   assert.match(await infraQuota.getByRole("alert").innerText(), /저장하지 못/);
   await infraQuota.close();
   results.push({
     name: "meeting-quota",
     checks:
-      "new Infra draft retained; GitHub connection persistence error visible passed",
+      "new Infra draft retained; Repository input retained and no registered item on persistence failure passed",
   });
   const pipelineQuota = await browser.newPage();
   await pipelineQuota.addInitScript(() => {

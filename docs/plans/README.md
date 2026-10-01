@@ -47,3 +47,14 @@
 ## 현재 작업 — Infra AI 흐름 정정 (2026-10-01)
 사용자가 앞서 제시한 동일 Space 흐름의 구현을 요청하여 로컬 구현·검증 완료: Space → 질의응답 → 인프라 구성안 2~3개 → 선택 → Terraform 검토 → Apply 데모 → 결과.
 기존 [Day3 spec](2026-09-30-day3-spec.md) / [plan](2026-09-30-day3-plan.md)의 후속 정정과 [작업 계약](sprints/infra-ai-flow-contract.md)이 이 범위의 최신 기준이다. 후속 정정 완료: 2~3개 비교는 애플리케이션에만 적용하고 인프라는 답변에서 직접 Terraform을 생성한다. check17·browser11 및 독립 검토 PASS. [평가·인수인계](sprints/infra-ai-flow-eval.md)에 결과를 기록했다. 실제 AI/클라우드 및 이번 diff의 commit/push는 승인 범위 밖이다.
+
+## Completed local follow-up — Infra Space clarity
+Branch codex/infra-space-clarity, based on merged CD main ea35423. User requested name-only creation and clarified network vs app compute semantics. Existing infra-ai-flow contract/spec/plan updated. Implementation and verification complete: check19/browser11, independent code/visual review PASS. Local uncommitted changes; no commit/push/merge.
+
+Completed local follow-up: legacy standalone UI hidden, undeployed drafts cancel with confirmation. Earlier branch diff retained. check20/browser13 and readonly source/visual review PASS; no Git publication.
+
+Completed local follow-up: Integration URL-only/main registration without account connection. Backend ff3c3b5 lacks repository endpoints; browser demo works with explicit API boundary. check22/browser14 and independent review PASS. Same uncommitted branch, no publication.
+
+2026-10-01 sample display-name correction completed: three fictional service names; existing check22/browser14 PASS. Local branch only.
+
+Completed local follow-up: seeded services open shared InfraBuilder with explicit readonly sample config/code/result. check23/browser14/source+visual review PASS. Existing branch preserved, no publication.
