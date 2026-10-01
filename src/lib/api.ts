@@ -8,7 +8,7 @@ const nullableString = (value: unknown) => value === null || typeof value === "s
 const fields = (v: Record<string, unknown>, keys: string[]) => keys.every(key => typeof v[key] === "string");
 function infraShape(value: unknown): boolean {
   const v = record(value);
-  return !!v && fields(v,["id","name","description"]) && ["public","private","ha","multi-az","db-isolated"].includes(String(v.network)) && strings(v.computes) && typeof v.app_count === "number";
+  return !!v && fields(v,["id","name","description"]) && ["public","private","ha","multi-az","db-isolated"].includes(String(v.network)) && strings(v.computes) && (v.deployable_computes === undefined || strings(v.deployable_computes)) && typeof v.app_count === "number";
 }
 function repositoryShape(value: unknown): boolean {
   const v = record(value);
@@ -135,7 +135,7 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
     createApp: (body:AppSpaceCreate, signal?:AbortSignal) => request<AppSpace>("/app-spaces",body,"POST",signal),
     analyze,
     analysis,
-    analyzeUntilDone: (id:string, options?:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>analyze(id,signal),signal=>analysis(id,signal),"분석",options),
+    analyzeUntilDone: (id:string, options?:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>analyze(id,signal),signal=>analysis(id,signal),"분석",{...options, timeoutMs:options?.timeoutMs ?? 150_000}),
     plansUntilDone: (id:string,compute:string,options?:{signal?:AbortSignal;onUpdate?:(value:PlanSet)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),signal=>request<PlanSet>(`${appPath(id)}/plans?compute=${encodeURIComponent(compute)}`,undefined,"GET",signal),"구성안",options),
     createPlans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),
     plans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans?compute=${encodeURIComponent(compute)}`,undefined,"GET",signal),

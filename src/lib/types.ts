@@ -12,6 +12,7 @@ export type InfraSpace = {
   description: string;
   network: "public" | "private" | "ha" | "multi-az" | "db-isolated";
   computes: string[];
+  deployable_computes?: string[];
   app_count: number;
 };
 export type AppSpaceCreate = {

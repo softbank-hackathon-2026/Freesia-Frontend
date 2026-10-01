@@ -19,7 +19,7 @@ const appName = "local-integration-" + suffix;
 let repositoryId;
 const results = [];
 const deploymentPosts=[];
-page.on("request",request=>{if(request.method()==="POST"&&request.url().endsWith("/deployments")) deploymentPosts.push(request.url())});
+page.on("request",request=>{if(request.method()==="POST"&&request.url().endsWith("/deployments")) deploymentPosts.push({url:request.url(),body:request.postDataJSON()})});
 const get = (path) => api.get(baseURL + "/api" + path);
 async function navigate(name) {
   if (await page.locator(".sidebar-toggle").isVisible()) {
@@ -87,27 +87,41 @@ try {
   await page.getByRole("heading",{name:"실행 환경 후보",exact:true}).waitFor();
   assert.equal(await page.locator(".candidate.chosen").count(),0);
   assert.match(await page.locator(".deploy-actions").innerText(),/사용자 선택: 없음/);
-  await page.locator(".candidate").first().getByRole("button",{name:"이 후보 선택",exact:true}).click();
+  const fargate = page.locator(".candidate").filter({has:page.getByText("ecs-fargate",{exact:true})});
+  await fargate.getByRole("button",{name:"이 후보 선택",exact:true}).click();
   const review=page.getByRole("region",{name:"배포 변경 확인",exact:true});
   await review.waitFor();
   const planResponse = page.waitForResponse(r=>r.url().endsWith(`/app-spaces/${app.id}/plans`) && r.request().method()==="POST");
   await page.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
-  assert.equal((await planResponse).status(),404);
-  await review.getByRole("alert").filter({hasText:"연동 대기"}).waitFor();
+  const planReply=await planResponse;
+  assert.equal(planReply.status(),200);
+  const planSet=await planReply.json();
+  assert.equal(planSet.status,"done");
+  assert.equal(planSet.compute,"ecs-fargate");
+  assert.equal(planSet.plans.length,1);
+  assert.ok(infras[0].deployable_computes.includes("ecs-fargate"));
   assert.equal(await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
-  assert.equal(await page.getByLabel("앱 Terraform 미리보기",{exact:true}).count(),0);
-  assert.equal(deploymentPosts.length,0);
-  assert.equal((await (await get("/app-spaces/"+app.id)).json()).latest_deployment_id,null);
-  await page.screenshot({path:"artifacts/local-api-plan-waiting-desktop.png",fullPage:true});
-  results.push("app create201 from registered repo/server infra, sample analysis, explicit choice, real plans404 unsupported and no UI deployment POST");
-
-  // Explicit local simulation fixture: this bypass is only for read/SSE transport tests.
-  // The product UI must still require a reviewed server plan.
-  const depResponse=await api.post(baseURL+`/api/app-spaces/${app.id}/deployments`,{data:{compute:"ecs-fargate"}});
+  assert.equal(await review.getByRole("button",{name:"이 구성안 선택",exact:true}).count(),0);
+  await review.getByLabel("설정값을 확인했습니다").check();
+  await page.screenshot({path:"artifacts/local-api-plan-ready-desktop.png",fullPage:true});
+  for(const compute of ["lambda","ec2"]){
+    assert.equal(infras[0].deployable_computes.includes(compute),false);
+    const unsupported=await api.post(baseURL+`/api/app-spaces/${app.id}/plans`,{data:{compute}});
+    assert.equal(unsupported.status(),400);
+    assert.equal((await unsupported.json()).error,"compute_not_ready");
+  }
+  const deploymentReply=page.waitForResponse(r=>r.url().endsWith(`/app-spaces/${app.id}/deployments`)&&r.request().method()==="POST");
+  await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).click();
+  const depResponse=await deploymentReply;
   assert.equal(depResponse.status(),201);
   const dep=await depResponse.json();
-  await page.getByRole("button",{name:"앱 목록으로",exact:true}).click();
-  await page.getByRole("button",{name:new RegExp(appName)}).click();
+  assert.equal(deploymentPosts.length,1);
+  assert.deepEqual(deploymentPosts[0].body,{compute:"ecs-fargate",plan_id:planSet.plans[0].id});
+  const duplicateDeployment=await api.post(baseURL+`/api/app-spaces/${app.id}/deployments`,{data:{compute:"ecs-fargate",plan_id:planSet.plans[0].id}});
+  assert.equal(duplicateDeployment.status(),409);
+  assert.equal((await duplicateDeployment.json()).error,"deployment_in_progress");
+  assert.equal((await (await get(`/app-spaces/${app.id}`)).json()).latest_deployment_id,dep.id);
+  results.push("app create201, actual single server plan200, explicit plan/settings review, UI deployment201 sends plan_id, unready compute400, duplicate deployment409 preserves current ID");
   await page.getByRole("heading",{name:"배포 상태",exact:true}).waitFor();
   assert.equal(await page.locator(".pipeline-steps li").count(),6);
   await page.waitForFunction(()=>Number(document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value"))>0);
@@ -120,7 +134,8 @@ try {
   assert.deepEqual(await (await get(`/deployments/${dep.id}/resources`)).json(),[]);
   await page.getByText("아직 보고된 자원이 없습니다.",{exact:false}).waitFor();
   await page.screenshot({path:"artifacts/local-api-deployment-desktop.png",fullPage:true});
-  results.push("explicit local simulated deployment, six steps, refresh SSE current-state restoration, terminal success, empty resources remain unknown");
+  assert.equal(deploymentPosts.length,1);
+  results.push("reviewed UI local simulation, no duplicate POST on reload, six steps, refresh SSE current-state restoration, terminal success, empty resources remain unknown");
 
   if(process.env.LOCAL_RESOURCE_APP_NAME){
     await page.getByRole("button",{name:"앱 목록으로",exact:true}).click();
@@ -151,7 +166,7 @@ try {
   await writeFile("artifacts/local-api-results.json", JSON.stringify({
     status: "passed", backendVersion: version, testedAt: new Date().toISOString(),
     results, appId: app.id,
-    limits: "SQLite local runtime; backend analysis is sample; product deployment blocked until plan API; explicit direct API simulated deployment tests only; optional resource fixture is local DB data; no external GitHub/AWS execution.",
+    limits: "SQLite local runtime; model-missing sample analysis, actual server catalog plan and UI deployment with DEPLOY_SIMULATE=true; optional resource fixture is local DB data; no external GitHub/AWS execution.",
   }, null, 2));
   console.log(JSON.stringify({ status: "passed", backendVersion: version, results }));
 } catch (error) {

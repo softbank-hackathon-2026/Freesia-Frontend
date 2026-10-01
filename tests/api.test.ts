@@ -360,3 +360,36 @@ test("deployment sends the reviewed plan identity and abort never becomes connec
   const controller=new AbortController();controller.abort();
   await assert.rejects(api.resources("d",controller.signal),{name:"AbortError"});
 });
+
+test("deployable computes remains optional but invalid readiness metadata is rejected",async()=>{
+  const infra={id:"i",name:"i",description:"",network:"public",computes:["ecs-fargate","lambda","ec2"],app_count:0};
+  const legacy=await createApi("",async()=>new Response(JSON.stringify([infra]))).infras();
+  assert.equal(legacy[0].deployable_computes,undefined);
+  for(const deployable_computes of [[],["ecs-fargate"]]){
+    const data={...infra,deployable_computes};
+    assert.deepEqual(await createApi("",async()=>new Response(JSON.stringify([data]))).infras(),[data]);
+  }
+  for(const deployable_computes of [null,"ecs-fargate",[42]]){
+    await assert.rejects(createApi("",async()=>new Response(JSON.stringify([{...infra,deployable_computes}]))).infras(),/응답/);
+  }
+});
+
+test("analysis deadline is 150 seconds while plan deadline remains 60 seconds",async(t)=>{
+  t.mock.timers.enable({apis:["setTimeout"]});
+  let aborted=0;
+  const api=createApi("",(_url,init)=>new Promise((_resolve,reject)=>{
+    init!.signal!.addEventListener("abort",()=>{aborted++;reject(init!.signal!.reason);},{once:true});
+  }));
+  const analysis=assert.rejects(api.analyzeUntilDone("a"),/시간/);
+  t.mock.timers.tick(149_999);
+  assert.equal(aborted,0);
+  t.mock.timers.tick(1);
+  await analysis;
+  assert.equal(aborted,1);
+  const plans=assert.rejects(api.plansUntilDone("a","ecs-fargate"),/시간/);
+  t.mock.timers.tick(59_999);
+  assert.equal(aborted,1);
+  t.mock.timers.tick(1);
+  await plans;
+  assert.equal(aborted,2);
+});

@@ -36,6 +36,7 @@ const infra = {
   description: "서버 샘플",
   network: "public",
   computes: ["ecs-fargate", "lambda"],
+  deployable_computes: ["ecs-fargate", "lambda"],
   app_count: 0,
 };
 const repository = { id: "repo-api", name: "team/web", repo_url: "https://github.com/team/web", branch: "main", created_at: "2026-10-02T00:00:00Z" };
@@ -236,6 +237,55 @@ try {
       "C:/Program Files/Google/Chrome/Application/chrome.exe",
     headless: true,
   });
+  const readinessPage=await browser.newPage();
+  let readinessKnown=false, readinessPlanReject=false, readinessExisting=false, readinessPlanPosts=0, readinessDeployPosts=0;
+  await readinessPage.route("**/api/**",async route=>{
+    const req=route.request(),path=new URL(req.url()).pathname;
+    const json=(body,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify(body)});
+    if(path.endsWith("/infra-spaces")){const {deployable_computes:ignored,...base}=infra;void ignored;return json([{...base,...(readinessKnown?{deployable_computes:["ecs-fargate"]}:{})}]);}
+    if(path.endsWith("/repositories"))return json([repository]);
+    if(path.endsWith("/app-spaces"))return json([app]);
+    if(path.endsWith("/app-api"))return json({...app,latest_deployment_id:readinessExisting?"dep-api":null});
+    if(path.endsWith("/analysis"))return json(analysis);
+    if(path.endsWith("/plans")){
+      readinessPlanPosts++;
+      if(readinessPlanReject)return json({error:"compute_not_ready",message:"아직 준비되지 않은 컴퓨팅"},400);
+      return json({status:"done",compute:"ecs-fargate",plans:[{id:"ready-plan",name:"기본 구성",summary:"기본값",pros:[],cons:[],template:"ecs-fargate/basic",values:{cpu:256,memory:512,container_port:3000}}]});
+    }
+    if(path.endsWith("/deployments")) {readinessDeployPosts++;readinessExisting=true;return json({error:"deployment_in_progress",message:"이미 배포가 진행 중입니다"},409);}
+    if(path.endsWith("/resources"))return json([]);
+    if(path.endsWith("/events"))return route.fulfill({contentType:"text/event-stream",body:'event: progress\ndata: '+JSON.stringify({status:"success",step:"done",progress:100,message:"기존 배포 완료",url:null,at:"now"})+'\n\n'});
+    return json({...deployment,compute:"ecs-fargate",status:"success"});
+  });
+  await readinessPage.goto(url+"/?source=api&app=app-api");
+  await readinessPage.getByRole("button",{name:"배포",exact:true}).click();
+  await readinessPage.locator(".candidate").filter({hasText:"ecs-fargate"}).getByRole("button",{name:"이 후보 선택",exact:true}).click();
+  assert.equal(await readinessPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).isDisabled(),true,"missing readiness must block plan request");
+  assert.match(await readinessPage.locator(".deploy-actions").innerText(),/배포 가능 여부 미확인/);
+  assert.equal(await readinessPage.getByRole("img",{name:"읽기 전용 분석 분기 트리"}).count(),0,"API never fabricates a demo decision tree");
+  readinessKnown=true;await readinessPage.reload();
+  await readinessPage.getByRole("button",{name:"배포",exact:true}).click();
+  const lambdaCard=readinessPage.locator(".candidate").filter({hasText:"lambda"});
+  await lambdaCard.getByRole("button",{name:"이 후보 선택",exact:true}).click();
+  assert.match(await lambdaCard.innerText(),/배포 준비 중/);
+  assert.equal(await readinessPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).isDisabled(),true);
+  assert.equal(readinessPlanPosts,0);
+  await readinessPage.locator(".candidate").filter({hasText:"ecs-fargate"}).getByRole("button",{name:"이 후보 선택",exact:true}).click();
+  readinessPlanReject=true;await readinessPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
+  await readinessPage.getByText(/배포 준비 중입니다/).waitFor();
+  readinessPlanReject=false;await readinessPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
+  const singleReview=readinessPage.getByRole("region",{name:"배포 변경 확인",exact:true});
+  await singleReview.getByRole("heading",{name:"기본 구성",exact:true}).waitFor();
+  assert.equal(await singleReview.getByRole("button",{name:"이 구성안 선택",exact:true}).count(),0);
+  assert.equal(await singleReview.getByLabel("설정값을 확인했습니다",{exact:true}).isDisabled(),false);
+  assert.equal(await singleReview.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
+  await singleReview.getByLabel("설정값을 확인했습니다",{exact:true}).check();
+  await singleReview.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).click();
+  await readinessPage.getByText("기존 배포 완료",{exact:true}).waitFor();
+  assert.match(await readinessPage.getByRole("alert").innerText(),/이미 배포가 진행 중/);
+  assert.equal(readinessDeployPosts,1,"409 restores existing deployment and never retries POST");
+  await readinessPage.close();
+  results.push({name:"deployment-readiness",checks:"unknown readiness blocked; unready recommendations retained; compute400 shown; single plan directly reviewed; deployment409 resumes existing SSE without duplicate POST"});
   for (const [name, width, height] of [
     ["desktop", 1440, 1000],
     ["mobile", 390, 844],
@@ -1332,13 +1382,13 @@ try {
   await review.locator(".candidate").filter({hasText:"확장 구성"}).getByRole("button").click();
   assert.equal(await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
   await review.getByLabel("설정값을 확인했습니다",{exact:true}).check();
-  // A fresh single-plan response still requires explicit selection and review.
+  // A single plan goes directly to review without a redundant selection step.
   planCount=1;
   await plansPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
-  await review.getByRole("button",{name:"이 구성안 선택",exact:true}).waitFor();
+  await review.getByRole("heading",{name:"기본 구성",exact:true}).waitFor();
   assert.equal(await review.locator(".candidate").count(),1);
   assert.equal(await review.getByLabel("설정값을 확인했습니다",{exact:true}).isChecked(),false);
-  await review.getByRole("button",{name:"이 구성안 선택",exact:true}).click();
+  assert.equal(await review.getByRole("button",{name:"이 구성안 선택",exact:true}).count(),0);
   await review.getByLabel("설정값을 확인했습니다",{exact:true}).check();
   await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).click();
   await plansPage.getByText("컨테이너 빌드 실패 이유",{exact:true}).waitFor();

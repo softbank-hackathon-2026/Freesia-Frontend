@@ -326,7 +326,7 @@ export default function App() {
         <div className={"source-banner " + mode} role="status">
           {mode === "demo"
             ? "데모 모드 · 브라우저 샘플 데이터입니다. 실제 AI·클라우드 작업을 실행하지 않습니다."
-            : "백엔드 API 모드 · 현재 서버도 고정 분석·배포 샘플을 반환합니다. 실제 AWS 배포가 아닙니다."}
+            : "백엔드 API 모드 · 서버가 제공하는 데이터를 표시합니다. 실제 AI·클라우드 실행 여부는 서버 설정에 따라 달라집니다."}
         </div>
         <main id="content">
           {mode === "demo" && storeError && (
@@ -599,7 +599,7 @@ export default function App() {
                     <dd>
                       {mode === "demo"
                         ? "준비된 기반 샘플"
-                        : "백엔드 샘플 기반"}
+                        : "서버에 등록된 기반"}
                     </dd>
                   </dl>
                   <p className="muted">
