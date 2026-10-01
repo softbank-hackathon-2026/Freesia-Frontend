@@ -43,6 +43,7 @@ export default function App() {
   const [storeError, setStoreError] = useState(loaded.error);
   const [mode, setMode] = useState<DataMode>("demo");
   const [page, setPage] = useState<"infra" | "apps" | "integration">("infra");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
   const [role, setRole] = useState<DemoRole>("infra");
   const [newInfra, setNewInfra] = useState(false);
@@ -159,6 +160,7 @@ export default function App() {
     setApps([]);
   }
   function nav(next: "infra" | "apps" | "integration") {
+    setMenuOpen(false);
     setNewInfra(false);
     setActiveSpaceId("");
     setPage(next);
@@ -196,7 +198,10 @@ export default function App() {
       <a className="skip-link" href="#content">
         본문으로 이동
       </a>
-      <header className="masthead">
+      <aside
+        className={"sidebar" + (menuOpen ? " is-open" : "")}
+        id="primary-navigation"
+      >
         <a className="brand" href="#" onClick={() => nav("infra")}>
           <svg
             className="brand-flower"
@@ -247,6 +252,65 @@ export default function App() {
             Freesia<small>아이디어가 자라는 공간</small>
           </span>
         </a>
+        <nav className="sidebar-nav" aria-label="주요 메뉴">
+          <button
+            className={"sidebar-link" + (page === "infra" ? " active" : "")}
+            aria-label="인프라"
+            aria-current={page === "infra" ? "page" : undefined}
+            onClick={() => nav("infra")}
+          >
+            <span className="sidebar-number" aria-hidden="true">
+              01
+            </span>
+            <span className="sidebar-label">인프라</span>
+          </button>
+          <button
+            className={"sidebar-link" + (page === "apps" ? " active" : "")}
+            aria-label="애플리케이션"
+            aria-current={page === "apps" ? "page" : undefined}
+            onClick={() => nav("apps")}
+          >
+            <span className="sidebar-number" aria-hidden="true">
+              02
+            </span>
+            <span className="sidebar-label">애플리케이션</span>
+          </button>
+          <button
+            className={"sidebar-link" + (page === "integration" ? " active" : "")}
+            aria-label="통합"
+            aria-current={page === "integration" ? "page" : undefined}
+            onClick={() => nav("integration")}
+          >
+            <span className="sidebar-number" aria-hidden="true">
+              03
+            </span>
+            <span className="sidebar-label">통합</span>
+          </button>
+        </nav>
+      </aside>
+      <header className="masthead">
+        <button
+          className="sidebar-toggle"
+          aria-label="주요 메뉴 열기"
+          aria-controls="primary-navigation"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <svg
+            className="sidebar-toggle-icon"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <path
+              d="M3 5h14M3 10h14M3 15h14"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+          메뉴
+        </button>
         <div className="masthead-controls">
           <div className="workspace-label">
             <span className="workspace-dot" aria-hidden="true" />
@@ -283,79 +347,6 @@ export default function App() {
         </div>
       </header>
       <div className="workspace">
-        <nav className="space-map" aria-label="주요 메뉴">
-          <button
-            className={page === "infra" ? "space-node active" : "space-node"}
-            aria-label="인프라"
-            aria-describedby="infra-space-role"
-            aria-current={page === "infra" ? "page" : undefined}
-            onClick={() => nav("infra")}
-          >
-            <span className="space-number" aria-hidden="true">
-              01
-            </span>
-            <span className="space-copy">
-              <span className="space-label">Infra Space</span>
-              <strong>인프라</strong>
-              <small id="infra-space-role">공통 기반을 설계하고 준비</small>
-            </span>
-            <span className="space-state">
-              {page === "infra" ? "현재 공간" : "공간 열기"}
-              <span aria-hidden="true"> ↗</span>
-            </span>
-          </button>
-          <div className="space-connection" aria-hidden="true">
-            <span>기반 연결</span>
-            <svg viewBox="0 0 90 16">
-              <path
-                d="M0 8H85M78 2L85 8L78 14"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              />
-            </svg>
-          </div>
-          <button
-            className={page === "apps" ? "space-node active" : "space-node"}
-            aria-label="애플리케이션"
-            aria-describedby="app-space-role"
-            aria-current={page === "apps" ? "page" : undefined}
-            onClick={() => nav("apps")}
-          >
-            <span className="space-number" aria-hidden="true">
-              02
-            </span>
-            <span className="space-copy">
-              <span className="space-label">Application Space</span>
-              <strong>애플리케이션</strong>
-              <small id="app-space-role">준비된 기반에 앱을 배포</small>
-            </span>
-            <span className="space-state">
-              {page === "apps" ? "현재 공간" : "공간 열기"}
-              <span aria-hidden="true"> ↗</span>
-            </span>
-          </button>
-          <button
-            className={
-              page === "integration" ? "space-node active" : "space-node"
-            }
-            aria-label="통합"
-            aria-current={page === "integration" ? "page" : undefined}
-            onClick={() => nav("integration")}
-          >
-            <span className="space-number" aria-hidden="true">
-              03
-            </span>
-            <span className="space-copy">
-              <span className="space-label">INTEGRATIONS</span>
-              <strong>통합</strong>
-              <small>배포 전에 Repository 연결·등록</small>
-            </span>
-            <span className="space-state">
-              {page === "integration" ? "현재 메뉴" : "메뉴 열기"} ↗
-            </span>
-          </button>
-        </nav>
         <div className={"source-banner " + mode} role="status">
           {mode === "demo"
             ? "데모 모드 · 브라우저 샘플 데이터입니다. 실제 AI·클라우드 작업을 실행하지 않습니다."
