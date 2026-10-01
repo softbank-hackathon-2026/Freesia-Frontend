@@ -10,7 +10,6 @@ import type {
   InfraSpace,
 } from "./lib/types.ts";
 import InfraBuilder from "./components/InfraBuilder.tsx";
-import type { BuilderDraft } from "./components/InfraBuilder.tsx";
 import Applications from "./components/Applications.tsx";
 import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
 import type { InfraSpaceDraft } from "./components/InfraSpaceForm.tsx";
@@ -18,7 +17,6 @@ import GitHubIntegration from "./components/GitHubIntegration.tsx";
 import {
   connectGitHubDemo,
   foundationTarget,
-  markDemoDeployed,
   newMeetingState,
   readyMeetingSpaces,
   templates,
@@ -47,8 +45,6 @@ export default function App() {
   const [newInfra, setNewInfra] = useState(false);
   const [infraDraft, setInfraDraft] = useState<InfraSpaceDraft | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState("");
-  const [builder, setBuilder] = useState(false);
-  const [builderDraft, setBuilderDraft] = useState<BuilderDraft | null>(null);
   const [infras, setInfras] = useState<InfraSpace[]>(foundations);
   const [apps, setApps] = useState<AppSpace[]>([]);
   const [error, setError] = useState("");
@@ -151,7 +147,6 @@ export default function App() {
     setMode(next);
     setSelected(null);
     setDesign(null);
-    setBuilder(false);
     setError("");
     setLoading(false);
     setInfras(next === "demo" ? foundations : []);
@@ -162,7 +157,6 @@ export default function App() {
     setNewInfra(false);
     setActiveSpaceId("");
     setPage(next);
-    setBuilder(false);
     setSelected(null);
     setDesign(null);
   }
@@ -368,21 +362,10 @@ export default function App() {
               onCreate={createSpace}
               onCancel={() => setNewInfra(false)}
             />
-          ) : builder && mode === "demo" ? (
-            <InfraBuilder
-              mode={mode}
-              initialDraft={builderDraft}
-              onDraftChange={setBuilderDraft}
-              onCancel={() => {
-                setBuilderDraft(null);
-                setBuilder(false);
-              }}
-              onSave={(entry) => {
-                persist({ ...demo, designs: [entry, ...demo.designs] });
-                setBuilderDraft(null);
-                setBuilder(false);
-                setDesign(entry);
-              }}
+          ) : activeSpace?.flow && mode === "demo" ? (
+            <InfraBuilder key={activeSpace.id} space={activeSpace}
+              onCancel={() => setActiveSpaceId("")}
+              onSave={(entry) => persist({...demo, meeting: {...meeting, spaces: meeting.spaces.map(s => s.id === entry.id ? entry : s)}})}
             />
           ) : (
             <>
@@ -415,17 +398,7 @@ export default function App() {
                       >
                         Infra Space 만들기
                       </button>
-                      <button
-                        className="secondary"
-                        onClick={() => {
-                          setBuilder(true);
-                          setSelected(null);
-                          setDesign(null);
-                          setActiveSpaceId("");
-                        }}
-                      >
-                        AI로 인프라 설계
-                      </button>
+
                     </>
                   )}
                 </div>
@@ -437,12 +410,12 @@ export default function App() {
                 </p>
               )}
               {mode === "demo" &&
-                meeting.spaces.some((s) => s.status === "source_generated") && (
+                meeting.spaces.some((s) => s.status !== "demo_deployed") && (
                   <section className="panel" aria-label="작성 중인 Infra Space">
                     <h2>작성 중인 Space</h2>
                     <div className="app-list">
                       {meeting.spaces
-                        .filter((s) => s.status === "source_generated")
+                        .filter((s) => s.status !== "demo_deployed")
                         .map((s) => (
                           <button
                             key={s.id}
@@ -455,8 +428,7 @@ export default function App() {
                           >
                             <strong>{s.name}</strong>
                             <span>
-                              {s.target} · {templates[s.template].name} · 코드
-                              초안 · 미구축
+                              {s.target} · {s.flow ? "AI 설계 진행 중" : "이전 템플릿 샘플"} · 미구축
                             </span>
                           </button>
                         ))}
@@ -480,10 +452,10 @@ export default function App() {
                     <dt>리전</dt>
                     <dd>{activeSpace.region}</dd>
                     <dt>템플릿</dt>
-                    <dd>{templates[activeSpace.template].name}</dd>
+                    <dd>{activeSpace.template ? templates[activeSpace.template].name : "미선택"}</dd>
                     <dt>샘플 구성 설명</dt>
                     <dd>
-                      {templates[activeSpace.template].contents.join(" · ")}
+                      {activeSpace.template ? templates[activeSpace.template].contents.join(" · ") : ""}
                     </dd>
                   </dl>
                   <ul>
@@ -491,33 +463,7 @@ export default function App() {
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
-                  {mode === "demo" &&
-                    activeSpace.status === "source_generated" && (
-                      <button
-                        className="primary"
-                        onClick={() => {
-                          try {
-                            persist({
-                              ...demo,
-                              meeting: {
-                                ...meeting,
-                                spaces: meeting.spaces.map((s) =>
-                                  s.id === activeSpace.id
-                                    ? markDemoDeployed(s)
-                                    : s,
-                                ),
-                              },
-                            });
-                          } catch (e) {
-                            setError(
-                              e instanceof Error ? e.message : "저장 실패",
-                            );
-                          }
-                        }}
-                      >
-                        인프라 배포 · 데모
-                      </button>
-                    )}
+                  <p className="notice">이전 템플릿 샘플 · 새 AI 질의응답 흐름과 연결되지 않은 읽기 전용 기록입니다. 새 설계는 Infra Space 만들기에서 시작하세요.</p>
                   <details>
                     <summary>Terraform 초안 · 미검증</summary>
                     <pre tabIndex={0}>
@@ -603,7 +549,7 @@ export default function App() {
               {mode === "demo" && (
                 <section className="panel">
                   <div className="section-heading">
-                    <h2>저장한 인프라 설계</h2>
+                    <h2>이전 별도 설계 · 읽기 전용</h2>
                     <span className="badge caution">
                       미구축 · {demo.designs.length}개
                     </span>
@@ -626,8 +572,7 @@ export default function App() {
                   ) : (
                     <div className="empty">
                       <p>
-                        AI 가이드 대화로 Terraform 초안을 작성하고 설계로
-                        저장하세요.
+                        이전 버전에서 별도로 저장한 설계가 없습니다. 새 설계는 Infra Space 만들기에서 시작하세요.
                       </p>
                     </div>
                   )}

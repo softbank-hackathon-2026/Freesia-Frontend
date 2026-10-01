@@ -1,4 +1,6 @@
 import { generateTerraform } from "./terraform.ts";
+import { newInfraFlow, validInfraFlow } from "./infraFlow.ts";
+import type { InfraFlow } from "./infraFlow.ts";
 import type { InfraSpace } from "./types.ts";
 export type InfraTemplate = "public" | "multi-az" | "db-isolated";
 export const targets = ["AWS 샘플 대상", "LINE 샘플 대상"] as const;
@@ -28,8 +30,9 @@ export type MeetingInfraSpace = {
   name: string;
   target: Target;
   region: string;
-  template: InfraTemplate;
-  status: "source_generated" | "demo_deployed";
+  template?: InfraTemplate;
+  flow?: InfraFlow;
+  status: "draft" | "source_generated" | "demo_deployed";
   computes: string[];
   code: string;
   limitations: string[];
@@ -57,16 +60,22 @@ export function makeInfraSpace(input: {
   name: string;
   target: Target;
   region: string;
-  template: InfraTemplate;
+  template?: InfraTemplate;
 }): MeetingInfraSpace {
   if (!input.name.trim() || input.name.length > 80)
     throw new Error("Space 이름을 1~80자로 입력하세요.");
   if (
     !targets.includes(input.target) ||
-    !Object.hasOwn(templates, input.template) ||
+    (input.template !== undefined && !Object.hasOwn(templates, input.template)) ||
     !["ap-northeast-2", "ap-northeast-1"].includes(input.region)
   )
     throw new Error("대상·리전·템플릿을 선택하세요.");
+  if (input.template === undefined) return {
+    ...input, name: input.name.trim(), id: `demo-space-${crypto.randomUUID()}`,
+    status: "draft", computes: ["ecs-fargate", "lambda", "ec2"], code: "",
+    limitations: ["실제 AWS 리소스 없음", "고정 VPC/Subnet 샘플 · 실제 AI 생성/검증/적용 없음"],
+    flow: newInfraFlow(input.region),
+  };
   return {
     ...input,
     name: input.name.trim(),
@@ -90,6 +99,7 @@ export function makeInfraSpace(input: {
   };
 }
 export function markDemoDeployed(space: MeetingInfraSpace): MeetingInfraSpace {
+  if (space.flow) throw new Error("질의응답·코드 검토 후 Apply 데모를 진행하세요.");
   return { ...space, status: "demo_deployed" };
 }
 export function connectGitHubDemo(): GitHubConnection {
@@ -126,8 +136,7 @@ export function validMeetingState(value: unknown): value is MeetingState {
             typeof (i as unknown as Record<string, unknown>)[k] !== "string",
         ) ||
         !targets.includes(i.target) ||
-        !Object.hasOwn(templates, i.template) ||
-        !["source_generated", "demo_deployed"].includes(i.status) ||
+        (i.flow ? !validInfraFlow(i) : (!i.template || !Object.hasOwn(templates, i.template) || !["source_generated", "demo_deployed"].includes(i.status))) ||
         !Array.isArray(i.computes) ||
         !i.computes.every((c) => typeof c === "string") ||
         !Array.isArray(i.limitations) ||
@@ -175,15 +184,15 @@ export function registeredRepositories(
 }
 export function readyMeetingSpaces(state: MeetingState): InfraSpace[] {
   return state.spaces
-    .filter((s) => s.status === "demo_deployed")
+    .filter((s) => s.status === "demo_deployed" && (!s.flow || s.flow.apply?.status === "success"))
     .map((s) => ({
       id: s.id,
       name: s.name,
       description: `${s.target} · 데모 배포된 기반 샘플. 실제 AWS 리소스가 아닙니다.`,
       network:
-        s.template === "public"
+        (s.flow ? s.flow.choices.visibility === "public" : s.template === "public")
           ? "public"
-          : s.template === "multi-az"
+          : (s.flow ? s.flow.choices.availability === "multi" : s.template === "multi-az")
             ? "ha"
             : "private",
       computes: s.computes,

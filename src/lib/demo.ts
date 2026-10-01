@@ -1,3 +1,4 @@
+import { normalizeInfraSpace } from "./infraFlow.ts";
 import { validPipeline } from "./pipeline.ts";
 import { complete, generateTerraform } from "./terraform.ts";
 export { generateTerraform } from "./terraform.ts";
@@ -168,6 +169,8 @@ export function parseDemo(raw: string | null): DemoState {
       )
     )
       throw new Error();
+    if (Array.isArray(s.meeting?.spaces))
+      s.meeting.spaces = s.meeting.spaces.map(normalizeInfraSpace);
     if (s.meeting !== undefined && !validMeetingState(s.meeting))
       throw new Error();
     return s;

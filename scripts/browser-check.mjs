@@ -179,6 +179,17 @@ async function checkSidebar(page, mobile) {
   await navigate(page, "통합");
   await navigate(page, "인프라");
 }
+async function createInfra(page,name) {
+ await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
+ await page.getByLabel("Space 이름",{exact:true}).fill(name);
+ await page.getByRole("button",{name:"Space 생성 · 데모",exact:true}).click();
+}
+async function answerInfra(page,request,availability="Multi AZ · 2개") {
+ await page.getByLabel("인프라 요구사항",{exact:true}).fill(request);
+ await page.getByRole("button",{name:"질문 시작",exact:true}).click();
+ await page.getByRole("button",{name:"Private · 외부 경로 제외",exact:true}).click();
+ await page.getByRole("button",{name:availability,exact:true}).click();
+}
 async function appForm(page, name, infraId) {
   await navigate(page, "통합");
   if (
@@ -256,86 +267,55 @@ try {
       .click();
     await page.getByRole("region", { name: "인프라 상세" }).waitFor();
     await page.getByRole("button", { name: "닫기", exact: true }).click();
-    await page.getByRole("button", { name: "AI로 인프라 설계" }).click();
-    await page.getByRole("button", { name: "목록으로" }).focus();
-    await page.keyboard.press("Enter");
-    await page.getByRole("heading", { name: "인프라", exact: true }).waitFor();
-    await page.getByRole("button", { name: "AI로 인프라 설계" }).click();
-    await page.getByRole("button", { name: "질문 시작" }).click();
+    await createInfra(page, "conversation-foundation");
+    await page.getByRole("button", {name:"질문 시작",exact:true}).click();
     assert.match(await page.getByRole("alert").innerText(), /요구사항/);
-    const request = "<script>window.bad=1</script> 서울 개발용 웹 서비스";
-    await page.getByLabel("인프라 요구사항").fill(request);
-    await page.getByRole("button", { name: "질문 시작" }).click();
-    await page.getByRole("button", { name: "목록으로" }).click();
-    await page.getByRole("dialog", { name: "설계 대화 닫기" }).waitFor();
-    await page.keyboard.press("Escape");
-    assert.equal(
-      await page.getByRole("dialog", { name: "설계 대화 닫기" }).count(),
-      0,
-    );
-    assert.match(
-      await page.locator(".chat.user").first().innerText(),
-      /서울 개발용/,
-    );
-    await page.getByRole("button", { name: "서울", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Private · 외부 경로 제외", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Multi AZ · 2개", exact: true })
-      .click();
-    assert.match(
-      await page.getByLabel("Terraform 코드").innerText(),
-      /count = 2/,
-    );
-    assert.doesNotMatch(
-      await page.getByLabel("Terraform 코드").innerText(),
-      /window.bad/,
-    );
-    assert.equal(await page.evaluate(() => window.bad), undefined);
-    assert.equal(
-      await page
-        .getByRole("button", { name: "설계 저장", exact: true })
-        .isDisabled(),
-      true,
-    );
-    await page.screenshot({
-      path: `artifacts/sprint02-builder-${name}.png`,
-      fullPage: true,
-    });
-    await navigate(page, "애플리케이션");
-    await navigate(page, "인프라");
-    await page.getByRole("button", { name: "AI로 인프라 설계" }).click();
-    assert.match(
-      await page.getByLabel("Terraform 코드").innerText(),
-      /count = 2/,
-    );
-    await openNavigation(page);
-    await page.locator(".brand").click();
-    await page.getByRole("button", { name: "AI로 인프라 설계" }).click();
-    assert.match(
-      await page.locator(".chat.user").first().innerText(),
-      /서울 개발용/,
-    );
-    await page.getByLabel("데이터 소스").selectOption("api");
-    await page.getByLabel("데이터 소스").selectOption("demo");
-    await page.getByRole("button", { name: "AI로 인프라 설계" }).click();
-    assert.match(
-      await page.getByLabel("Terraform 코드").innerText(),
-      /count = 2/,
-    );
-    const downloaded = page.waitForEvent("download");
-    await page.getByRole("button", { name: ".tf 다운로드" }).click();
-    assert.equal((await downloaded).suggestedFilename(), "main.tf");
-    await page.getByLabel("설계 이름").fill("conversation-foundation");
-    await page.getByRole("button", { name: "설계 저장", exact: true }).click();
-    await page.getByRole("region", { name: "저장한 설계 상세" }).waitFor();
+    await answerInfra(page, "서울 리전에 내부 API를 위한 인프라가 필요합니다. 두 가용 영역을 비교하고 싶습니다.");
+    assert.equal(await page.getByLabel("Terraform 코드").count(),0);
+    assert.equal(await page.getByRole("radio").count(),0);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({path:`artifacts/infra-generation-${name}.png`,fullPage:true});
+    await page.getByRole("button",{name:"답변으로 Terraform 생성",exact:true}).click();
+    assert.match(await page.getByLabel("Terraform 코드").innerText(), /count = 2/);
+    assert.doesNotMatch(await page.getByLabel("Terraform 코드").innerText(), /window.bad/);
+    assert.equal(await page.evaluate(()=>window.bad),undefined);
+    const downloaded=page.waitForEvent("download");
+    await page.getByRole("button",{name:".tf 다운로드"}).click();
+    assert.equal((await downloaded).suggestedFilename(),"main.tf");
+    await navigate(page,"통합"); await navigate(page,"인프라");
+    await page.getByRole("button",{name:"Space 상세: conversation-foundation",exact:true}).click();
+    await page.getByLabel("Terraform 코드").waitFor();
     await page.reload();
-    await page.getByRole("button", { name: /conversation-foundation/ }).click();
-    assert.match(
-      await page.getByRole("region", { name: "저장한 설계 상세" }).innerText(),
-      /미구축/,
-    );
+    await page.getByRole("button",{name:"Space 상세: conversation-foundation",exact:true}).click();
+    await page.getByLabel("Terraform 코드").waitFor();
+    await page.getByRole("button",{name:"답변 수정 · 이후 결과 초기화",exact:true}).click();
+    await answerInfra(page,"서울 리전의 내부 API용 단일 영역 구성이 필요합니다.","Single AZ · 1개");
+    assert.equal(await page.getByLabel("Terraform 코드").count(),0);
+    await page.getByRole("button",{name:"답변으로 Terraform 생성",exact:true}).click();
+    assert.match(await page.getByLabel("Terraform 코드").innerText(), /count = 1/);
+    assert.equal(await page.getByRole("button",{name:"Apply 시작 · 데모",exact:true}).isDisabled(),true);
+    await page.getByLabel("선택한 코드와 데모 제한을 검토했습니다",{exact:true}).check();
+    await page.getByLabel("Apply 실패 시연",{exact:true}).check();
+    await page.getByRole("button",{name:"Apply 시작 · 데모",exact:true}).click();
+    await page.getByText("Apply 실패 시연 · 준비된 기반으로 등록되지 않았습니다.",{exact:true}).waitFor();
+    await page.getByLabel("Apply 실패 시연",{exact:true}).uncheck();
+    await page.getByRole("button",{name:"Apply 다시 시도 · 데모",exact:true}).click();
+    await page.getByRole("button",{name:"진행 일시정지",exact:true}).click();
+    await page.reload();
+    await page.getByRole("button",{name:"Space 상세: conversation-foundation",exact:true}).click();
+    await page.getByRole("button",{name:"Apply 데모 이어하기",exact:true}).waitFor();
+    assert.equal(await page.getByText(/DEMO Apply 완료/).count(),0);
+    await page.getByRole("button",{name:"Apply 데모 이어하기",exact:true}).click();
+    await page.getByText(/DEMO Apply 완료/).waitFor();
+    for (const checkbox of await page.locator('.infra-flow-panel input[type="checkbox"]').all()) {
+      const box = await checkbox.boundingBox();
+      assert.ok(box && box.width > 0 && box.width <= 32, "Infra checkbox retains native control width");
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({path:`artifacts/infra-apply-${name}.png`,fullPage:true});
+    await page.getByRole("button",{name:"답변 수정 · 이후 결과 초기화",exact:true}).click();
+    assert.equal(await page.getByLabel("Terraform 코드").count(),0);
+    assert.equal(await page.getByRole("region",{name:"인프라 Apply 결과"}).count(),0);
     await navigate(page, "애플리케이션");
     await page.getByRole("button", { name: "앱 연결", exact: true }).click();
     await page
@@ -364,7 +344,7 @@ try {
     const disabled = page
       .locator("#infra-select option")
       .filter({ hasText: "conversation-foundation" });
-    assert.equal(await disabled.getAttribute("disabled"), "");
+    assert.equal(await disabled.count(), 0);
     await page
       .getByLabel("등록한 Repository", { exact: true })
       .selectOption("");
@@ -473,7 +453,7 @@ try {
       name,
       width,
       checks:
-        "sidebar/active-menu/mobile-toggle/guided-chat/save/reload/not-deployable/invalid-form/app-analysis/deploy/log/metrics/API-error/no-fallback/keyboard/no-overflow/JS0 passed",
+        "sidebar/active-menu/mobile-toggle/same-space-answers/direct-generate/review/apply-failure/retry/pause/reload/invalidation/invalid-form/app-analysis/deploy/log/metrics/API-error/no-fallback/keyboard/no-overflow/JS0 passed",
     });
     await page.close();
   }
@@ -834,66 +814,20 @@ try {
       await page.getByLabel("Space 이름", { exact: true }).inputValue(),
       "preserved-foundation",
     );
-    for (const [i, template] of [
-      "Public 중심",
-      "Multi-AZ",
-      "DB 격리",
-    ].entries()) {
-      if (i)
-        await page
-          .getByRole("button", { name: "Infra Space 만들기", exact: true })
-          .click();
-      await page.getByLabel("Space 이름", { exact: true }).fill("sample-" + i);
-      await page
-        .getByLabel("기업 / 대상", { exact: true })
-        .selectOption("LINE 샘플 대상");
-      await page.getByRole("radio", { name: new RegExp(template) }).check();
-      if (i === 2)
-        await page.screenshot({
-          path: "artifacts/day3-infra-form-" + viewportName + ".png",
-          fullPage: true,
-        });
-      await page
-        .getByRole("button", { name: "Space 생성 · 데모", exact: true })
-        .click();
-      const detail = page.getByRole("region", {
-        name: "Space 상세",
-        exact: true,
-      });
-      assert.match(await detail.innerText(), /미구축/);
-      if (i === 2)
-        assert.match(
-          await detail.innerText(),
-          /Bastion.*VPC Gateway Endpoint.*코드에 생성되지/s,
-        );
-      assert.equal(
-        await page
-          .getByRole("button", { name: "인프라 배포 · 데모", exact: true })
-          .count(),
-        1,
-      );
-      assert.equal(
-        await page
-          .getByRole("button", { name: "Infra Space 만들기", exact: true })
-          .count(),
-        1,
-      );
-      assert.equal(
-        await page
-          .getByRole("button", { name: "AI로 인프라 설계", exact: true })
-          .count(),
-        1,
-      );
-      await page
-        .getByRole("button", { name: "인프라 배포 · 데모", exact: true })
-        .click();
-      assert.match(await detail.innerText(), /DEMO 배포 완료.*실제 AWS/s);
-      assert.equal(
-        await page
-          .getByRole("button", { name: "sample-" + i, exact: true })
-          .count(),
-        1,
-      );
+    for (let i=0;i<3;i++) {
+      if (i) await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
+      await page.getByLabel("Space 이름",{exact:true}).fill("sample-"+i);
+      await page.getByLabel("기업 / 대상",{exact:true}).selectOption("LINE 샘플 대상");
+      assert.equal(await page.getByRole("radio").count(),0);
+      if(i===2) await page.screenshot({path:"artifacts/day3-infra-form-"+viewportName+".png",fullPage:true});
+      await page.getByRole("button",{name:"Space 생성 · 데모",exact:true}).click();
+      await answerInfra(page,"샘플 요구사항");
+      await page.getByRole("button",{name:"답변으로 Terraform 생성",exact:true}).click();
+      await page.getByLabel("선택한 코드와 데모 제한을 검토했습니다",{exact:true}).check();
+      await page.getByRole("button",{name:"Apply 시작 · 데모",exact:true}).click();
+      await page.getByText(/DEMO Apply 완료/).waitFor();
+      await page.getByRole("button",{name:"목록으로",exact:true}).click();
+      assert.equal(await page.getByRole("button",{name:"sample-"+i,exact:true}).count(),1);
     }
     await page.screenshot({
       path: "artifacts/day3-infra-ready-" + viewportName + ".png",
@@ -998,40 +932,23 @@ try {
     results.push({
       name: "day3-sprint01-" + viewportName,
       checks:
-        "three entry points, three templates source->demo-ready, role-free infra/repo/app flow, draft retention, explicit repo registration, reload/API isolation passed",
+        "three entry points, direct generation/review/apply->demo-ready, role-free infra/repo/app flow, draft retention, explicit repo registration, reload/API isolation passed",
     });
   }
   const quota = await browser.newPage();
-  await quota.addInitScript(() => {
-    Storage.prototype.setItem = function () {
-      throw new DOMException("quota", "QuotaExceededError");
-    };
-  });
   await quota.goto(url);
-  await quota.getByRole("button", { name: "AI로 인프라 설계" }).click();
-  await quota.getByLabel("인프라 요구사항").fill("저장 오류 확인용");
-  await quota.getByRole("button", { name: "질문 시작" }).click();
-  await quota.getByRole("button", { name: "서울", exact: true }).click();
-  await quota
-    .getByRole("button", { name: "Public · 인터넷 경로 포함", exact: true })
-    .click();
-  await quota
-    .getByRole("button", { name: "Single AZ · 1개", exact: true })
-    .click();
-  await quota.getByLabel("설계 이름").fill("retain-draft");
-  await quota.getByRole("button", { name: "설계 저장", exact: true }).click();
-  assert.match(await quota.getByRole("alert").innerText(), /저장하지 못/);
-  assert.equal(
-    await quota.getByLabel("설계 이름").inputValue(),
-    "retain-draft",
-  );
+  await createInfra(quota,"retain-code"); await answerInfra(quota,"<script>window.bad=1</script> 저장 오류 확인용");
+  await quota.getByRole("button",{name:"답변으로 Terraform 생성",exact:true}).click();
+  assert.doesNotMatch(await quota.getByLabel("Terraform 코드").innerText(),/window.bad/);
+  assert.equal(await quota.evaluate(()=>window.bad),undefined);
+  await quota.getByLabel("선택한 코드와 데모 제한을 검토했습니다",{exact:true}).check();
+  await quota.evaluate(()=>{Storage.prototype.setItem=function(){throw new DOMException("quota","QuotaExceededError");};});
+  await quota.getByRole("button",{name:"Apply 시작 · 데모",exact:true}).click();
+  assert.match(await quota.getByRole("alert").innerText(),/저장하지 못/);
   await quota.getByLabel("Terraform 코드").waitFor();
+  assert.equal(await quota.getByRole("region",{name:"인프라 Apply 결과"}).count(),0);
   await quota.close();
-  results.push({
-    name: "quota",
-    checks:
-      "storage failure visible and conversation/code/name retained passed",
-  });
+  results.push({name:"quota",checks:"Apply persistence failure retains reviewed code without advancing passed"});
 
   const infraQuota = await browser.newPage();
   await infraQuota.addInitScript(() => {
