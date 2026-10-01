@@ -14,6 +14,7 @@ import type {
   Deployment,
   DeploymentEvent,
   InfraSpace,
+  Repository,
 } from "../lib/types.ts";
 import { registeredRepositories } from "../lib/meeting.ts";
 import type { MeetingState } from "../lib/meeting.ts";
@@ -39,8 +40,13 @@ export default function Applications({
   onStartDeployment,
   initialForm,
   onDraftChange,
+  apiRepositories, repositoryLoading, repositoryError, onRefreshRepositories,
 }: {
   mode: DataMode;
+  apiRepositories: Repository[];
+  repositoryLoading: boolean;
+  repositoryError: string;
+  onRefreshRepositories: () => void;
   apps: AppSpace[];
   infras: InfraSpace[];
   designs: InfraDesign[];
@@ -82,7 +88,8 @@ export default function Applications({
   const [chosen, setChosen] = useState("");
   const [plan, setPlan] = useState<AppPlan | null>(null);
   const [failCI, setFailCI] = useState(false);
-  const registered = registeredRepositories(meeting.github);
+  const demoRegistered = registeredRepositories(meeting.github);
+  const registered = mode === "demo" ? demoRegistered : apiRepositories;
   const preview =
     plan ??
     (deployment?.demo_pipeline?.plan.compute === chosen
@@ -182,8 +189,8 @@ export default function Applications({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const token = session.current;
-    if (mode !== "demo") {
-      setError("Repository 등록 API가 없어 앱 생성은 미지원입니다.");
+    if (mode === "api" && (repositoryLoading || repositoryError)) {
+      setError("Repository 목록을 먼저 불러오세요.");
       return;
     }
     if (
@@ -321,7 +328,7 @@ export default function Applications({
         mode === "demo"
           ? startDemoDeployment(
               selected.id,
-              makeAppPlan(selected, chosen, allowed, registered),
+              makeAppPlan(selected, chosen, allowed, demoRegistered),
               failCI,
             )
           : await api.deploy(selected.id, chosen);
@@ -368,11 +375,12 @@ export default function Applications({
         ) : (
           <button
             className="primary"
-            disabled={mode === "api"}
+            disabled={mode === "api" && repositoryLoading}
             onClick={() => {
               session.current++;
               setBusy(false);
               setCreating(true);
+              setAnalysis(null); setChosen(""); setPlan(null); setEvent(null); setDeployment(null); setTab("overview");
               setError("");
             }}
           >
@@ -387,11 +395,11 @@ export default function Applications({
       )}
       {mode === "api" && !selected && (
         <p className="notice">
-          GitHub Repository 등록 API가 없어 새 앱 생성은 미지원입니다. 기존 앱
-          조회·샘플 분석·배포 API만 사용할 수 있습니다.
+          서버에 등록된 Repository와 Infra Space로 앱을 생성합니다. 현재 백엔드의 앱·분석·배포는 샘플 구현이며 실제 AI·클라우드 배포가 아닙니다.
         </p>
       )}
-      {creating && !registered.length ? (
+      {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefreshRepositories}>Repository 다시 조회</button></div>}
+      {creating && mode === "api" && repositoryLoading ? <p role="status">Repository 불러오는 중…</p> : creating && !registered.length ? (
         <section className="panel detail">
           <h2>등록한 Repository가 없습니다</h2>
           <p>통합에서 사용할 public GitHub Repository URL을 먼저 등록하세요.</p>
@@ -709,7 +717,7 @@ export default function Applications({
                                       selected,
                                       chosen,
                                       allowed,
-                                      registered,
+                                      demoRegistered,
                                     ),
                                   );
                               } catch (e) {

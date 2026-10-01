@@ -5,6 +5,7 @@ import type {
   Deployment,
   DeploymentEvent,
   InfraSpace,
+  Repository,
 } from "./types.ts";
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -27,6 +28,10 @@ function infraShape(value: unknown): boolean {
     strings(v.computes) &&
     typeof v.app_count === "number"
   );
+}
+function repositoryShape(value: unknown): boolean {
+  const v = record(value);
+  return !!v && ["id", "name", "repo_url", "branch", "created_at"].every((key) => typeof v[key] === "string");
 }
 function appShape(value: unknown): boolean {
   const v = record(value);
@@ -83,6 +88,7 @@ function analysisShape(value: unknown): boolean {
   );
 }
 function validShape(path: string, value: unknown, post: boolean): boolean {
+  if (path === "/repositories") return post ? repositoryShape(value) : Array.isArray(value) && value.every(repositoryShape);
   if (path === "/infra-spaces")
     return Array.isArray(value) && value.every(infraShape);
   if (path.startsWith("/infra-spaces/")) return infraShape(value);
@@ -97,12 +103,12 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
   async function request<T>(
     path: string,
     body?: unknown,
-    post = false,
+    method: "GET" | "POST" | "DELETE" = "GET",
   ): Promise<T> {
     let response: Response;
     try {
       response = await fetcher(`${root}${path}`, {
-        method: post ? "POST" : "GET",
+        method,
         ...(body === undefined
           ? {}
           : {
@@ -115,6 +121,7 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
         "백엔드에 연결할 수 없습니다. 주소와 서버 상태를 확인하세요.",
       );
     }
+    if (method === "DELETE" && response.status === 204) return undefined as T;
     let data: unknown;
     try {
       data = await response.json();
@@ -135,24 +142,27 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
           : `요청 실패 (HTTP ${response.status})`;
       throw new Error(message);
     }
-    if (!validShape(path, data, post))
+    if (!validShape(path, data, method === "POST"))
       throw new Error("백엔드 응답 형식이 올바르지 않습니다.");
     return data as T;
   }
   const appPath = (id: string) => `/app-spaces/${encodeURIComponent(id)}`;
   return {
+    repositories: () => request<Repository[]>("/repositories"),
+    registerRepository: (body: { repo_url: string; branch: string }) => request<Repository>("/repositories", body, "POST"),
+    deleteRepository: (id: string) => request<void>(`/repositories/${encodeURIComponent(id)}`, undefined, "DELETE"),
     infras: () => request<InfraSpace[]>("/infra-spaces"),
     infra: (id: string) =>
       request<InfraSpace>(`/infra-spaces/${encodeURIComponent(id)}`),
     apps: () => request<AppSpace[]>("/app-spaces"),
     app: (id: string) => request<AppSpace>(appPath(id)),
     createApp: (body: AppSpaceCreate) =>
-      request<AppSpace>("/app-spaces", body, true),
+      request<AppSpace>("/app-spaces", body, "POST"),
     analyze: (id: string) =>
-      request<Analysis>(`${appPath(id)}/analysis`, undefined, true),
+      request<Analysis>(`${appPath(id)}/analysis`, undefined, "POST"),
     analysis: (id: string) => request<Analysis>(`${appPath(id)}/analysis`),
     deploy: (id: string, compute: string) =>
-      request<Deployment>(`${appPath(id)}/deployments`, { compute }, true),
+      request<Deployment>(`${appPath(id)}/deployments`, { compute }, "POST"),
     deployment: (id: string) =>
       request<Deployment>(`/deployments/${encodeURIComponent(id)}`),
   };

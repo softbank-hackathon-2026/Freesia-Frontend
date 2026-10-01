@@ -38,6 +38,7 @@ const infra = {
   computes: ["ecs-fargate", "lambda"],
   app_count: 0,
 };
+const repository = { id: "repo-api", name: "team/web", repo_url: "https://github.com/team/web", branch: "main", created_at: "2026-10-02T00:00:00Z" };
 const app = {
   id: "app-api",
   name: "api-web",
@@ -447,9 +448,9 @@ try {
     assert.equal(await page.evaluate(()=>localStorage.getItem("freesia.demo.v1")),appStore);
     await page.getByLabel("데이터 소스").selectOption("api");
     await checkSourceBanner(page);
-    await page.getByRole("alert").waitFor();
+    await page.getByRole("alert").first().waitFor();
     assert.match(
-      await page.getByRole("alert").innerText(),
+      await page.getByRole("alert").first().innerText(),
       /테스트 백엔드 연결 실패/,
     );
     await navigate(page, "인프라");
@@ -490,14 +491,27 @@ try {
   const calls = [];
   let serverStatus = "pending";
   let hasDeployment = false;
+  let apiRepositories = [repository];
   await apiPage.route("**/api/**", async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname.replace("/api", "");
     calls.push({ path, method: req.method(), body: req.postData() });
     let value;
-    if (path === "/infra-spaces") value = [infra];
+    if (path === "/repositories") {
+      if (req.method() === "POST") {
+        const body = req.postDataJSON();
+        if (body.repo_url.endsWith("/conflict")) return route.fulfill({status:409,contentType:"application/json",body:JSON.stringify({message:"서버 중복 등록"})});
+        value = {...repository,...body,id:"repo-added",name:body.repo_url.slice("https://github.com/".length)};
+        apiRepositories = [value,...apiRepositories];
+      } else value = apiRepositories;
+    }
+    else if (path.startsWith("/repositories/") && req.method() === "DELETE") {
+      apiRepositories = apiRepositories.filter(repo=>repo.id!==path.split("/").at(-1));
+      return route.fulfill({status:204});
+    }
+    else if (path === "/infra-spaces") value = [infra];
     else if (path === "/app-spaces" && req.method() === "GET") value = [app];
-    else if (path === "/app-spaces") value = app;
+    else if (path === "/app-spaces") value = {...app,...req.postDataJSON(),id:"app-created"};
     else if (path === "/app-spaces/app-api")
       value = {
         ...app,
@@ -540,14 +554,31 @@ try {
   assert.equal(await apiPage.getByLabel("Terraform 코드").count(),0);
   assert.equal(await apiPage.getByRole("region",{name:"인프라 질의응답",exact:true}).count(),0);
   await apiPage.getByRole("button",{name:"닫기",exact:true}).click();
-  await navigate(apiPage, "애플리케이션");
-  assert.equal(
-    await apiPage
-      .getByRole("button", { name: "앱 연결", exact: true })
-      .isDisabled(),
-    true,
-  );
-  assert.equal(await apiPage.locator("#repo-url").count(), 0);
+
+  await navigate(apiPage,"통합");
+  await apiPage.getByRole("button",{name:"등록 해제: team/web (main)",exact:true}).waitFor();
+  await apiPage.getByLabel("Repository URL",{exact:true}).fill(" https://github.com/team/added.git/ ");
+  await apiPage.getByRole("button",{name:"Repository 등록",exact:true}).click();
+  await apiPage.getByRole("button",{name:"등록 해제: team/added (main)",exact:true}).waitFor();
+  assert.deepEqual(JSON.parse(calls.find(call=>call.path==="/repositories"&&call.method==="POST").body),{repo_url:"https://github.com/team/added",branch:"main"});
+  await apiPage.getByLabel("Repository URL",{exact:true}).fill("https://github.com/team/conflict");
+  await apiPage.getByRole("button",{name:"Repository 등록",exact:true}).click();
+  await apiPage.getByRole("alert").waitFor();
+  assert.match(await apiPage.getByRole("alert").innerText(),/서버 중복 등록/);
+  assert.equal(await apiPage.getByLabel("Repository URL",{exact:true}).inputValue(),"https://github.com/team/conflict");
+  await apiPage.getByRole("button",{name:"등록 해제: team/added (main)",exact:true}).click();
+  await apiPage.getByRole("button",{name:"등록 해제: team/added (main)",exact:true}).waitFor({state:"detached"});
+  await navigate(apiPage,"애플리케이션");
+  await apiPage.getByRole("button",{name:"앱 연결",exact:true}).click();
+  assert.equal(await apiPage.locator("#repo-url").count(),0);
+  assert.deepEqual(await apiPage.locator("#infra-select option").evaluateAll(items=>items.map(item=>item.value)),["","api-infra"]);
+  await apiPage.getByLabel("앱 이름",{exact:true}).fill("created-api-app");
+  await apiPage.getByLabel("등록한 Repository",{exact:true}).selectOption("repo-api");
+  await apiPage.getByLabel("Infra Space",{exact:true}).selectOption("api-infra");
+  await apiPage.getByRole("button",{name:"앱 만들기",exact:true}).click();
+  await apiPage.getByRole("heading",{name:"created-api-app",exact:true}).waitFor();
+  assert.deepEqual(JSON.parse(calls.find(call=>call.path==="/app-spaces"&&call.method==="POST").body),{name:"created-api-app",repo_url:repository.repo_url,branch:"main",infra_id:"api-infra"});
+  await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button", { name: /api-web/ }).click();
   await apiPage
     .getByRole("button", { name: "기존 앱 샘플 분석", exact: true })
@@ -611,7 +642,7 @@ try {
   results.push({
     name: "API",
     checks:
-      "API create disabled/no URL; exact existing-app analyze/alternative/deploy payload/named SSE success/log-metric unsupported/isolation passed",
+      "API repositories list/register/409/delete204 and create from registered repo+serverinfra; exact analysis/deploy/SSE; demo isolation passed",
   });
   await apiPage.close();
   const racePage = await browser.newPage();
@@ -621,6 +652,7 @@ try {
   const b = { ...app, id: "app-b", name: "app-B" };
   await racePage.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/repositories")) return route.fulfill({contentType:"application/json",body:JSON.stringify([repository])});
     if (path.endsWith("/infra-spaces"))
       return route.fulfill({
         contentType: "application/json",
@@ -720,6 +752,7 @@ try {
         contentType: "application/json",
         body: JSON.stringify(value),
       });
+    if (path.endsWith("/repositories")) return fulfill([repository]);
     if (path.endsWith("/infra-spaces")) return fulfill([infra]);
     if (path.endsWith("/app-spaces")) {
       if (req.method() === "POST") {
@@ -750,12 +783,16 @@ try {
     .getByRole("button", { name: "API 기반", exact: true })
     .waitFor();
   await navigate(listOnly, "애플리케이션");
-  assert.equal(
-    await listOnly
-      .getByRole("button", { name: "앱 연결", exact: true })
-      .isDisabled(),
-    true,
-  );
+  await listOnly.getByRole("button",{name:"앱 연결",exact:true}).click();
+  await listOnly.getByLabel("앱 이름",{exact:true}).fill("late-created");
+  await listOnly.getByLabel("등록한 Repository",{exact:true}).selectOption("repo-api");
+  await listOnly.getByLabel("Infra Space",{exact:true}).selectOption("api-infra");
+  const createRequest=listOnly.waitForRequest(request=>request.url().endsWith("/app-spaces")&&request.method()==="POST");
+  await listOnly.getByRole("button",{name:"앱 만들기",exact:true}).click();
+  await createRequest;
+  await listOnly.getByRole("button",{name:"앱 목록으로",exact:true}).click();
+  await listOnly.waitForTimeout(500);
+  assert.equal(await listOnly.getByRole("heading",{name:"late-created",exact:true}).count(),0);
   operation = "analysis";
   await listOnly.getByRole("button", { name: /app-A/ }).click();
   const listAnalyzeReq = listOnly.waitForRequest("**/app-a/analysis");
@@ -799,7 +836,7 @@ try {
   results.push({
     name: "list-only-navigation",
     checks:
-      "API create disabled; late analyze/deploy ignored on Back without opening B passed",
+      "API late create/analyze/deploy ignored on Back without opening B passed",
   });
 
   for (const [viewportName, width, height] of [
@@ -958,8 +995,10 @@ try {
         .count(),
       0,
     );
-    assert.equal(await page.getByLabel("Repository URL",{exact:true}).count(),0);
-    assert.match(await page.locator("main").innerText(), /Repository 등록·조회 API가 아직/s);
+    assert.equal(await page.getByLabel("Repository URL",{exact:true}).count(),1);
+    await page.getByRole("button",{name:"Repository 다시 조회",exact:true}).waitFor();
+    assert.equal(await page.getByRole("button",{name:"Repository 등록",exact:true}).isDisabled(),true);
+    assert.equal(await page.locator(".repository-row").count(),0);
     await navigate(page, "인프라");
     for (const name of [
       "Infra Space 만들기",
@@ -1066,6 +1105,50 @@ try {
   assert.equal(await branchPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps[0].branch),"main");
   await branchPage.close();
   results.push({name:"legacy-repository-branches",checks:"registered legacy develop and same-URL main remain independently selectable; app persists main passed"});
+
+  const repositoryRace = await browser.newPage();
+  let repositoryCalls = 0;
+  let repositoryList = [repository];
+  await repositoryRace.route("**/api/**",async route=>{
+    const request=route.request();
+    const path=new URL(request.url()).pathname;
+    const json=value=>route.fulfill({contentType:"application/json",body:JSON.stringify(value)});
+    if(path.endsWith("/repositories")) {
+      if(request.method()==="POST") {
+        repositoryCalls++;
+        await new Promise(resolve=>setTimeout(resolve,350));
+        const added={...repository,...request.postDataJSON(),id:"late-repository",name:"team/late"};
+        repositoryList=[...repositoryList,added];
+        return json(added);
+      }
+      return json(repositoryList);
+    }
+    if(path.endsWith("/infra-spaces"))return json([infra]);
+    if(path.endsWith("/app-spaces"))return json([]);
+  });
+  await repositoryRace.goto(url);
+  await navigate(repositoryRace,"통합");
+  await repositoryRace.getByLabel("Repository URL",{exact:true}).fill("https://github.com/demo/only");
+  await repositoryRace.getByRole("button",{name:"Repository 등록 · 데모",exact:true}).click();
+  const demoRegistry=await repositoryRace.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
+  await repositoryRace.getByLabel("데이터 소스").selectOption("api");
+  await repositoryRace.getByRole("button",{name:"등록 해제: team/web (main)",exact:true}).waitFor();
+  await repositoryRace.getByLabel("Repository URL",{exact:true}).fill("https://github.com/team/late");
+  const pendingRepository=repositoryRace.waitForRequest(request=>request.url().endsWith("/repositories")&&request.method()==="POST");
+  await repositoryRace.getByRole("button",{name:"Repository 등록",exact:true}).click();
+  await pendingRepository;
+  await repositoryRace.getByLabel("데이터 소스").selectOption("demo");
+  await repositoryRace.getByLabel("Repository URL",{exact:true}).fill("https://github.com/demo/unfinished");
+  await repositoryRace.waitForTimeout(500);
+  assert.equal(repositoryCalls,1);
+  assert.equal(await repositoryRace.locator(".repository-row").count(),1);
+  assert.equal(await repositoryRace.getByLabel("Repository URL",{exact:true}).inputValue(),"https://github.com/demo/unfinished");
+  assert.equal(await repositoryRace.evaluate(()=>localStorage.getItem("freesia.demo.v1")),demoRegistry);
+  await repositoryRace.getByLabel("데이터 소스").selectOption("api");
+  await repositoryRace.getByRole("button",{name:"등록 해제: team/late (main)",exact:true}).waitFor();
+  assert.equal(await repositoryRace.locator(".repository-row").count(),2);
+  await repositoryRace.close();
+  results.push({name:"repository-mode-race",checks:"late API registration cannot overwrite demo records/input; reentry reloads actual server list passed"});
   const quota = await browser.newPage();
   await quota.goto(url);
   await createInfra(quota,"retain-code"); await answerInfra(quota,"<script>window.bad=1</script> 저장 오류 확인용");

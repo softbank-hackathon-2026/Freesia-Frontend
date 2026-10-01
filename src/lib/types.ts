@@ -1,3 +1,10 @@
+export type Repository = {
+  id: string;
+  name: string;
+  repo_url: string;
+  branch: string;
+  created_at: string;
+};
 import type { DemoPipeline } from "./pipeline.ts";
 export type InfraSpace = {
   id: string;

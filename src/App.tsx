@@ -8,6 +8,7 @@ import type {
   DataMode,
   Deployment,
   InfraSpace,
+  Repository,
 } from "./lib/types.ts";
 import InfraBuilder from "./components/InfraBuilder.tsx";
 import { canDiscardInfra } from "./lib/infraFlow.ts";
@@ -41,11 +42,15 @@ export default function App() {
   const [page, setPage] = useState<"infra" | "apps" | "integration">("infra");
   const [menuOpen, setMenuOpen] = useState(false);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
+  const [apiAppDraft, setApiAppDraft] = useState<AppSpaceCreate | null>(null);
   const [newInfra, setNewInfra] = useState(false);
   const [infraDraft, setInfraDraft] = useState<InfraSpaceDraft | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState("");
   const [infras, setInfras] = useState<InfraSpace[]>(foundations);
   const [apps, setApps] = useState<AppSpace[]>([]);
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [repositoryLoading, setRepositoryLoading] = useState(false);
+  const [repositoryError, setRepositoryError] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
@@ -79,6 +84,19 @@ export default function App() {
       active = false;
     };
   }, [mode, reload]);
+  useEffect(() => {
+    if (mode !== "api") return;
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) { setRepositoryLoading(true); setRepositoryError(""); setRepositories([]); }
+    });
+    api.repositories().then((items) => {
+      if (active) setRepositories(items);
+    }).catch((e) => {
+      if (active) setRepositoryError(e instanceof Error ? e.message : "Repository 조회 실패");
+    }).finally(() => { if (active) setRepositoryLoading(false); });
+    return () => { active = false; };
+  }, [mode, page, reload]);
   function persist(next: DemoState) {
     if (storeError) throw new Error("손상된 저장소를 먼저 확인·초기화하세요.");
     try {
@@ -143,6 +161,9 @@ export default function App() {
     setNewInfra(false);
     setActiveSpaceId("");
     setMode(next);
+    setRepositories([]);
+    setRepositoryError("");
+    setRepositoryLoading(next === "api");
     setSelected(null);
     setError("");
     setLoading(false);
@@ -316,7 +337,13 @@ export default function App() {
           )}
           {page === "integration" ? (
             <GitHubIntegration
+              key={mode}
               mode={mode}
+              apiRepositories={repositories}
+              loading={mode === "api" && repositoryLoading}
+              loadError={mode === "api" ? repositoryError : ""}
+              onRefresh={() => setReload((n) => n + 1)}
+              onApiChange={setRepositories}
               connection={meeting.github}
               onSave={(github) => persist({ ...demo, meeting: { ...meeting, github } })}
             />
@@ -332,12 +359,17 @@ export default function App() {
                 if (mode === "demo")
                   persist({ ...demo, apps: [app, ...demo.apps] });
                 else setApps((current) => [app, ...current]);
-                setAppDraft(null);
+                if (mode === "demo") setAppDraft(null);
+                else setApiAppDraft(null);
               }}
               onDeployment={updateDeployment}
-              initialForm={appDraft}
-              onDraftChange={setAppDraft}
+              initialForm={mode === "demo" ? appDraft : apiAppDraft}
+              onDraftChange={mode === "demo" ? setAppDraft : setApiAppDraft}
               meeting={meeting}
+              apiRepositories={repositories}
+              repositoryLoading={repositoryLoading}
+              repositoryError={repositoryError}
+              onRefreshRepositories={() => setReload((n) => n + 1)}
               onIntegration={() => nav("integration")}
               onStartDeployment={(entry) =>
                 persist({

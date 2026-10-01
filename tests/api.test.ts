@@ -227,3 +227,32 @@ test("rejects malformed JSON shapes at the API boundary", async () => {
     /응답/,
   );
 });
+
+test("Repository API uses registered records, exact mutations and empty DELETE 204", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const repository = { id: "repo/1", name: "team/web", repo_url: "https://github.com/team/web", branch: "main", created_at: "2026-10-02T00:00:00Z" };
+  const api = createApi("/api/", async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (init?.method === "DELETE") return new Response(null, {status:204});
+    return new Response(JSON.stringify(init?.method === "POST" ? repository : [repository]), {status:init?.method === "POST" ? 201 : 200});
+  });
+  assert.deepEqual(await api.repositories(),[repository]);
+  assert.deepEqual(await api.registerRepository({repo_url:repository.repo_url,branch:"main"}),repository);
+  assert.equal(await api.deleteRepository(repository.id),undefined);
+  assert.deepEqual(calls.map(call=>[call.url,call.init?.method]),[
+    ["/api/repositories","GET"],["/api/repositories","POST"],["/api/repositories/repo%2F1","DELETE"],
+  ]);
+  assert.deepEqual(JSON.parse(calls[1].init!.body as string),{repo_url:repository.repo_url,branch:"main"});
+  assert.equal(calls[2].init?.body,undefined);
+});
+test("Repository errors and malformed responses stay visible without synthetic records", async () => {
+  for (const status of [404,409,422]) {
+    const api = createApi("/api", async()=>new Response(JSON.stringify({error:"repository_error",message:"저장소 오류 "+status}),{status}));
+    await assert.rejects(api.registerRepository({repo_url:"https://github.com/team/web",branch:"main"}),new RegExp(String(status)));
+    await assert.rejects(api.deleteRepository("missing"),new RegExp(String(status)));
+  }
+  for (const value of [{},[{}],[{id:"r",name:"repo",repo_url:42,branch:"main",created_at:"now"}]]) {
+    await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify(value))).repositories(),/응답/);
+  }
+  await assert.rejects(createApi("/api",async()=>new Response(null,{status:204})).repositories(),/JSON|응답/);
+});
