@@ -1,13 +1,13 @@
 # API contracts: current and proposed
 
 ## Current FastAPI contract — implemented adapter
-Source: Freesia-backend/app/schemas.py and app/routers at HEAD 0d9061bbc3f74c260e4cceb32f72cb60cf1dae63. No prefix. Default Vite /api proxy forwards to localhost:8000.
+Source: Freesia-backend main 9c58ef852d8dfbdc6685cdf058ff907ae1430289 (2026-10-01), app/main.py, app/schemas.py and app/routers. All routes below are relative to /api. Default Vite proxy preserves /api and forwards to localhost:8000/api. A direct VITE_API_BASE_URL must also include /api. Production routing must preserve the same prefix; the Vite development proxy is not part of the build.
 - GET /infra-spaces, GET /infra-spaces/{id}: ready foundation samples, fields id/name/description/network/computes/app_count. network ha is backend literal, not proof of private or Multi AZ topology.
 - GET/POST /app-spaces, GET /app-spaces/{id}. POST name/repo_url/branch/infra_id. IDs must come from API foundation list, never local source-generated designs.
 - POST/GET /app-spaces/{id}/analysis: requirements/evidence/candidates/mascot_message. Candidates selected/alternative/unsuitable remain server recommendation; user selection is separate.
 - POST /app-spaces/{id}/deployments: {compute}. GET /deployments/{id}. GET /deployments/{id}/events emits event: progress with status/step/message/progress/url/at; close terminal, errors, unmount/source change.
 - Structured errors {error,message}, 400/404/422/500. NonJSON/connection/schema failures become visible errors; no demo fallback.
-- All existing app/analysis/deploy handlers use samples/in-memory state. No actual GitHub analysis, AI, cloud deployment or customer app health check. /health is platform backend health only.
+- All existing app/analysis/deploy handlers use samples/in-memory state. No actual GitHub analysis, AI, cloud deployment or customer app health check. /api/health is platform backend health only.
 
 ## Current UI meeting flow — local DEMO only
 Main destinations: Infra / Application / Integration. Role switch is a screen demonstration, not authentication/RBAC.
@@ -21,7 +21,7 @@ Main destinations: Infra / Application / Integration. Role switch is a screen de
 - Explicit DEMO commit/push + CI/CD start stores one Deployment with optional `demo_pipeline` metadata (plan/phase/failCI/sample commit). Seven local steps show code preparation, commit, push, build, CI check, resource creation, app deployment/check. DEMO commit/run identifiers are not actual GitHub objects, no invented working Actions URL or app endpoint is created.
 - CI failure simulation reports failed status; retry creates a new DEMO run with the reviewed plan. Back/source change/unmount stops local progress; reopening/reloading resumes the remaining stored phase. Completed/failed runs do not silently restart. Existing API SSE cleanup and nonterminal reentry remain unchanged.
 - API mode retains existing app GET, analysis, deployment and named progress events. New creation is disabled because GitHub repository registration contract is absent. Infra create/provision and GitHub integration are visibly unsupported. There is no local demo ID submission, fake route or automatic demo fallback.
-- Logs/metrics remain fixed local samples; API unsupported. Backend `/health` is platform health, not customer application health.
+- Logs/metrics remain fixed local samples; API unsupported. Backend `/api/health` is platform health, not customer application health.
 
 ## Local persistence and boundaries
 Versioned localStorage key `freesia.demo.v1` retains existing designs/apps/deployments and optional meeting metadata (Infra Spaces, sample connection, registered repo IDs). Optional demo pipeline lives on the existing Deployment; no parallel shadow pipeline store.

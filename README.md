@@ -6,13 +6,15 @@ React + TypeScript + Vite 기반 플랫폼 콘솔입니다. Node.js 24 이상을
 npm ci
 npm run dev
 ```
-http://localhost:5173 에서 확인합니다. `.env.example`을 `.env.local`로 복사해 `VITE_API_BASE_URL`을 설정할 수 있습니다. 기본 `/api`는 Vite가 `http://localhost:8000`으로 전달하며 별도 API prefix는 없습니다. 배포 환경은 API reverse proxy 또는 backend CORS 설정이 필요합니다.
+http://localhost:5173 에서 확인합니다. `.env.example`을 `.env.local`로 복사해 `VITE_API_BASE_URL`을 설정할 수 있습니다. 기본 `/api`는 Vite가 접두사를 유지하여 `http://localhost:8000/api`로 전달합니다. 백엔드는 모든 API에 `/api`를 사용하는 버전이 필요합니다. 다른 서버에 직접 연결하려면 `VITE_API_BASE_URL=https://backend.example.com/api`처럼 `/api`까지 포함하세요. 배포 빌드에는 Vite 개발 프록시가 포함되지 않으므로 배포 환경도 `/api`를 유지하는 reverse proxy 또는 backend CORS 설정이 필요합니다.
 
 ## 검증 하네스
 ```sh
 npm run check
 npm run test:e2e
 ```
+프록시 회귀 테스트는 실제 Vite 서버와 로컬 HTTP 테스트 서버로 GET·POST·SSE 경로 전달을 확인합니다. 실제 FastAPI·AI·클라우드 배포 검증은 아닙니다.
+
 check는 TypeScript → ESLint → Node 네이티브 테스트 → Vite build를 실행하며 첫 실패 시 종료합니다. e2e는 로컬 Vite 서버와 설치된 Chrome을 실행하고 desktop/mobile 스크린샷을 `artifacts/`에 저장합니다. `CHROME_PATH` 환경변수로 실행 파일을 바꿀 수 있습니다. 브라우저 추가 다운로드는 하지 않습니다.
 
 ## 구현 경계
