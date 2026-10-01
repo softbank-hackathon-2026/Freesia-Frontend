@@ -16,7 +16,6 @@ import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
 import type { InfraSpaceDraft } from "./components/InfraSpaceForm.tsx";
 import GitHubIntegration from "./components/GitHubIntegration.tsx";
 import {
-  canManageInfra,
   connectGitHubDemo,
   foundationTarget,
   markDemoDeployed,
@@ -24,7 +23,7 @@ import {
   readyMeetingSpaces,
   templates,
 } from "./lib/meeting.ts";
-import type { DemoRole, MeetingInfraSpace } from "./lib/meeting.ts";
+import type { MeetingInfraSpace } from "./lib/meeting.ts";
 const api = createApi(import.meta.env.VITE_API_BASE_URL || "/api");
 function load() {
   try {
@@ -45,7 +44,6 @@ export default function App() {
   const [page, setPage] = useState<"infra" | "apps" | "integration">("infra");
   const [menuOpen, setMenuOpen] = useState(false);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
-  const [role, setRole] = useState<DemoRole>("infra");
   const [newInfra, setNewInfra] = useState(false);
   const [infraDraft, setInfraDraft] = useState<InfraSpaceDraft | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState("");
@@ -275,21 +273,6 @@ export default function App() {
             </span>
           </div>
           <label className="mode-label">
-            데모 역할
-            <select
-              aria-label="데모 역할"
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value as DemoRole);
-                setNewInfra(false);
-                setBuilder(false);
-              }}
-            >
-              <option value="infra">인프라 관리자</option>
-              <option value="app">애플리케이션 관리자</option>
-            </select>
-          </label>
-          <label className="mode-label">
             데이터 소스
             <select
               aria-label="데이터 소스"
@@ -309,12 +292,6 @@ export default function App() {
             : "백엔드 API 모드 · 현재 서버도 고정 분석·배포 샘플을 반환합니다. 실제 AWS 배포가 아닙니다."}
         </div>
         <main id="content">
-          <p className="role-note">
-            역할 전환은 화면 시연용입니다. 실제 로그인·권한 검증이 아닙니다.{" "}
-            {role === "app"
-              ? "애플리케이션 관리자는 공통 기반을 읽기 전용으로 확인합니다."
-              : "인프라 관리자는 공통 기반 Space를 만들고 데모 배포합니다."}
-          </p>
           {mode === "demo" && storeError && (
             <div className="error" role="alert">
               <strong>브라우저 저장소 확인이 필요합니다.</strong>
@@ -384,14 +361,14 @@ export default function App() {
                 })
               }
             />
-          ) : newInfra && canManageInfra(role, mode) ? (
+          ) : newInfra && mode === "demo" ? (
             <InfraSpaceForm
               draft={infraDraft}
               onDraft={setInfraDraft}
               onCreate={createSpace}
               onCancel={() => setNewInfra(false)}
             />
-          ) : builder && canManageInfra(role, mode) ? (
+          ) : builder && mode === "demo" ? (
             <InfraBuilder
               mode={mode}
               initialDraft={builderDraft}
@@ -425,7 +402,7 @@ export default function App() {
                   >
                     새로고침
                   </button>
-                  {canManageInfra(role, mode) && (
+                  {mode === "demo" && (
                     <>
                       <button
                         className="primary"
@@ -514,7 +491,7 @@ export default function App() {
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
-                  {canManageInfra(role, mode) &&
+                  {mode === "demo" &&
                     activeSpace.status === "source_generated" && (
                       <button
                         className="primary"

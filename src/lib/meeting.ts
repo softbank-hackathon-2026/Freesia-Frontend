@@ -1,6 +1,5 @@
 import { generateTerraform } from "./terraform.ts";
-import type { DataMode, InfraSpace } from "./types.ts";
-export type DemoRole = "infra" | "app";
+import type { InfraSpace } from "./types.ts";
 export type InfraTemplate = "public" | "multi-az" | "db-isolated";
 export const targets = ["AWS 샘플 대상", "LINE 샘플 대상"] as const;
 export type Target = (typeof targets)[number];
@@ -53,9 +52,6 @@ export type MeetingState = {
 };
 export function newMeetingState(): MeetingState {
   return { spaces: [], github: null };
-}
-export function canManageInfra(role: DemoRole, mode: DataMode) {
-  return role === "infra" && mode === "demo";
 }
 export function makeInfraSpace(input: {
   name: string;

@@ -5,11 +5,10 @@ import {
   newMeetingState,
   makeInfraSpace,
   markDemoDeployed,
-  canManageInfra,
   connectGitHubDemo,
   validMeetingState,
 } from "../src/lib/meeting.ts";
-test("three admin templates create source-only Space until explicit sample deployment", () => {
+test("three templates create source-only Space until explicit sample deployment", () => {
   for (const template of ["public", "multi-az", "db-isolated"] as const) {
     const space = makeInfraSpace({
       name: "team-foundation",
@@ -32,9 +31,6 @@ test("three admin templates create source-only Space until explicit sample deplo
       }),
     /이름/,
   );
-  assert.equal(canManageInfra("app", "demo"), false);
-  assert.equal(canManageInfra("infra", "api"), false);
-  assert.equal(canManageInfra("infra", "demo"), true);
 });
 test("v1 data preserves old ids while meeting metadata is validated and persists", () => {
   const old = initialDemo();

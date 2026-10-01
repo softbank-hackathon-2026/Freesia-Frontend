@@ -130,6 +130,8 @@ async function checkSidebar(page, mobile) {
   const sidebar = page.locator("#primary-navigation");
   const toggle = page.getByRole("button", { name: "주요 메뉴 열기", exact: true });
   assert.equal(await page.locator(".space-map").count(), 0);
+  assert.equal(await page.getByLabel("데모 역할", { exact: true }).count(), 0);
+  assert.equal(await page.locator(".role-note").count(), 0);
   const brandIcon = sidebar.locator(".brand .brand-icon");
   assert.equal(await brandIcon.count(), 1);
   assert.equal(await brandIcon.getAttribute("src"), "/freesia-mascot.jpg");
@@ -335,7 +337,6 @@ try {
       /미구축/,
     );
     await navigate(page, "애플리케이션");
-    await page.getByLabel("데모 역할").selectOption("app");
     await page.getByRole("button", { name: "앱 연결", exact: true }).click();
     await page
       .getByRole("heading", {
@@ -865,26 +866,24 @@ try {
           await detail.innerText(),
           /Bastion.*VPC Gateway Endpoint.*코드에 생성되지/s,
         );
-      await page.getByLabel("데모 역할").selectOption("app");
       assert.equal(
         await page
           .getByRole("button", { name: "인프라 배포 · 데모", exact: true })
           .count(),
-        0,
+        1,
       );
       assert.equal(
         await page
           .getByRole("button", { name: "Infra Space 만들기", exact: true })
           .count(),
-        0,
+        1,
       );
       assert.equal(
         await page
           .getByRole("button", { name: "AI로 인프라 설계", exact: true })
           .count(),
-        0,
+        1,
       );
-      await page.getByLabel("데모 역할").selectOption("infra");
       await page
         .getByRole("button", { name: "인프라 배포 · 데모", exact: true })
         .click();
@@ -918,6 +917,31 @@ try {
       path: "artifacts/day3-integration-" + viewportName + ".png",
       fullPage: true,
     });
+    await navigate(page, "애플리케이션");
+    await page.getByRole("button", { name: "앱 연결", exact: true }).click();
+    await page.getByLabel("앱 이름", { exact: true }).fill("sample-foundation-web");
+    await page
+      .getByLabel("등록한 Repository", { exact: true })
+      .selectOption(
+        "https://github.com/softbank-hackathon-2026/Freesia-Frontend",
+      );
+    const readyOption = page
+      .locator("#infra-select option")
+      .filter({ hasText: "sample-0" });
+    assert.equal(await readyOption.getAttribute("disabled"), null);
+    await page
+      .getByLabel("기업 / 대상 Space", { exact: true })
+      .selectOption(await readyOption.getAttribute("value"));
+    await page.getByRole("button", { name: "앱 만들기", exact: true }).click();
+    await page
+      .getByRole("heading", { name: "sample-foundation-web", exact: true })
+      .waitFor();
+    await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+    await page.getByRole("button", { name: /sample-foundation-web/ }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: /sample-foundation-web/ }).count(),
+      1,
+    );
     await page.reload();
     await navigate(page, "통합");
     assert.equal(
@@ -946,12 +970,15 @@ try {
     );
     assert.match(await page.locator("main").innerText(), /OAuth.*API가 아직/s);
     await navigate(page, "인프라");
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Infra Space 만들기", exact: true })
-        .count(),
-      0,
-    );
+    for (const name of [
+      "Infra Space 만들기",
+      "AI로 인프라 설계",
+      "인프라 배포 · 데모",
+    ])
+      assert.equal(
+        await page.getByRole("button", { name, exact: true }).count(),
+        0,
+      );
     assert.equal(
       await page.evaluate(
         () =>
@@ -971,7 +998,7 @@ try {
     results.push({
       name: "day3-sprint01-" + viewportName,
       checks:
-        "three entry points, three templates source->demo-ready, role read-only, draft retention, explicit repo registration, reload/API isolation passed",
+        "three entry points, three templates source->demo-ready, role-free infra/repo/app flow, draft retention, explicit repo registration, reload/API isolation passed",
     });
   }
   const quota = await browser.newPage();
