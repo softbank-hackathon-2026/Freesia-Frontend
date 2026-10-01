@@ -18,6 +18,8 @@ const repoURL = "https://github.com/local-integration/freesia-" + suffix;
 const appName = "local-integration-" + suffix;
 let repositoryId;
 const results = [];
+const deploymentPosts=[];
+page.on("request",request=>{if(request.method()==="POST"&&request.url().endsWith("/deployments")) deploymentPosts.push(request.url())});
 const get = (path) => api.get(baseURL + "/api" + path);
 async function navigate(name) {
   if (await page.locator(".sidebar-toggle").isVisible()) {
@@ -81,19 +83,56 @@ try {
   assert.ok(!app.infra_id.startsWith("demo-"));
   const appButton = page.getByRole("button", { name: new RegExp(appName) });
   if (await appButton.count()) await appButton.click();
-  await page.getByRole("button", { name: "기존 앱 샘플 분석", exact: true }).click();
-  await page.locator(".candidate").filter({ hasText: "ecs-fargate" }).getByRole("button").first().waitFor();
-  const deploymentResponse = page.waitForResponse((r) => r.url().endsWith("/deployments") && r.request().method() === "POST");
-  await page.getByRole("button", { name: "기존 API 샘플 배포", exact: true }).click();
-  const deployment = await (await deploymentResponse).json();
-  await page.getByText("success", { exact: true }).waitFor({ timeout: 25000 });
-  assert.equal((await (await get("/deployments/" + deployment.id)).json()).status, "success");
-  await page.screenshot({ path: "artifacts/local-api-deployment-desktop.png", fullPage: true });
-  await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
-  await page.getByRole("button", { name: new RegExp(appName) }).click();
-  await page.getByText("success", { exact: true }).waitFor();
-  results.push("app create201 from registered repo/server infra, sample analysis, real SSE transport success, detail reentry");
+  await page.getByRole("button",{name:"배포",exact:true}).click();
+  await page.getByRole("heading",{name:"실행 환경 후보",exact:true}).waitFor();
+  assert.equal(await page.locator(".candidate.chosen").count(),0);
+  assert.match(await page.locator(".deploy-actions").innerText(),/사용자 선택: 없음/);
+  await page.locator(".candidate").first().getByRole("button",{name:"이 후보 선택",exact:true}).click();
+  const review=page.getByRole("region",{name:"배포 변경 확인",exact:true});
+  await review.waitFor();
+  const planResponse = page.waitForResponse(r=>r.url().endsWith(`/app-spaces/${app.id}/plans`) && r.request().method()==="POST");
+  await page.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
+  assert.equal((await planResponse).status(),404);
+  await review.getByRole("alert").filter({hasText:"연동 대기"}).waitFor();
+  assert.equal(await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
+  assert.equal(await page.getByLabel("앱 Terraform 미리보기",{exact:true}).count(),0);
+  assert.equal(deploymentPosts.length,0);
+  assert.equal((await (await get("/app-spaces/"+app.id)).json()).latest_deployment_id,null);
+  await page.screenshot({path:"artifacts/local-api-plan-waiting-desktop.png",fullPage:true});
+  results.push("app create201 from registered repo/server infra, sample analysis, explicit choice, real plans404 unsupported and no UI deployment POST");
 
+  // Explicit local simulation fixture: this bypass is only for read/SSE transport tests.
+  // The product UI must still require a reviewed server plan.
+  const depResponse=await api.post(baseURL+`/api/app-spaces/${app.id}/deployments`,{data:{compute:"ecs-fargate"}});
+  assert.equal(depResponse.status(),201);
+  const dep=await depResponse.json();
+  await page.getByRole("button",{name:"앱 목록으로",exact:true}).click();
+  await page.getByRole("button",{name:new RegExp(appName)}).click();
+  await page.getByRole("heading",{name:"배포 상태",exact:true}).waitFor();
+  assert.equal(await page.locator(".pipeline-steps li").count(),6);
+  await page.waitForFunction(()=>Number(document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value"))>0);
+  await page.reload();
+  await page.getByLabel("데이터 소스").selectOption("api");
+  await navigate("애플리케이션");
+  if (await page.getByRole("button",{name:new RegExp(appName)}).count()) await page.getByRole("button",{name:new RegExp(appName)}).click();
+  await page.waitForFunction(()=>document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value")==="100",{},{timeout:45000});
+  assert.equal((await (await get(`/deployments/${dep.id}`)).json()).status,"success");
+  assert.deepEqual(await (await get(`/deployments/${dep.id}/resources`)).json(),[]);
+  await page.getByText("아직 보고된 자원이 없습니다.",{exact:false}).waitFor();
+  await page.screenshot({path:"artifacts/local-api-deployment-desktop.png",fullPage:true});
+  results.push("explicit local simulated deployment, six steps, refresh SSE current-state restoration, terminal success, empty resources remain unknown");
+
+  if(process.env.LOCAL_RESOURCE_APP_NAME){
+    await page.getByRole("button",{name:"앱 목록으로",exact:true}).click();
+    await page.getByRole("button",{name:new RegExp(process.env.LOCAL_RESOURCE_APP_NAME)}).click();
+    const resourcePanel=page.getByRole("region",{name:"배포 자원 상태",exact:true});
+    await resourcePanel.getByText(/1\/3개 완료/).waitFor();
+    assert.match(await resourcePanel.innerText(),/완료/);
+    assert.match(await resourcePanel.innerText(),/진행 중/);
+    assert.match(await resourcePanel.innerText(),/실패/);
+    await page.screenshot({path:"artifacts/local-api-resources-desktop.png",fullPage:true});
+    results.push("explicit local DB resource fixture rendered actual type/address/action and done/in_progress/failed states");
+  }
   await page.setViewportSize({ width: 390, height: 844 });
   await navigate("통합");
   await page.getByRole("button", { name: "등록 해제: " + repo.name + " (main)", exact: true }).waitFor();
@@ -111,8 +150,8 @@ try {
   results.push("mobile unregister204 preserves existing app, demo storage unchanged, no overflow/page errors");
   await writeFile("artifacts/local-api-results.json", JSON.stringify({
     status: "passed", backendVersion: version, testedAt: new Date().toISOString(),
-    results, appId: app.id, deploymentId: deployment.id,
-    limits: "SQLite local runtime; backend AI/deployment are samples; no external GitHub/AWS execution.",
+    results, appId: app.id,
+    limits: "SQLite local runtime; backend analysis is sample; product deployment blocked until plan API; explicit direct API simulated deployment tests only; optional resource fixture is local DB data; no external GitHub/AWS execution.",
   }, null, 2));
   console.log(JSON.stringify({ status: "passed", backendVersion: version, results }));
 } catch (error) {

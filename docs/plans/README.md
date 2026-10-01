@@ -63,3 +63,13 @@ Completed local follow-up: seeded services open shared InfraBuilder with explici
 User-approved runtime setup and API Repository/app creation connection. Backend current f7a29a9 has real DB repositories CRUD; older unsupported notes above are historical. Contract in Day3 latest addition. Worker owns product/tests, parent runtime/docs/review. Required check + browser regression + local FastAPI roundtrip; record limits separately.
 
 2026-10-02 completion: API repositoryCRUD/appcreation implemented; check25/browser15/live-localAPI PASS, readonlyreviewPASS. SQLite localbackendf7a29a9. Backendpytest28pass2Windowsencodingfailure; no actualAI/AWS. Currentbranchlocaluncommitted. See infra-ai-flow-eval latestrecord and scripts/local-api-check.mjs for real local roundtrip.
+
+## Active — shared demo/API UI (2026-10-02)
+Approved same layout/explicit choice/review flow, server-only data and unavailable placeholders. Existing infra-ai-flow contract latest entry applies; repository integration was pushed as 238def9. This follow-up is not approved for Git publication.
+
+2026-10-02 shared UI completed locally: Infra/app/review/monitoring common layout with unavailable API actions gated; existing server SSE retained. check25/browser15/actual-localAPI/source+visual review PASS. Latest infra-ai-flow-eval applies. Current follow-up uncommitted/unpushed.
+
+## Active — frontend completion (2026-10-02)
+User-approved 1/2/4/5 then template-plan UI readiness; codex/frontend-deployment-flow. Commit/push authorized on verified completion, no PR/merge. Latest infra-ai-flow-contract applies.
+
+2026-10-02 frontend completion verified: check33/browser17/live-localAPI5groups/review PASS. Template+values UI and six-stage SSE/resources ready; latest backend8d99b37 still lacks plans/real analysis/workflow dispatch. User-authorized commit/push on codex/frontend-deployment-flow includes previous shared UI; no PR/merge. See infra-ai-flow-eval for evidence and runtime preservation.

@@ -10,7 +10,7 @@ import type {
   InfraSpace,
   Repository,
 } from "./lib/types.ts";
-import InfraBuilder from "./components/InfraBuilder.tsx";
+import InfraBuilder, { ApiInfraBuilder } from "./components/InfraBuilder.tsx";
 import { canDiscardInfra } from "./lib/infraFlow.ts";
 import Applications from "./components/Applications.tsx";
 import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
@@ -38,8 +38,8 @@ export default function App() {
   const [loaded] = useState(load);
   const [demo, setDemo] = useState<DemoState>(loaded.data);
   const [storeError, setStoreError] = useState(loaded.error);
-  const [mode, setMode] = useState<DataMode>("demo");
-  const [page, setPage] = useState<"infra" | "apps" | "integration">("infra");
+  const [mode, setMode] = useState<DataMode>(() => new URLSearchParams(location.search).get("source") === "api" ? "api" : "demo");
+  const [page, setPage] = useState<"infra" | "apps" | "integration">(() => new URLSearchParams(location.search).has("app") ? "apps" : "infra");
   const [menuOpen, setMenuOpen] = useState(false);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
   const [apiAppDraft, setApiAppDraft] = useState<AppSpaceCreate | null>(null);
@@ -158,6 +158,11 @@ export default function App() {
     [mode],
   );
   function changeMode(next: DataMode) {
+    if (next === mode) return;
+    const url = new URL(location.href);
+    url.searchParams.set("source", next);
+    url.searchParams.delete("app");
+    history.replaceState(null, "", url);
     setNewInfra(false);
     setActiveSpaceId("");
     setMode(next);
@@ -171,6 +176,9 @@ export default function App() {
     setApps([]);
   }
   function nav(next: "infra" | "apps" | "integration") {
+    const url = new URL(location.href);
+    url.searchParams.delete("app");
+    history.replaceState(null, "", url);
     setMenuOpen(false);
     setNewInfra(false);
     setActiveSpaceId("");
@@ -206,9 +214,12 @@ export default function App() {
       public: "인터넷 경로 포함",
       private: "외부 직접 경로 없음",
       ha: "고가용성 · 접근 방식/AZ 상세 미제공",
+      "multi-az": "다중 AZ · 접근 방식 상세 미제공",
+      "db-isolated": "DB 격리 · 접근 방식 상세 미제공",
     }[infra.network];
   }
   function createSpace(space: MeetingInfraSpace) {
+    if (mode !== "demo") return;
     persist({
       ...demo,
       meeting: { ...meeting, spaces: [space, ...meeting.spaces] },
@@ -372,7 +383,7 @@ export default function App() {
               onRefreshRepositories={() => setReload((n) => n + 1)}
               onIntegration={() => nav("integration")}
               onStartDeployment={(entry) =>
-                persist({
+                mode === "api" ? updateDeployment(entry) : persist({
                   ...demo,
                   deployments: [entry, ...demo.deployments],
                   apps: demo.apps.map((a) =>
@@ -383,9 +394,11 @@ export default function App() {
                 })
               }
             />
-          ) : newInfra && mode === "demo" ? (
+          ) : newInfra ? (
             <InfraSpaceForm
-              draft={infraDraft}
+              key={mode}
+              unavailable={mode === "api"}
+              draft={mode === "demo" ? infraDraft : null}
               onDraft={setInfraDraft}
               onCreate={createSpace}
               onCancel={() => setNewInfra(false)}
@@ -405,6 +418,8 @@ export default function App() {
                 persist({...demo, meeting: {...meeting, spaces: meeting.spaces.map(s => s.id === entry.id ? entry : s)}});
               }}
             />
+          ) : mode === "api" && selected ? (
+            <ApiInfraBuilder space={selected} onCancel={() => setSelected(null)} />
           ) : (
             <>
               <div className="page-heading">
@@ -423,27 +438,21 @@ export default function App() {
                   >
                     새로고침
                   </button>
-                  {mode === "demo" && (
-                    <>
-                      <button
-                        className="primary"
-                        onClick={() => {
-                          setNewInfra(true);
-                          setSelected(null);
-                          setActiveSpaceId("");
-                        }}
-                      >
-                        Infra Space 만들기
-                      </button>
-
-                    </>
-                  )}
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      setNewInfra(true);
+                      setSelected(null);
+                      setActiveSpaceId("");
+                    }}
+                  >
+                    Infra Space 만들기
+                  </button>
                 </div>
               </div>
               {mode === "api" && (
                 <p className="notice">
-                  Infra Space 생성·인프라 배포 API는 아직 없습니다. 서버 기반만
-                  읽기 전용으로 표시합니다.
+                  연동 대기 · Infra Space 생성·인프라 배포 API는 아직 없습니다. 서버 기반은 읽기 전용이며, 대화·코드·Apply 영역은 API 연결 후 사용할 수 있습니다.
                 </p>
               )}
               {mode === "demo" &&

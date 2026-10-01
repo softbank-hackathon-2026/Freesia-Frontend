@@ -80,7 +80,7 @@ export default function GitHubIntegration({
           {mode === "demo" ? "브라우저 데모 등록입니다." : "서버에 Repository 주소를 등록합니다."}
           {" "}실제 Repository의 존재·공개 여부·main 브랜치와 접근 권한은 확인하지 않습니다.
         </div>
-        <button className="primary" disabled={disabled}>{busy ? "처리 중…" : mode === "demo" ? "Repository 등록 · 데모" : "Repository 등록"}</button>
+        <button className="primary" disabled={disabled}>{busy ? "처리 중…" : "Repository 등록"}</button>
       </form>
       <section className="panel">
         <div className="section-heading">
