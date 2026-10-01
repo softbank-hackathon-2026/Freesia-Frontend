@@ -1,0 +1,61 @@
+# Frontend CD (ADR-002): check -> build -> S3 upload -> CloudFront invalidation.
+# Manual trigger only until the first deploy succeeds. Then add the push: main trigger.
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-frontend
+  cancel-in-progress: false
+
+# Identifiers of resources created by platform-terraform (env/dev). Not secrets.
+env:
+  AWS_REGION: ap-northeast-2
+  S3_BUCKET: sbh-platform-dev-s3-web-723225040786
+  CLOUDFRONT_DISTRIBUTION_ID: ECSDZ4JA6Z85U
+  APP_URL: https://sbh.howon.me
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Typecheck, lint, tests and the production build (dist/). The API base stays at the default /api (same CloudFront origin).
+      - run: npm run check
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Upload hashed assets first, then index.html, so a page never points at files that are not there yet.
+      - name: Upload to S3
+        run: |
+          aws s3 sync dist "s3://$S3_BUCKET" --delete --exclude index.html
+          aws s3 cp dist/index.html "s3://$S3_BUCKET/index.html" --cache-control no-cache
+
+      - name: Invalidate CloudFront
+        run: |
+          ID=$(aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*" \
+            --query 'Invalidation.Id' --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --id "$ID"
+
+      - name: Verify
+        run: |
+          curl -fsS -o /dev/null "$APP_URL/"
+          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- $APP_URL (\`$GITHUB_SHA\`)" >> "$GITHUB_STEP_SUMMARY"
