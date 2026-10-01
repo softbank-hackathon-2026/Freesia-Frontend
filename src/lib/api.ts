@@ -1,205 +1,167 @@
-import type {
-  Analysis,
-  AppSpace,
-  AppSpaceCreate,
-  Deployment,
-  DeploymentEvent,
-  InfraSpace,
-} from "./types.ts";
+import type { Analysis, AppSpace, AppSpaceCreate, Deployment, DeploymentEvent, InfraSpace, Repository, DeploymentResource, PlanSet } from "./types.ts";
 
 function record(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
-const strings = (value: unknown) =>
-  Array.isArray(value) && value.every((item) => typeof item === "string");
-const nullableString = (value: unknown) =>
-  value === null || typeof value === "string";
+const strings = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === "string");
+const nullableString = (value: unknown) => value === null || typeof value === "string";
+const fields = (v: Record<string, unknown>, keys: string[]) => keys.every(key => typeof v[key] === "string");
 function infraShape(value: unknown): boolean {
   const v = record(value);
-  return (
-    !!v &&
-    typeof v.id === "string" &&
-    typeof v.name === "string" &&
-    typeof v.description === "string" &&
-    ["public", "private", "ha"].includes(String(v.network)) &&
-    strings(v.computes) &&
-    typeof v.app_count === "number"
-  );
+  return !!v && fields(v,["id","name","description"]) && ["public","private","ha","multi-az","db-isolated"].includes(String(v.network)) && strings(v.computes) && (v.deployable_computes === undefined || strings(v.deployable_computes)) && typeof v.app_count === "number";
+}
+function repositoryShape(value: unknown): boolean {
+  const v = record(value);
+  return !!v && fields(v,["id","name","repo_url","branch","created_at"]);
 }
 function appShape(value: unknown): boolean {
   const v = record(value);
-  return (
-    !!v &&
-    ["id", "name", "repo_url", "branch", "infra_id", "created_at"].every(
-      (key) => typeof v[key] === "string",
-    ) &&
-    nullableString(v.latest_deployment_id)
-  );
+  return !!v && fields(v,["id","name","repo_url","branch","infra_id","created_at"]) && nullableString(v.latest_deployment_id);
 }
 function deploymentShape(value: unknown): boolean {
   const v = record(value);
-  return (
-    !!v &&
-    ["id", "app_space_id", "compute", "created_at"].every(
-      (key) => typeof v[key] === "string",
-    ) &&
-    ["pending", "building", "deploying", "success", "failed"].includes(
-      String(v.status),
-    ) &&
-    nullableString(v.url) &&
-    nullableString(v.reason)
-  );
+  return !!v && fields(v,["id","app_space_id","compute","created_at"]) && ["pending","building","deploying","success","failed"].includes(String(v.status)) && nullableString(v.url) && nullableString(v.reason);
 }
 function analysisShape(value: unknown): boolean {
   const v = record(value);
-  return (
-    !!v &&
-    ["pending", "running", "done", "failed"].includes(String(v.status)) &&
-    strings(v.requirements) &&
-    nullableString(v.mascot_message) &&
-    Array.isArray(v.evidence) &&
-    v.evidence.every((item) => {
-      const e = record(item);
-      return (
-        !!e &&
-        typeof e.file === "string" &&
-        typeof e.finding === "string" &&
-        typeof e.certain === "boolean"
-      );
-    }) &&
-    Array.isArray(v.candidates) &&
-    v.candidates.every((item) => {
-      const c = record(item);
-      return (
-        !!c &&
-        typeof c.compute === "string" &&
-        ["selected", "alternative", "unsuitable"].includes(String(c.state)) &&
-        typeof c.reason === "string" &&
-        strings(c.cons)
-      );
-    })
-  );
+  return !!v && ["pending","running","done","failed"].includes(String(v.status)) && strings(v.requirements) && nullableString(v.mascot_message) && Array.isArray(v.evidence) && v.evidence.every(item => {
+    const e = record(item);
+    return !!e && fields(e,["file","finding"]) && typeof e.certain === "boolean";
+  }) && Array.isArray(v.candidates) && v.candidates.every(item => {
+    const c = record(item);
+    return !!c && fields(c,["compute","reason"]) && ["selected","alternative","unsuitable"].includes(String(c.state)) && strings(c.cons) && (c.evidence_files === undefined || strings(c.evidence_files));
+  });
+}
+function resourceShape(value: unknown): boolean {
+  const v = record(value);
+  return !!v && fields(v,["address","type","action","updated_at"]) && ["pending","in_progress","done","failed"].includes(String(v.state)) && nullableString(v.reason);
+}
+function jsonValue(value: unknown): boolean {
+  return value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)) || (Array.isArray(value) ? value.every(jsonValue) : !!record(value) && Object.values(value as object).every(jsonValue));
+}
+function planSetShape(value: unknown): boolean {
+  const v = record(value);
+  return !!v && ["pending","running","done","failed"].includes(String(v.status)) && typeof v.compute === "string" && Array.isArray(v.plans) && v.plans.every(item => {
+    const p = record(item);
+    return !!p && fields(p,["id","name","summary","template"]) && strings(p.pros) && strings(p.cons) && !!record(p.values) && jsonValue(p.values);
+  });
 }
 function validShape(path: string, value: unknown, post: boolean): boolean {
-  if (path === "/infra-spaces")
-    return Array.isArray(value) && value.every(infraShape);
+  if (/^\/deployments\/[^/]+\/resources$/.test(path)) return Array.isArray(value) && value.every(resourceShape);
+  if (/\/plans(?:\?|$)/.test(path)) return planSetShape(value);
+  if (path === "/repositories") return post ? repositoryShape(value) : Array.isArray(value) && value.every(repositoryShape);
+  if (path === "/infra-spaces") return Array.isArray(value) && value.every(infraShape);
   if (path.startsWith("/infra-spaces/")) return infraShape(value);
   if (path.endsWith("/analysis")) return analysisShape(value);
   if (path.includes("/deployments")) return deploymentShape(value);
-  if (path === "/app-spaces" && !post)
-    return Array.isArray(value) && value.every(appShape);
+  if (path === "/app-spaces" && !post) return Array.isArray(value) && value.every(appShape);
   return appShape(value);
+}
+export class ApiError extends Error {
+  status?: number;
+  code?: string;
+  constructor(message: string, status?: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
 }
 export function createApi(base: string, fetcher: typeof fetch = fetch) {
   const root = base.replace(/\/$/, "");
-  async function request<T>(
-    path: string,
-    body?: unknown,
-    post = false,
-  ): Promise<T> {
+  async function request<T>(path: string, body?: unknown, method: "GET" | "POST" | "DELETE" = "GET", signal?: AbortSignal): Promise<T> {
+    signal?.throwIfAborted();
     let response: Response;
     try {
-      response = await fetcher(`${root}${path}`, {
-        method: post ? "POST" : "GET",
-        ...(body === undefined
-          ? {}
-          : {
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            }),
-      });
+      response = await fetcher(`${root}${path}`, { method, signal, ...(body === undefined ? {} : { headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) }) });
     } catch {
-      throw new Error(
-        "백엔드에 연결할 수 없습니다. 주소와 서버 상태를 확인하세요.",
-      );
+      signal?.throwIfAborted();
+      throw new ApiError("백엔드에 연결할 수 없습니다. 주소와 서버 상태를 확인하세요.");
     }
+    signal?.throwIfAborted();
+    if (method === "DELETE" && response.status === 204) return undefined as T;
     let data: unknown;
-    try {
-      data = await response.json();
-    } catch {
-      throw new Error(
-        response.ok
-          ? "백엔드 응답이 JSON 형식이 아닙니다."
-          : `요청 실패 (HTTP ${response.status})`,
-      );
+    try { data = await response.json(); }
+    catch {
+      signal?.throwIfAborted();
+      throw new ApiError(response.ok ? "백엔드 응답이 JSON 형식이 아닙니다." : `요청 실패 (HTTP ${response.status})`, response.status);
     }
+    signal?.throwIfAborted();
     if (!response.ok) {
-      const message =
-        data &&
-        typeof data === "object" &&
-        "message" in data &&
-        typeof data.message === "string"
-          ? data.message
-          : `요청 실패 (HTTP ${response.status})`;
-      throw new Error(message);
+      const error = record(data);
+      throw new ApiError(typeof error?.message === "string" ? error.message : `요청 실패 (HTTP ${response.status})`, response.status, typeof error?.error === "string" ? error.error : undefined);
     }
-    if (!validShape(path, data, post))
-      throw new Error("백엔드 응답 형식이 올바르지 않습니다.");
+    if (!validShape(path, data, method === "POST")) throw new ApiError("백엔드 응답 형식이 올바르지 않습니다.",response.status,"invalid_response");
     return data as T;
   }
   const appPath = (id: string) => `/app-spaces/${encodeURIComponent(id)}`;
+  const analyze = (id: string, signal?: AbortSignal) => request<Analysis>(`${appPath(id)}/analysis`,undefined,"POST",signal);
+  const analysis = (id: string, signal?: AbortSignal) => request<Analysis>(`${appPath(id)}/analysis`,undefined,"GET",signal);
+  async function pollUntilDone<T extends {status: Analysis["status"]}>(start:(signal:AbortSignal)=>Promise<T>, read:(signal:AbortSignal)=>Promise<T>, label:string, options:{signal?:AbortSignal;onUpdate?:(value:T)=>void;intervalMs?:number;timeoutMs?:number} = {}) {
+      const controller = new AbortController();
+      const cancel = () => controller.abort(options.signal?.reason);
+      options.signal?.addEventListener("abort",cancel,{once:true});
+      if (options.signal?.aborted) cancel();
+      const deadline = setTimeout(() => controller.abort(new ApiError(`${label} 대기 시간이 초과되었습니다. 다시 시도하세요.`,undefined,"poll_timeout")),options.timeoutMs ?? 60_000);
+      try {
+        controller.signal.throwIfAborted();
+        let value = await start(controller.signal);
+        while (true) {
+          controller.signal.throwIfAborted();
+          options.onUpdate?.(value);
+          if (value.status === "done" || value.status === "failed") return value;
+          await new Promise<void>((resolve,reject) => {
+            const abort = () => {clearTimeout(timer);reject(controller.signal.reason);};
+            const timer = setTimeout(() => {controller.signal.removeEventListener("abort",abort);resolve();},options.intervalMs ?? 2_000);
+            controller.signal.addEventListener("abort",abort,{once:true});
+            if (controller.signal.aborted) abort();
+          });
+          controller.signal.throwIfAborted();
+          value = await read(controller.signal);
+        }
+      } finally {
+        clearTimeout(deadline);
+        options.signal?.removeEventListener("abort",cancel);
+      }
+    }
   return {
-    infras: () => request<InfraSpace[]>("/infra-spaces"),
-    infra: (id: string) =>
-      request<InfraSpace>(`/infra-spaces/${encodeURIComponent(id)}`),
-    apps: () => request<AppSpace[]>("/app-spaces"),
-    app: (id: string) => request<AppSpace>(appPath(id)),
-    createApp: (body: AppSpaceCreate) =>
-      request<AppSpace>("/app-spaces", body, true),
-    analyze: (id: string) =>
-      request<Analysis>(`${appPath(id)}/analysis`, undefined, true),
-    analysis: (id: string) => request<Analysis>(`${appPath(id)}/analysis`),
-    deploy: (id: string, compute: string) =>
-      request<Deployment>(`${appPath(id)}/deployments`, { compute }, true),
-    deployment: (id: string) =>
-      request<Deployment>(`/deployments/${encodeURIComponent(id)}`),
+    repositories: (signal?: AbortSignal) => request<Repository[]>("/repositories",undefined,"GET",signal),
+    registerRepository: (body: {repo_url:string;branch:string}, signal?: AbortSignal) => request<Repository>("/repositories",body,"POST",signal),
+    deleteRepository: (id:string, signal?:AbortSignal) => request<void>(`/repositories/${encodeURIComponent(id)}`,undefined,"DELETE",signal),
+    infras: (signal?:AbortSignal) => request<InfraSpace[]>("/infra-spaces",undefined,"GET",signal),
+    infra: (id:string, signal?:AbortSignal) => request<InfraSpace>(`/infra-spaces/${encodeURIComponent(id)}`,undefined,"GET",signal),
+    apps: (signal?:AbortSignal) => request<AppSpace[]>("/app-spaces",undefined,"GET",signal),
+    app: (id:string, signal?:AbortSignal) => request<AppSpace>(appPath(id),undefined,"GET",signal),
+    createApp: (body:AppSpaceCreate, signal?:AbortSignal) => request<AppSpace>("/app-spaces",body,"POST",signal),
+    analyze,
+    analysis,
+    analyzeUntilDone: (id:string, options?:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>analyze(id,signal),signal=>analysis(id,signal),"분석",{...options, timeoutMs:options?.timeoutMs ?? 150_000}),
+    plansUntilDone: (id:string,compute:string,options?:{signal?:AbortSignal;onUpdate?:(value:PlanSet)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),signal=>request<PlanSet>(`${appPath(id)}/plans?compute=${encodeURIComponent(compute)}`,undefined,"GET",signal),"구성안",options),
+    createPlans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),
+    plans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans?compute=${encodeURIComponent(compute)}`,undefined,"GET",signal),
+    deploy: (id:string,compute:string,planId?:string,signal?:AbortSignal) => request<Deployment>(`${appPath(id)}/deployments`,{compute,...(planId ? {plan_id:planId} : {})},"POST",signal),
+    deployment: (id:string,signal?:AbortSignal) => request<Deployment>(`/deployments/${encodeURIComponent(id)}`,undefined,"GET",signal),
+    resources: (id:string,signal?:AbortSignal) => request<DeploymentResource[]>(`/deployments/${encodeURIComponent(id)}/resources`,undefined,"GET",signal),
   };
 }
-
-type Stream = {
-  addEventListener: (name: string, listener: EventListener) => void;
-  close: () => void;
-};
-export function watchDeployment(
-  base: string,
-  id: string,
-  onProgress: (event: DeploymentEvent) => void,
-  onError: (message: string) => void,
-  open: (url: string) => Stream = (url) => new EventSource(url),
-) {
-  const source = open(
-    `${base.replace(/\/$/, "")}/deployments/${encodeURIComponent(id)}/events`,
-  );
-  source.addEventListener("progress", ((event: MessageEvent) => {
+type Stream = { addEventListener:(name:string,listener:EventListener)=>void; close:()=>void };
+export function watchDeployment(base:string,id:string,onProgress:(event:DeploymentEvent)=>void,onError:(message:string)=>void,open:(url:string)=>Stream = url=>new EventSource(url),onReconnect?:()=>void) {
+  const source = open(`${base.replace(/\/$/,"")}/deployments/${encodeURIComponent(id)}/events`);
+  let stopped = false;
+  const close = () => { if (!stopped) {stopped=true;source.close();} };
+  source.addEventListener("open",()=>{if (!stopped) onReconnect?.();});
+  source.addEventListener("progress",((event:MessageEvent)=>{
+    if (stopped) return;
+    let value: DeploymentEvent;
     try {
-      const value = JSON.parse(event.data) as DeploymentEvent;
-      if (
-        !value ||
-        !["pending", "building", "deploying", "success", "failed"].includes(
-          value.status,
-        ) ||
-        typeof value.progress !== "number" ||
-        value.progress < 0 ||
-        value.progress > 100 ||
-        typeof value.message !== "string" ||
-        typeof value.step !== "string" ||
-        typeof value.at !== "string" ||
-        (value.url !== null && typeof value.url !== "string")
-      )
-        throw new Error("invalid");
-      onProgress(value);
-      if (value.status === "success" || value.status === "failed")
-        source.close();
-    } catch {
-      source.close();
-      onError("배포 이벤트 형식을 확인할 수 없습니다.");
-    }
+      value = JSON.parse(event.data) as DeploymentEvent;
+      if (!value || !["pending","building","deploying","success","failed"].includes(value.status) || !Number.isFinite(value.progress) || value.progress<0 || value.progress>100 || typeof value.message!=="string" || typeof value.step!=="string" || typeof value.at!=="string" || !nullableString(value.url)) throw new Error("invalid");
+    } catch {close();onError("배포 이벤트 형식을 확인할 수 없습니다.");return;}
+    onProgress(value);
+    if (value.status==="success" || value.status==="failed") close();
   }) as EventListener);
-  source.addEventListener("error", () => {
-    source.close();
-    onError("배포 상태 연결이 끊겼습니다. 상태를 다시 확인하세요.");
+  source.addEventListener("error",()=>{
+    if (!stopped) onError("배포 상태 연결이 끊겼습니다. 자동으로 다시 연결합니다.");
   });
-  return () => source.close();
+  return close;
 }

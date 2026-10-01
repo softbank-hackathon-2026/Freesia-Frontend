@@ -1,10 +1,18 @@
+export type Repository = {
+  id: string;
+  name: string;
+  repo_url: string;
+  branch: string;
+  created_at: string;
+};
 import type { DemoPipeline } from "./pipeline.ts";
 export type InfraSpace = {
   id: string;
   name: string;
   description: string;
-  network: "public" | "private" | "ha";
+  network: "public" | "private" | "ha" | "multi-az" | "db-isolated";
   computes: string[];
+  deployable_computes?: string[];
   app_count: number;
 };
 export type AppSpaceCreate = {
@@ -28,6 +36,7 @@ export type Analysis = {
     state: "selected" | "alternative" | "unsuitable";
     reason: string;
     cons: string[];
+    evidence_files?: string[];
   }[];
   mascot_message: string | null;
 };
@@ -50,3 +59,26 @@ export type DeploymentEvent = {
   at: string;
 };
 export type DataMode = "demo" | "api";
+export type DeploymentResource = {
+  address: string;
+  type: string;
+  action: string;
+  state: "pending" | "in_progress" | "done" | "failed";
+  reason: string | null;
+  updated_at: string;
+};
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type DeploymentPlan = {
+  id: string;
+  name: string;
+  summary: string;
+  pros: string[];
+  cons: string[];
+  template: string;
+  values: Record<string, JsonValue>;
+};
+export type PlanSet = {
+  status: Analysis["status"];
+  compute: string;
+  plans: DeploymentPlan[];
+};

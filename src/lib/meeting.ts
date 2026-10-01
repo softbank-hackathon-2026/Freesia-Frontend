@@ -207,18 +207,21 @@ export function foundationTarget(id: string, state: MeetingState): Target | unde
   return id === "demo-private" ? "LINE 샘플 대상" : id === "demo-public" || id === "demo-ha" ? "AWS 샘플 대상" : undefined;
 }
 
-export function registerRepository(connection: GitHubConnection | null, input: string): GitHubConnection {
+export function normalizeRepositoryUrl(input: string): string {
   const normalized = input.trim().replace(/\/+$/, "").replace(/\.git$/i, "");
   const match = /^https:\/\/github\.com\/([a-z0-9][a-z0-9-]*)\/([\w.-]+)$/i.exec(normalized);
   if (!match || input.length > 2048 || [".", ".."].includes(match[2]))
     throw new Error("https://github.com/owner/repository 형식의 Repository URL을 입력하세요.");
-  const repoUrl = `https://github.com/${match[1]}/${match[2]}`;
+  return `https://github.com/${match[1]}/${match[2]}`;
+}
+export function registerRepository(connection: GitHubConnection | null, input: string): GitHubConnection {
+  const repoUrl = normalizeRepositoryUrl(input);
   const sameMain = connection?.repositories.find((repo) =>
     repo.repo_url.replace(/\.git$/i, "").toLowerCase() === repoUrl.toLowerCase() && repo.branch === "main");
   if (sameMain && connection?.registeredIds?.includes(sameMain.id))
     throw new Error("이미 등록한 Repository입니다.");
   const repo: RemoteRepository = sameMain ?? {
-    id: `repo-${crypto.randomUUID()}`, name: `${match[1]}/${match[2]}`,
+    id: `repo-${crypto.randomUUID()}`, name: repoUrl.slice("https://github.com/".length),
     repo_url: repoUrl, branch: "main", visibility: "sample",
   };
   return {

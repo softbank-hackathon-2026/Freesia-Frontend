@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { createApi, watchDeployment } from "../lib/api.ts";
+import DeploymentResources from "./DeploymentResources.tsx";
+import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
 import {
   availableCandidates,
   sampleAnalysis,
@@ -14,6 +15,8 @@ import type {
   Deployment,
   DeploymentEvent,
   InfraSpace,
+  Repository,
+  PlanSet,
 } from "../lib/types.ts";
 import { registeredRepositories } from "../lib/meeting.ts";
 import type { MeetingState } from "../lib/meeting.ts";
@@ -21,6 +24,8 @@ import {
   advancePipeline,
   makeAppPlan,
   pipelineSteps,
+  pipelineStepIds,
+  demoStep,
   startDemoDeployment,
 } from "../lib/pipeline.ts";
 import type { AppPlan } from "../lib/pipeline.ts";
@@ -39,8 +44,13 @@ export default function Applications({
   onStartDeployment,
   initialForm,
   onDraftChange,
+  apiRepositories, repositoryLoading, repositoryError, onRefreshRepositories,
 }: {
   mode: DataMode;
+  apiRepositories: Repository[];
+  repositoryLoading: boolean;
+  repositoryError: string;
+  onRefreshRepositories: () => void;
   apps: AppSpace[];
   infras: InfraSpace[];
   designs: InfraDesign[];
@@ -54,9 +64,12 @@ export default function Applications({
   onIntegration: () => void;
 }) {
   const session = useRef(0);
+  const request = useRef<AbortController | null>(null);
+  const restored = useRef(false);
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
   useEffect(
     () => () => {
+      request.current?.abort();
       session.current++;
     },
     [],
@@ -81,14 +94,26 @@ export default function Applications({
   const [error, setError] = useState("");
   const [chosen, setChosen] = useState("");
   const [plan, setPlan] = useState<AppPlan | null>(null);
+  const [plans, setPlans] = useState<PlanSet | null>(null);
+  const [planId, setPlanId] = useState("");
+  const [planError, setPlanError] = useState("");
   const [failCI, setFailCI] = useState(false);
-  const registered = registeredRepositories(meeting.github);
+  const [reviewed, setReviewed] = useState(false);
+  const [analysisPending, setAnalysisPending] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [streamError, setStreamError] = useState("");
+  const [streamRetry, setStreamRetry] = useState(0);
+  const demoRegistered = registeredRepositories(meeting.github);
+  const registered = mode === "demo" ? demoRegistered : apiRepositories;
   const preview =
     plan ??
     (deployment?.demo_pipeline?.plan.compute === chosen
       ? deployment.demo_pipeline.plan
       : null);
   const infra = infras.find((i) => i.id === selected?.infra_id);
+  const currentProgress = event?.progress ?? (mode === "demo" && deployment && demoStep(deployment) >= 0 ? Math.round(demoStep(deployment)/5*100) : undefined);
+  const canDeploy = mode === "demo" || infra?.deployable_computes?.includes(chosen) === true;
+  const readinessMessage = infra?.deployable_computes === undefined ? "배포 가능 여부 미확인" : "배포 준비 중";
   const allowed = analysis
     ? availableCandidates(analysis.candidates, infra?.computes ?? [])
     : [];
@@ -101,18 +126,25 @@ export default function Applications({
         streamId,
         (data) => {
           if (token !== session.current) return;
+          setReconnecting(false);
           setEvent(data);
           setDeployment((current) =>
             current
               ? { ...current, status: data.status, url: data.url }
               : current,
           );
-          if (data.status === "success" || data.status === "failed")
+          if (data.status === "success" || data.status === "failed") {
             setStreamId("");
+            void api.deployment(streamId).then(value => {
+              if (token === session.current) setDeployment(current => current?.id === streamId ? value : current);
+            }).catch(e => { if (token === session.current) setError(e instanceof Error ? e.message : "배포 결과 조회 실패"); });
+          }
         },
         (message) => {
-          if (token === session.current) setError(message);
+          if (token === session.current) { setReconnecting(true); setStreamError(message); }
         },
+        undefined,
+        () => { if (token === session.current) { setReconnecting(false); setStreamError(""); } },
       );
     if (deployment?.demo_pipeline) {
       let current = deployment;
@@ -120,12 +152,11 @@ export default function Applications({
         if (token !== session.current) return;
         current = advancePipeline(current);
         setDeployment(current);
-        const meta = current.demo_pipeline!;
         setEvent({
           status: current.status,
-          progress: Math.round((meta.phase / 7) * 100),
-          message: pipelineSteps[meta.phase - 1],
-          step: "demo-pipeline",
+          progress: Math.round((demoStep(current) / 5) * 100),
+          message: pipelineSteps[demoStep(current)],
+          step: pipelineStepIds[demoStep(current)],
           url: null,
           at: new Date().toISOString(),
         });
@@ -175,15 +206,15 @@ export default function Applications({
     }, 650);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamId, mode]);
+  }, [streamId, mode, streamRetry]);
   useEffect(() => {
     if (deployment) onDeployment(deployment);
   }, [deployment, mode, onDeployment]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const token = session.current;
-    if (mode !== "demo") {
-      setError("Repository 등록 API가 없어 앱 생성은 미지원입니다.");
+    if (mode === "api" && (repositoryLoading || repositoryError)) {
+      setError("Repository 목록을 먼저 불러오세요.");
       return;
     }
     if (
@@ -224,6 +255,8 @@ export default function Applications({
       if (token !== session.current) return;
       onCreate(app);
       setCreating(false);
+      restored.current = true;
+      const url = new URL(window.location.href); url.searchParams.set("app", app.id); url.searchParams.set("source", mode); history.replaceState(null, "", url);
       setSelected(app);
       setAnalysis(null);
       setDeployment(null);
@@ -235,13 +268,22 @@ export default function Applications({
     }
   }
   async function open(app: AppSpace) {
+    restored.current = true;
+    request.current?.abort();
+    const url = new URL(window.location.href);
+    url.searchParams.set("app", app.id);
+    url.searchParams.set("source", mode);
+    history.replaceState(null, "", url);
     const token = ++session.current;
     setBusy(false);
     setSelected(app);
     setCreating(false);
     setAnalysis(null);
     setChosen("");
-    setPlan(null);
+    setPlan(null); setPlans(null); setPlanId(""); setPlanError("");
+    setReviewed(false);
+    setAnalysisPending(false);
+    setReconnecting(false);
     setEvent(null);
     setStreamId("");
     setError("");
@@ -270,8 +312,7 @@ export default function Applications({
           const value = await api.deployment(fresh.latest_deployment_id);
           if (token !== session.current) return;
           setDeployment(value);
-          if (!["success", "failed"].includes(value.status))
-            setStreamId(value.id);
+          setStreamId(value.id);
         }
       } catch (e) {
         if (token === session.current)
@@ -279,64 +320,91 @@ export default function Applications({
       }
     }
   }
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("app");
+    if (restored.current || !id || !apps.length) return;
+    restored.current = true;
+    const app = apps.find(a => a.id === id);
+    // URL restoration synchronizes this view with browser navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (app) void open(app);
+    // Restore only on entry; app updates must not restart an active request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apps]);
   async function analyze() {
-    const token = session.current;
     if (!selected) return;
-    setBusy(true);
-    setError("");
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    const token = session.current;
+    setBusy(true); setAnalysisPending(true); setError("");
+    setPlan(null); setPlans(null); setPlanId(""); setPlanError(""); setReviewed(false); setChosen(""); setAnalysis(null);
     try {
-      const result =
-        mode === "demo" ? sampleAnalysis : await api.analyze(selected.id);
-      if (token !== session.current) return;
+      const result = mode === "demo" ? sampleAnalysis : await api.analyzeUntilDone(selected.id, {signal: controller.signal});
+      if (token !== session.current || controller.signal.aborted) return;
+      if(result.status === "failed") throw new Error("분석에 실패했습니다. 배포 버튼으로 다시 분석하세요.");
       setAnalysis(result);
-      setPlan(null);
-      const initial = availableCandidates(
-        result.candidates,
-        infra?.computes ?? [],
-      );
-      setChosen(
-        mode === "demo"
-          ? ""
-          : (initial.find((c) => c.state === "selected")?.compute ??
-              initial[0]?.compute ??
-              ""),
-      );
     } catch (e) {
-      if (token === session.current)
+      if (token === session.current && !controller.signal.aborted)
         setError(e instanceof Error ? e.message : "분석 실패");
     } finally {
-      if (token === session.current) setBusy(false);
+      if (token === session.current && !controller.signal.aborted) { setBusy(false); setAnalysisPending(false); }
     }
   }
-  async function deploy() {
+  async function preparePlans() {
+    if (!selected || !chosen || !canDeploy) return;
+    request.current?.abort();
+    const controller = new AbortController(); request.current = controller;
     const token = session.current;
-    if (!selected || !allowed.some((c) => c.compute === chosen)) {
-      setError("선택한 실행 환경을 이 기반에서 사용할 수 없습니다.");
-      return;
-    }
-    setBusy(true);
-    setError("");
+    setBusy(true); setError(""); setPlanError(""); setPlan(null); setPlans(null); setPlanId(""); setReviewed(false);
     try {
-      const result =
-        mode === "demo"
-          ? startDemoDeployment(
-              selected.id,
-              makeAppPlan(selected, chosen, allowed, registered),
-              failCI,
-            )
-          : await api.deploy(selected.id, chosen);
-      if (mode === "demo") onStartDeployment(result);
-      if (token !== session.current) return;
-      demoResumeStatus.current = result.status;
-      setDeployment(result);
-      setEvent(null);
-      setStreamId(result.id);
-    } catch (e) {
-      if (token === session.current)
-        setError(e instanceof Error ? e.message : "배포 요청 실패");
-    } finally {
-      if (token === session.current) setBusy(false);
+      if (mode === "demo") setPlan(makeAppPlan(selected, chosen, allowed, demoRegistered));
+      else {
+        const result = await api.plansUntilDone(selected.id, chosen, { signal: controller.signal });
+        if (token !== session.current || controller.signal.aborted) return;
+        if(result.status === "failed") throw new Error("구성안 준비에 실패했습니다. 구성안을 다시 조회하세요.");
+        if(result.compute !== chosen) throw new Error("선택한 실행 환경과 구성안 응답이 다릅니다. 다시 조회하세요.");
+        setPlans(result);
+        if (result.plans.length === 1) setPlanId(result.plans[0].id);
+      }
+    } catch(e) {
+      if (token === session.current && !controller.signal.aborted)
+        setPlanError(e instanceof ApiError && e.code === "compute_not_ready" ? "선택한 실행 환경은 배포 준비 중입니다. 다른 후보를 선택하거나 서버 지원 상태를 확인하세요." : e instanceof ApiError && (e.status === 404 || e.status === 501) ? "구성안 API 연동 대기입니다. 서버에 템플릿과 설정값 조회 기능이 아직 없습니다." : e instanceof Error ? e.message : "구성안 조회 실패");
+    } finally { if (token === session.current && !controller.signal.aborted) setBusy(false); }
+  }
+  async function deploy() {
+    if (!selected || !reviewed || !canDeploy || !allowed.some(c => c.compute === chosen)) return;
+    const realPlan = plans?.compute === chosen && plans.status === "done" ? plans.plans.find(p => p.id === planId) : null;
+    if ((mode === "api" && !realPlan) || (mode === "demo" && (!preview || preview.compute !== chosen || preview.status !== "template_ready"))) {
+      setError("현재 선택한 환경의 구성안을 조회하고 설정값을 확인하세요."); return;
     }
+    const token = ++session.current;
+    request.current?.abort(); const controller = new AbortController(); request.current = controller;
+    setBusy(true); setError("");
+    try {
+      const result = mode === "demo" ? startDemoDeployment(selected.id, preview!, failCI) : await api.deploy(selected.id, chosen, realPlan!.id, controller.signal);
+      if (token !== session.current || controller.signal.aborted) return;
+      onStartDeployment(result); demoResumeStatus.current = result.status;
+      setDeployment(result); setEvent(null); setStreamId(result.id);
+    } catch(e) {
+      if(token !== session.current || controller.signal.aborted) return;
+      setError(e instanceof ApiError && e.code === "compute_not_ready" ? "선택한 실행 환경은 배포 준비 중입니다. 서버 지원 상태를 확인하세요." : e instanceof Error ? e.message : "배포 요청 실패");
+      if (e instanceof ApiError && e.status === 409 && e.code === "deployment_in_progress") {
+        try {
+          const fresh = await api.app(selected.id, controller.signal);
+          if(token !== session.current || controller.signal.aborted) return;
+          setSelected(fresh);
+          if(fresh.latest_deployment_id) {
+            const existing = await api.deployment(fresh.latest_deployment_id, controller.signal);
+            if(token !== session.current || controller.signal.aborted) return;
+            setDeployment(existing); setEvent(null); setStreamId(existing.id);
+          }
+        } catch(refreshError) {
+          if(token === session.current && !controller.signal.aborted) setError(`${e.message} · 현재 배포 조회 실패: ${refreshError instanceof Error ? refreshError.message : "다시 앱을 열어 확인하세요."}`);
+        }
+      }
+    }
+    finally { if(token === session.current && !controller.signal.aborted)setBusy(false); }
   }
   return (
     <>
@@ -355,8 +423,10 @@ export default function Applications({
         {selected || creating ? (
           <button
             onClick={() => {
+              request.current?.abort();
               session.current++;
               setBusy(false);
+              const url = new URL(window.location.href); url.searchParams.delete("app"); history.replaceState(null, "", url);
               setSelected(null);
               setCreating(false);
               setStreamId("");
@@ -368,11 +438,13 @@ export default function Applications({
         ) : (
           <button
             className="primary"
-            disabled={mode === "api"}
+            disabled={mode === "api" && repositoryLoading}
             onClick={() => {
+              request.current?.abort();
               session.current++;
               setBusy(false);
               setCreating(true);
+              setAnalysis(null); setChosen(""); setPlan(null); setEvent(null); setDeployment(null); setTab("overview");
               setError("");
             }}
           >
@@ -387,11 +459,11 @@ export default function Applications({
       )}
       {mode === "api" && !selected && (
         <p className="notice">
-          GitHub Repository 등록 API가 없어 새 앱 생성은 미지원입니다. 기존 앱
-          조회·샘플 분석·배포 API만 사용할 수 있습니다.
+          서버에 등록된 Repository와 Infra Space로 앱을 생성합니다. 분석·배포 결과는 서버가 제공하며 실제 실행 여부는 서버 설정과 상태를 확인하세요.
         </p>
       )}
-      {creating && !registered.length ? (
+      {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefreshRepositories}>Repository 다시 조회</button></div>}
+      {creating && mode === "api" && repositoryLoading ? <p role="status">Repository 불러오는 중…</p> : creating && !registered.length ? (
         <section className="panel detail">
           <h2>등록한 Repository가 없습니다</h2>
           <p>통합에서 사용할 public GitHub Repository URL을 먼저 등록하세요.</p>
@@ -466,7 +538,8 @@ export default function Applications({
             <button
               type="button"
               onClick={() => {
-                session.current++;
+                request.current?.abort();
+              session.current++;
                 setBusy(false);
                 setCreating(false);
               }}
@@ -507,7 +580,7 @@ export default function Applications({
                   <div className="section-heading">
                     <h2>앱 정보</h2>
                     <span className="badge">
-                      {mode === "demo" ? "데모 앱" : "백엔드 샘플 앱"}
+                      {mode === "demo" ? "데모 앱" : "서버 등록 앱"}
                     </span>
                   </div>
                   <dl>
@@ -528,23 +601,22 @@ export default function Applications({
                       onClick={analyze}
                     >
                       {busy
-                        ? "요청 중…"
+                        ? analysisPending ? "분석 중…" : "요청 중…"
                         : analysis
                           ? "분석 다시 보기"
-                          : mode === "demo"
-                            ? "배포"
-                            : "기존 앱 샘플 분석"}
+                          : "배포"}
                     </button>
                   </div>
                   <div className="panel-body">
                     <p className="muted">
                       {mode === "demo"
                         ? "고정 샘플 분석입니다. 저장소 코드를 읽거나 AI를 호출하지 않습니다."
-                        : "현재 백엔드 분석도 고정 샘플입니다. 실제 저장소 분석이 아닙니다."}
+                        : "서버가 반환한 요구사항·근거·실행 환경 후보입니다. 추천과 현재 배포 지원 여부를 구분해 확인하세요."}
                     </p>
+                    {analysisPending && <p role="status">코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
                     {analysis ? (
                       <>
-                        <div
+                        {mode === "demo" && <div
                           className="decision-tree"
                           role="img"
                           aria-label="읽기 전용 분석 분기 트리"
@@ -589,7 +661,7 @@ export default function Applications({
                             조건 분기는 설명용 샘플입니다. 실제 코드 분석·조건
                             판정이 아닙니다.
                           </small>
-                        </div>
+                        </div>}
                         <h3>확인된 요구사항</h3>
                         <ul>
                           {analysis.requirements.map((r) => (
@@ -605,17 +677,13 @@ export default function Applications({
                                   "badge " + (e.certain ? "" : "caution")
                                 }
                               >
-                                {e.certain ? "샘플 근거" : "불확실"}
+                                {e.certain ? mode === "demo" ? "샘플 근거" : "서버 분석 근거" : "불확실"}
                               </span>
                               <strong>{e.file}</strong>
                               <p>{e.finding}</p>
                             </div>
                           ))}
                         </div>
-                        <p className="notice">
-                          조건 질문 답변·저장 API는 아직 없습니다. 분석 결과의
-                          불확실한 항목을 검토해 주세요.
-                        </p>
                         <h3>실행 환경 후보</h3>
                         {allowed.length < 2 && (
                           <p className="notice">
@@ -644,7 +712,9 @@ export default function Applications({
                                       : "제외"}
                                 </span>
                               </div>
+                              {mode === "api" && !infra?.deployable_computes?.includes(c.compute) && <p className="badge caution">{readinessMessage}</p>}
                               <p>{c.reason}</p>
+                              {!!c.evidence_files?.length && <p className="muted">근거 파일: {c.evidence_files.join(", ")}</p>}
                               <ul>
                                 {c.cons.map((reason) => (
                                   <li key={reason}>{reason}</li>
@@ -654,11 +724,12 @@ export default function Applications({
                                 disabled={
                                   !allowed.some(
                                     (a) => a.compute === c.compute,
-                                  ) || !!streamId
+                                  ) || !!streamId || busy
                                 }
                                 onClick={() => {
                                   setChosen(c.compute);
-                                  setPlan(null);
+                                  setReviewed(false);
+                                  setPlan(null); setPlans(null); setPlanId(""); setPlanError("");
                                 }}
                               >
                                 {!infra?.computes.includes(c.compute)
@@ -685,45 +756,13 @@ export default function Applications({
                           <div>
                             <strong>사용자 선택: {chosen || "없음"}</strong>
                             <p className="muted">
-                              추천 표시와 사용자 선택은 별개입니다. 실제
-                              클라우드 변경 없이 샘플 상태만 진행합니다.
+                              추천 표시와 사용자 선택은 별개입니다.
+                              {mode === "demo" ? " 실제 클라우드 변경 없이 샘플 상태만 진행합니다." : " 선택 후 서버의 템플릿과 설정값을 검토합니다."}
                             </p>
                           </div>
-                          <button
-                            className="primary"
-                            disabled={
-                              busy ||
-                              !!streamId ||
-                              !chosen ||
-                              analysis.status !== "done"
-                            }
-                            onClick={() => {
-                              if (mode === "api") {
-                                void deploy();
-                                return;
-                              }
-                              try {
-                                if (selected)
-                                  setPlan(
-                                    makeAppPlan(
-                                      selected,
-                                      chosen,
-                                      allowed,
-                                      registered,
-                                    ),
-                                  );
-                              } catch (e) {
-                                setError(
-                                  e instanceof Error
-                                    ? e.message
-                                    : "코드 준비 실패",
-                                );
-                              }
-                            }}
-                          >
-                            {mode === "api"
-                              ? "기존 API 샘플 배포"
-                              : "선택한 환경으로 Terraform 준비"}
+                          {mode === "api" && chosen && !canDeploy && <p role="status">{readinessMessage} · 추천 결과는 확인할 수 있지만 현재 이 환경으로 배포할 수 없습니다.</p>}
+                          <button className="primary" disabled={busy || !!streamId || !chosen || !canDeploy || analysis.status !== "done"} onClick={preparePlans}>
+                            선택한 환경으로 구성안 조회
                           </button>
                         </div>
                       </>
@@ -737,50 +776,23 @@ export default function Applications({
                     )}
                   </div>
                 </section>
-                {mode === "demo" && preview && (
+                {(preview || chosen) && (
                   <section className="panel detail" aria-label="배포 변경 확인">
-                    <div className="section-heading">
-                      <h2>Terraform · Repository 변경 확인</h2>
-                      <span className="badge caution">코드 초안 · 미실행</span>
-                    </div>
-                    <dl>
-                      <dt>실행 환경</dt>
-                      <dd>{preview.compute}</dd>
-                      <dt>대상 Repository</dt>
-                      <dd className="break-word">{preview.repo_url}</dd>
-                      <dt>브랜치</dt>
-                      <dd>{preview.branch}</dd>
-                      <dt>변경할 파일</dt>
-                      <dd>{preview.path}</dd>
-                    </dl>
-                    <div className="file-tab">main.tf · DEMO</div>
-                    <pre tabIndex={0} aria-label="앱 Terraform 미리보기">
-                      <code>{preview.code}</code>
-                    </pre>
-                    <p className="notice">
-                      고정 코드 조각입니다. IAM·아티팩트·서비스 연결 등이
-                      생략되어 있고 검증·실행되지 않았습니다.
-                      commit/push/Actions도 화면 시연이며 외부 저장소를 변경하지
-                      않습니다.
-                    </p>
-                    <label className="failure-option">
-                      <input
-                        type="checkbox"
-                        checked={failCI}
-                        onChange={(e) => setFailCI(e.target.checked)}
-                        disabled={!!streamId}
-                      />{" "}
-                      CI 실패 시뮬레이션 · DEMO
-                    </label>
-                    <button
-                      className="primary"
-                      disabled={!!streamId || busy}
-                      onClick={deploy}
-                    >
-                      {deployment?.status === "failed"
-                        ? "실패한 데모 파이프라인 재시도"
-                        : "commit / push 및 CI/CD 시작 · 데모"}
-                    </button>
+                    <div className="section-heading"><h2>템플릿 · 설정값 검토</h2><span className="badge caution">{mode === "demo" ? "샘플 구성안" : "서버 구성안"}</span></div>
+                    <p>실행 환경: {chosen}</p>
+                    {planError && <p role="alert">{planError}</p>}
+                    {busy && !analysisPending && <p role="status">요청 처리 중…</p>}
+                    {mode === "api" && !plans && !planError && <p>구성안 조회 후 템플릿과 설정값을 확인하세요.</p>}
+                    {mode === "api" && plans && (plans.plans.length ? <div className={plans.plans.length > 1 ? "candidate-grid" : undefined}>{plans.plans.map(p => <div className={"candidate " + (planId === p.id ? "chosen" : "")} key={p.id}>
+                      <h3>{p.name}</h3><p>{p.summary}</p><p>템플릿: {p.template}</p>
+                      <ul>{p.pros.map((v,i)=><li key={i}>장점: {v}</li>)}{p.cons.map((v,i)=><li key={i}>고려사항: {v}</li>)}</ul>
+                      <pre tabIndex={0} aria-label={p.name + " 설정값"}>{JSON.stringify(p.values,null,2)}</pre>
+                      {plans.plans.length > 1 && <button disabled={busy || !!streamId} onClick={()=>{setPlanId(p.id);setReviewed(false);}}>{planId===p.id?"구성안 선택됨":"이 구성안 선택"}</button>}
+                    </div>)}</div> : <p>제공된 구성안이 없습니다. 다시 조회하거나 분석 결과를 확인하세요.</p>)}
+                    {mode === "demo" && preview && (preview.status === "template_ready" ? <><p>템플릿: {preview.template}</p><pre tabIndex={0} aria-label="샘플 템플릿 설정값">{JSON.stringify(preview.values,null,2)}</pre><p className="notice">고정 샘플 템플릿과 설정값입니다. 저장소 commit/push와 실제 클라우드 작업은 실행하지 않습니다.</p></> : <><p>이전 버전의 코드 기록입니다. 새 구성안을 조회해야 배포할 수 있습니다.</p><pre tabIndex={0}>{preview.code}</pre></>)}
+                    <label className="failure-option"><input type="checkbox" checked={reviewed} disabled={busy || !!streamId || (mode === "api" ? !planId : preview?.status !== "template_ready")} onChange={e=>setReviewed(e.target.checked)}/> 설정값을 확인했습니다</label>
+                    {mode === "demo" && <label className="failure-option"><input type="checkbox" checked={failCI} onChange={e=>setFailCI(e.target.checked)} disabled={!!streamId}/> CI 실패 시뮬레이션 · DEMO</label>}
+                    <button className="primary" disabled={!reviewed || !canDeploy || !!streamId || busy || (mode === "api" ? !planId : preview?.status !== "template_ready")} onClick={deploy}>{mode === "demo" && deployment?.status === "failed" ? "실패한 데모 파이프라인 재시도" : `선택한 구성안으로 배포${mode === "demo" ? " · 데모" : ""}`}</button>
                   </section>
                 )}
                 {deployment && (
@@ -791,71 +803,22 @@ export default function Applications({
                     </div>
                     <div className="panel-body">
                       <p>{event?.message ?? "현재 배포 상태를 표시합니다."}</p>
-                      {deployment.demo_pipeline && (
-                        <>
-                          <ol className="pipeline-steps">
-                            {pipelineSteps.map((step, i) => (
-                              <li
-                                key={step}
-                                className={
-                                  deployment.demo_pipeline!.phase > i
-                                    ? "complete"
-                                    : ""
-                                }
-                              >
-                                <span>
-                                  {deployment.demo_pipeline!.phase > i
-                                    ? deployment.status === "failed" && i === 4
-                                      ? "실패"
-                                      : "진행됨"
-                                    : "대기"}
-                                </span>
-                                {step}
-                              </li>
-                            ))}
-                          </ol>
-                          <p className="break-word">
-                            대상: {deployment.demo_pipeline.plan.repo_url} /{" "}
-                            {deployment.demo_pipeline.plan.branch}
-                          </p>
-                          <p>
-                            샘플 commit:{" "}
-                            {deployment.demo_pipeline.commit ?? "아직 없음"}
-                          </p>
-                          <p>
-                            GitHub Actions: 로컬 DEMO 실행 {deployment.id} ·
-                            외부 run 없음
-                          </p>
-                          {deployment.status === "failed" && (
-                            <button
-                              onClick={() => {
-                                setPlan(deployment.demo_pipeline!.plan);
-                                setChosen(deployment.compute);
-                                setFailCI(false);
-                              }}
-                            >
-                              실패 내용 확인 · 재시도 준비
-                            </button>
-                          )}
-                        </>
-                      )}
-                      <progress
-                        max={100}
-                        value={
-                          event?.progress ??
-                          (deployment.status === "success" ? 100 : 0)
-                        }
-                        aria-label="배포 진행률"
-                      />
-                      <p>
-                        {event?.progress ??
-                          (deployment.status === "success" ? 100 : 0)}
-                        %
-                      </p>
+                      {reconnecting && <p role="status">배포 연결 복구 중… {streamError} <button onClick={()=>{setStreamError("");setStreamRetry(n=>n+1);}}>배포 상태 다시 연결</button></p>}
+                      <ol className="pipeline-steps">
+                        {pipelineSteps.map((step,i)=>{
+                          const current = mode === "demo" ? demoStep(deployment) : pipelineStepIds.indexOf(event?.step ?? "");
+                          const label = current < 0 ? "확인 중" : i < current || (i === current && deployment.status === "success") ? "완료" : i === current ? deployment.status === "failed" ? "실패" : "진행 중" : "대기";
+                          return <li key={step} className={label === "완료" ? "complete" : ""}><span>{label}</span>{step}</li>;
+                        })}
+                      </ol>
+                      {mode === "demo" && <p className="notice">로컬 샘플 진행입니다. 외부 GitHub·AWS 작업은 실행하지 않습니다.</p>}
+                      {deployment.demo_pipeline && deployment.status === "failed" && <button onClick={()=>{setPlan(deployment.demo_pipeline!.plan);setChosen(deployment.compute);setReviewed(false);setFailCI(false);}}>실패 내용 확인 · 재시도 준비</button>}
+                      <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
+                      <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
                       <p>실행 환경: {deployment.compute}</p>
                       {deployment.url && (
                         <p className="break-word">
-                          샘플 URL: <code>{deployment.url}</code>
+                          {mode === "demo" ? "샘플 URL" : "서버 보고 URL"}: <code>{deployment.url}</code>
                         </p>
                       )}
                       <p className="notice">
@@ -868,6 +831,7 @@ export default function Applications({
                     </div>
                   </section>
                 )}
+                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={event?.at ?? "initial"}/>}
               </>
             ) : tab === "logs" ? (
               <section className="panel">
@@ -877,16 +841,9 @@ export default function Applications({
                     {mode === "demo" ? "샘플" : "API 미지원"}
                   </span>
                 </div>
-                {mode === "demo" ? (
-                  <pre className="log-output">{`[DEMO] 12:00:01 INFO HTTP server started on :3000\n[DEMO] 12:00:02 INFO GET / -> 200\n[DEMO] 12:00:03 INFO Sample log; no application connection`}</pre>
-                ) : (
-                  <div className="empty">
-                    <h2>로그 조회 API가 아직 없습니다</h2>
-                    <p>
-                      실제 애플리케이션 로그를 수집하거나 조회하지 않습니다.
-                    </p>
-                  </div>
-                )}
+                <pre className="log-output">{mode === "demo"
+                  ? `[DEMO] 12:00:01 INFO HTTP server started on :3000\n[DEMO] 12:00:02 INFO GET / -> 200\n[DEMO] 12:00:03 INFO Sample log; no application connection`
+                  : "연동 대기 · 로그 조회 API가 아직 없습니다.\n실제 애플리케이션 로그를 수집하거나 조회하지 않습니다."}</pre>
               </section>
             ) : (
               <section className="panel">
@@ -896,47 +853,29 @@ export default function Applications({
                     {mode === "demo" ? "샘플 수치" : "API 미지원"}
                   </span>
                 </div>
-                {mode === "demo" ? (
-                  <div className="panel-body">
-                    <p>실제 앱 관측 데이터가 아닌 고정 샘플입니다.</p>
-                    <div className="metrics">
-                      <div>
-                        <span>CPU</span>
-                        <strong>24%</strong>
-                        <meter
-                          min={0}
-                          max={100}
-                          value={24}
-                          aria-label="샘플 CPU"
-                        />
-                      </div>
-                      <div>
-                        <span>메모리</span>
-                        <strong>38%</strong>
-                        <meter
-                          min={0}
-                          max={100}
-                          value={38}
-                          aria-label="샘플 메모리"
-                        />
-                      </div>
-                      <div>
-                        <span>응답 시간</span>
-                        <strong>128 ms</strong>
-                        <small>샘플</small>
-                      </div>
+                <div className="panel-body">
+                  <p>{mode === "demo" ? "실제 앱 관측 데이터가 아닌 고정 샘플입니다." : "연동 대기 · 메트릭·알림 API가 아직 없습니다."}</p>
+                  <div className="metrics">
+                    <div>
+                      <span>CPU</span>
+                      <strong>{mode === "demo" ? "24%" : "—"}</strong>
+                      {mode === "demo" ? <meter min={0} max={100} value={24} aria-label="샘플 CPU" /> : <small>연동 대기</small>}
                     </div>
-                    <p className="notice">
-                      알림: 고정 시연 화면입니다. 실제 정상 상태를 의미하지
-                      않습니다.
-                    </p>
+                    <div>
+                      <span>메모리</span>
+                      <strong>{mode === "demo" ? "38%" : "—"}</strong>
+                      {mode === "demo" ? <meter min={0} max={100} value={38} aria-label="샘플 메모리" /> : <small>연동 대기</small>}
+                    </div>
+                    <div>
+                      <span>응답 시간</span>
+                      <strong>{mode === "demo" ? "128 ms" : "—"}</strong>
+                      <small>{mode === "demo" ? "샘플" : "연동 대기"}</small>
+                    </div>
                   </div>
-                ) : (
-                  <div className="empty">
-                    <h2>메트릭·알림 API가 아직 없습니다</h2>
-                    <p>연동 계약이 마련되면 앱별 실제 지표를 연결합니다.</p>
-                  </div>
-                )}
+                  <p className="notice">
+                    {mode === "demo" ? "알림: 고정 시연 화면입니다. 실제 정상 상태를 의미하지 않습니다." : "알림: 연동 대기입니다. 지표가 없는 상태를 정상이나 0으로 표시하지 않습니다."}
+                  </p>
+                </div>
               </section>
             )}
           </div>

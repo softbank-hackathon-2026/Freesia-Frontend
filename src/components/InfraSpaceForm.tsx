@@ -11,7 +11,9 @@ export default function InfraSpaceForm({
   onDraft,
   onCreate,
   onCancel,
+  unavailable = false,
 }: {
+  unavailable?: boolean;
   draft: InfraSpaceDraft | null;
   onDraft: (draft: InfraSpaceDraft) => void;
   onCreate: (space: MeetingInfraSpace) => void;
@@ -21,7 +23,7 @@ export default function InfraSpaceForm({
     { name: draft?.name ?? "" },
   );
   const [error, setError] = useState("");
-  useEffect(() => onDraft(form), [form, onDraft]);
+  useEffect(() => { if (!unavailable) onDraft(form); }, [form, onDraft, unavailable]);
   return (
     <>
       <div className="page-heading">
@@ -38,6 +40,7 @@ export default function InfraSpaceForm({
         className="panel app-form"
         onSubmit={(e) => {
           e.preventDefault();
+          if (unavailable) return;
           try {
             onCreate(makeInfraSpace({ name: form.name }));
           } catch (e) {
@@ -52,13 +55,13 @@ export default function InfraSpaceForm({
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
         />
-        <div className="notice">Space 생성은 인프라 배포가 아닙니다. 생성 후 요구사항을 답하고 Terraform을 생성하세요. 현재 전체 흐름은 데모입니다.</div>
+        <div className="notice">{unavailable ? "연동 대기 · Infra Space 생성 API가 아직 없습니다. 이름을 입력해도 서버에 저장되지 않습니다." : "Space 생성은 인프라 배포가 아닙니다. 생성 후 요구사항을 답하고 Terraform을 생성하세요. 현재 전체 흐름은 데모입니다."}</div>
         {error && (
           <div className="error" role="alert">
             {error}
           </div>
         )}
-        <button className="primary">Space 생성 · 데모</button>
+        <button className="primary" disabled={unavailable}>Space 생성</button>
       </form>
     </>
   );

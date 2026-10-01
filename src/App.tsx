@@ -8,8 +8,9 @@ import type {
   DataMode,
   Deployment,
   InfraSpace,
+  Repository,
 } from "./lib/types.ts";
-import InfraBuilder from "./components/InfraBuilder.tsx";
+import InfraBuilder, { ApiInfraBuilder } from "./components/InfraBuilder.tsx";
 import { canDiscardInfra } from "./lib/infraFlow.ts";
 import Applications from "./components/Applications.tsx";
 import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
@@ -37,15 +38,19 @@ export default function App() {
   const [loaded] = useState(load);
   const [demo, setDemo] = useState<DemoState>(loaded.data);
   const [storeError, setStoreError] = useState(loaded.error);
-  const [mode, setMode] = useState<DataMode>("demo");
-  const [page, setPage] = useState<"infra" | "apps" | "integration">("infra");
+  const [mode, setMode] = useState<DataMode>(() => new URLSearchParams(location.search).get("source") === "api" ? "api" : "demo");
+  const [page, setPage] = useState<"infra" | "apps" | "integration">(() => new URLSearchParams(location.search).has("app") ? "apps" : "infra");
   const [menuOpen, setMenuOpen] = useState(false);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
+  const [apiAppDraft, setApiAppDraft] = useState<AppSpaceCreate | null>(null);
   const [newInfra, setNewInfra] = useState(false);
   const [infraDraft, setInfraDraft] = useState<InfraSpaceDraft | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState("");
   const [infras, setInfras] = useState<InfraSpace[]>(foundations);
   const [apps, setApps] = useState<AppSpace[]>([]);
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [repositoryLoading, setRepositoryLoading] = useState(false);
+  const [repositoryError, setRepositoryError] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
@@ -79,6 +84,19 @@ export default function App() {
       active = false;
     };
   }, [mode, reload]);
+  useEffect(() => {
+    if (mode !== "api") return;
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) { setRepositoryLoading(true); setRepositoryError(""); setRepositories([]); }
+    });
+    api.repositories().then((items) => {
+      if (active) setRepositories(items);
+    }).catch((e) => {
+      if (active) setRepositoryError(e instanceof Error ? e.message : "Repository 조회 실패");
+    }).finally(() => { if (active) setRepositoryLoading(false); });
+    return () => { active = false; };
+  }, [mode, page, reload]);
   function persist(next: DemoState) {
     if (storeError) throw new Error("손상된 저장소를 먼저 확인·초기화하세요.");
     try {
@@ -140,9 +158,17 @@ export default function App() {
     [mode],
   );
   function changeMode(next: DataMode) {
+    if (next === mode) return;
+    const url = new URL(location.href);
+    url.searchParams.set("source", next);
+    url.searchParams.delete("app");
+    history.replaceState(null, "", url);
     setNewInfra(false);
     setActiveSpaceId("");
     setMode(next);
+    setRepositories([]);
+    setRepositoryError("");
+    setRepositoryLoading(next === "api");
     setSelected(null);
     setError("");
     setLoading(false);
@@ -150,6 +176,9 @@ export default function App() {
     setApps([]);
   }
   function nav(next: "infra" | "apps" | "integration") {
+    const url = new URL(location.href);
+    url.searchParams.delete("app");
+    history.replaceState(null, "", url);
     setMenuOpen(false);
     setNewInfra(false);
     setActiveSpaceId("");
@@ -185,9 +214,12 @@ export default function App() {
       public: "인터넷 경로 포함",
       private: "외부 직접 경로 없음",
       ha: "고가용성 · 접근 방식/AZ 상세 미제공",
+      "multi-az": "다중 AZ · 접근 방식 상세 미제공",
+      "db-isolated": "DB 격리 · 접근 방식 상세 미제공",
     }[infra.network];
   }
   function createSpace(space: MeetingInfraSpace) {
+    if (mode !== "demo") return;
     persist({
       ...demo,
       meeting: { ...meeting, spaces: [space, ...meeting.spaces] },
@@ -294,7 +326,7 @@ export default function App() {
         <div className={"source-banner " + mode} role="status">
           {mode === "demo"
             ? "데모 모드 · 브라우저 샘플 데이터입니다. 실제 AI·클라우드 작업을 실행하지 않습니다."
-            : "백엔드 API 모드 · 현재 서버도 고정 분석·배포 샘플을 반환합니다. 실제 AWS 배포가 아닙니다."}
+            : "백엔드 API 모드 · 서버가 제공하는 데이터를 표시합니다. 실제 AI·클라우드 실행 여부는 서버 설정에 따라 달라집니다."}
         </div>
         <main id="content">
           {mode === "demo" && storeError && (
@@ -316,7 +348,13 @@ export default function App() {
           )}
           {page === "integration" ? (
             <GitHubIntegration
+              key={mode}
               mode={mode}
+              apiRepositories={repositories}
+              loading={mode === "api" && repositoryLoading}
+              loadError={mode === "api" ? repositoryError : ""}
+              onRefresh={() => setReload((n) => n + 1)}
+              onApiChange={setRepositories}
               connection={meeting.github}
               onSave={(github) => persist({ ...demo, meeting: { ...meeting, github } })}
             />
@@ -332,15 +370,20 @@ export default function App() {
                 if (mode === "demo")
                   persist({ ...demo, apps: [app, ...demo.apps] });
                 else setApps((current) => [app, ...current]);
-                setAppDraft(null);
+                if (mode === "demo") setAppDraft(null);
+                else setApiAppDraft(null);
               }}
               onDeployment={updateDeployment}
-              initialForm={appDraft}
-              onDraftChange={setAppDraft}
+              initialForm={mode === "demo" ? appDraft : apiAppDraft}
+              onDraftChange={mode === "demo" ? setAppDraft : setApiAppDraft}
               meeting={meeting}
+              apiRepositories={repositories}
+              repositoryLoading={repositoryLoading}
+              repositoryError={repositoryError}
+              onRefreshRepositories={() => setReload((n) => n + 1)}
               onIntegration={() => nav("integration")}
               onStartDeployment={(entry) =>
-                persist({
+                mode === "api" ? updateDeployment(entry) : persist({
                   ...demo,
                   deployments: [entry, ...demo.deployments],
                   apps: demo.apps.map((a) =>
@@ -351,9 +394,11 @@ export default function App() {
                 })
               }
             />
-          ) : newInfra && mode === "demo" ? (
+          ) : newInfra ? (
             <InfraSpaceForm
-              draft={infraDraft}
+              key={mode}
+              unavailable={mode === "api"}
+              draft={mode === "demo" ? infraDraft : null}
               onDraft={setInfraDraft}
               onCreate={createSpace}
               onCancel={() => setNewInfra(false)}
@@ -373,6 +418,8 @@ export default function App() {
                 persist({...demo, meeting: {...meeting, spaces: meeting.spaces.map(s => s.id === entry.id ? entry : s)}});
               }}
             />
+          ) : mode === "api" && selected ? (
+            <ApiInfraBuilder space={selected} onCancel={() => setSelected(null)} />
           ) : (
             <>
               <div className="page-heading">
@@ -391,27 +438,21 @@ export default function App() {
                   >
                     새로고침
                   </button>
-                  {mode === "demo" && (
-                    <>
-                      <button
-                        className="primary"
-                        onClick={() => {
-                          setNewInfra(true);
-                          setSelected(null);
-                          setActiveSpaceId("");
-                        }}
-                      >
-                        Infra Space 만들기
-                      </button>
-
-                    </>
-                  )}
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      setNewInfra(true);
+                      setSelected(null);
+                      setActiveSpaceId("");
+                    }}
+                  >
+                    Infra Space 만들기
+                  </button>
                 </div>
               </div>
               {mode === "api" && (
                 <p className="notice">
-                  Infra Space 생성·인프라 배포 API는 아직 없습니다. 서버 기반만
-                  읽기 전용으로 표시합니다.
+                  연동 대기 · Infra Space 생성·인프라 배포 API는 아직 없습니다. 서버 기반은 읽기 전용이며, 대화·코드·Apply 영역은 API 연결 후 사용할 수 있습니다.
                 </p>
               )}
               {mode === "demo" &&
@@ -558,7 +599,7 @@ export default function App() {
                     <dd>
                       {mode === "demo"
                         ? "준비된 기반 샘플"
-                        : "백엔드 샘플 기반"}
+                        : "서버에 등록된 기반"}
                     </dd>
                   </dl>
                   <p className="muted">

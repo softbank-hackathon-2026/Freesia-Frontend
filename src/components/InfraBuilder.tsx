@@ -1,6 +1,60 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import type { InfraSpace } from "../lib/types.ts";
 import { advanceInfraApply, generateInfra, reviseInfra, startInfraApply } from "../lib/infraFlow.ts";
 import type { MeetingInfraSpace } from "../lib/meeting.ts";
+
+function InfraDesignLayout({ name, description, actions, notice, children }: {
+  name: string;
+  description: string;
+  actions: ReactNode;
+  notice: ReactNode;
+  children: ReactNode;
+}) {
+  return <>
+    <div className="page-heading">
+      <div>
+        <div className="eyebrow">INFRA SPACE / AI DESIGN</div>
+        <h1>{name}</h1>
+        <p>{description}</p>
+      </div>
+      <div className="heading-actions">{actions}</div>
+    </div>
+    {notice}
+    <ol className="infra-steps" aria-label="인프라 설계 순서">
+      <li>질의응답</li><li>Terraform 생성·검토</li><li>Apply 결과</li>
+    </ol>
+    {children}
+  </>;
+}
+
+export function ApiInfraBuilder({ space, onCancel }: { space: InfraSpace; onCancel: () => void }) {
+  return <InfraDesignLayout
+    name={space.name}
+    description={space.description}
+    actions={<button onClick={onCancel}>목록으로</button>}
+    notice={<div className="notice">연동 대기 · 서버에서 받은 Infra Space 정보입니다. 요구사항 대화·Terraform·Apply 이력은 현재 API에서 제공하지 않습니다.</div>}
+  >
+    <section className="panel conversation infra-flow-panel" aria-label="인프라 질의응답">
+      <h2>1. 요구사항 대화</h2>
+      <label htmlFor="requirement">인프라 요구사항</label>
+      <textarea id="requirement" rows={3} disabled placeholder="연동 대기 · AI 대화 API가 연결되면 요구사항을 입력할 수 있습니다." />
+      <button className="primary" disabled>질문 시작</button>
+    </section>
+    <section className="panel code-panel infra-flow-panel" aria-label="인프라 코드 검토">
+      <h2>2. Terraform 생성·검토</h2>
+      <p className="empty">연동 대기 · 서버가 제공한 Terraform 코드가 없습니다.</p>
+      <button disabled>.tf 다운로드</button>
+      <label><input type="checkbox" checked={false} disabled />선택한 코드와 실행 내용을 검토했습니다</label>
+      <button className="primary" disabled>Apply 시작</button>
+    </section>
+    <section className="panel infra-flow-panel" aria-label="인프라 Apply 결과">
+      <h2>3. Apply 결과</h2>
+      <p className="empty">연동 대기 · Apply 결과를 조회할 수 없습니다. 배포 여부는 확인되지 않았습니다.</p>
+    </section>
+  </InfraDesignLayout>;
+}
+
 export default function InfraBuilder({ space, onSave, onCancel, canDiscard, onDiscard, readOnly = false }: {
   space: MeetingInfraSpace;
   onSave: (space: MeetingInfraSpace) => void;
@@ -53,29 +107,20 @@ export default function InfraBuilder({ space, onSave, onCancel, canDiscard, onDi
   }
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">INFRA SPACE / AI DESIGN</div>
-          <h1>{space.name}</h1>
-          <p>{[space.target, space.region || "리전 미정 · 대화에서 설정"].filter(Boolean).join(" · ")}</p>
-        </div>
-        <div className="heading-actions">
-          <button onClick={onCancel}>목록으로</button>
+      <InfraDesignLayout
+        name={space.name}
+        description={[space.target, space.region || "리전 미정 · 대화에서 설정"].filter(Boolean).join(" · ")}
+        actions={<><button onClick={onCancel}>목록으로</button>
           {space.status !== "demo_deployed" && <button disabled={!canDiscard} onClick={() => {
             if (!canDiscard || !window.confirm(`“${space.name}” 작성을 취소하고 이 Space를 삭제할까요? 저장한 요구사항과 코드가 삭제되며 되돌릴 수 없습니다.`)) return;
             try { onDiscard(); }
             catch (e) { setError(e instanceof Error ? e.message : "작성 취소 실패"); }
-          }}>작성 취소</button>}
-        </div>
-      </div>
-      {readOnly && <div className="notice">미리 준비한 데모 예시 · 읽기 전용입니다. 아래 대화·코드·완료 상태는 실제 사용자의 AI 대화나 AWS 배포 이력이 아닙니다.</div>}
-      <div className="notice">
-        AI 질의응답·Apply 데모 · 실제 AI와 클라우드를 호출하지 않습니다.
-        자유 입력은 기록만 하며 분석하지 않습니다. 구조화된 답변으로 고정 VPC/Subnet 코드 초안을 만듭니다.
-      </div>
-      <ol className="infra-steps" aria-label="인프라 설계 순서">
-        <li>질의응답</li><li>Terraform 생성·검토</li><li>Apply 결과</li>
-      </ol>
+          }}>작성 취소</button>}</>}
+        notice={<>
+          {readOnly && <div className="notice">미리 준비한 데모 예시 · 읽기 전용입니다. 아래 대화·코드·완료 상태는 실제 사용자의 AI 대화나 AWS 배포 이력이 아닙니다.</div>}
+          <div className="notice">AI 질의응답·Apply 데모 · 실제 AI와 클라우드를 호출하지 않습니다. 자유 입력은 기록만 하며 분석하지 않습니다. 구조화된 답변으로 고정 VPC/Subnet 코드 초안을 만듭니다.</div>
+        </>}
+      >
       {error && <div className="error" role="alert">{error}</div>}
       <section className="panel conversation infra-flow-panel" aria-label="인프라 질의응답">
         <h2>1. 요구사항 대화</h2>
@@ -169,7 +214,7 @@ export default function InfraBuilder({ space, onSave, onCancel, canDiscard, onDi
       )}
       {operation && (
         <section className="panel infra-flow-panel" aria-label="인프라 Apply 결과">
-          <h2>3. Apply 결과 · 데모</h2>
+          <h2>3. Apply 결과</h2>
           <progress aria-label="인프라 Apply 진행률" max={3} value={operation.phase} />
           <p role="status">
             {operation.status === "success"
@@ -182,6 +227,7 @@ export default function InfraBuilder({ space, onSave, onCancel, canDiscard, onDi
           {busy && !running && <p>진행이 멈춰 있습니다. 이어하기를 눌러야 데모가 계속됩니다.</p>}
         </section>
       )}
+      </InfraDesignLayout>
     </>
   );
 }

@@ -58,3 +58,27 @@ Completed local follow-up: Integration URL-only/main registration without accoun
 2026-10-01 sample display-name correction completed: three fictional service names; existing check22/browser14 PASS. Local branch only.
 
 Completed local follow-up: seeded services open shared InfraBuilder with explicit readonly sample config/code/result. check23/browser14/source+visual review PASS. Existing branch preserved, no publication.
+
+## Active — local API integration (2026-10-02)
+User-approved runtime setup and API Repository/app creation connection. Backend current f7a29a9 has real DB repositories CRUD; older unsupported notes above are historical. Contract in Day3 latest addition. Worker owns product/tests, parent runtime/docs/review. Required check + browser regression + local FastAPI roundtrip; record limits separately.
+
+2026-10-02 completion: API repositoryCRUD/appcreation implemented; check25/browser15/live-localAPI PASS, readonlyreviewPASS. SQLite localbackendf7a29a9. Backendpytest28pass2Windowsencodingfailure; no actualAI/AWS. Currentbranchlocaluncommitted. See infra-ai-flow-eval latestrecord and scripts/local-api-check.mjs for real local roundtrip.
+
+## Active — shared demo/API UI (2026-10-02)
+Approved same layout/explicit choice/review flow, server-only data and unavailable placeholders. Existing infra-ai-flow contract latest entry applies; repository integration was pushed as 238def9. This follow-up is not approved for Git publication.
+
+2026-10-02 shared UI completed locally: Infra/app/review/monitoring common layout with unavailable API actions gated; existing server SSE retained. check25/browser15/actual-localAPI/source+visual review PASS. Latest infra-ai-flow-eval applies. Current follow-up uncommitted/unpushed.
+
+## Active — frontend completion (2026-10-02)
+User-approved 1/2/4/5 then template-plan UI readiness; codex/frontend-deployment-flow. Commit/push authorized on verified completion, no PR/merge. Latest infra-ai-flow-contract applies.
+
+2026-10-02 frontend completion verified: check33/browser17/live-localAPI5groups/review PASS. Template+values UI and six-stage SSE/resources ready; latest backend8d99b37 still lacks plans/real analysis/workflow dispatch. User-authorized commit/push on codex/frontend-deployment-flow includes previous shared UI; no PR/merge. See infra-ai-flow-eval for evidence and runtime preservation.
+
+
+## Backend plans compatibility — 2026-10-02 (active)
+User supplied latest backend message and asked to continue. Bounded existing-flow adaptation: readiness deployable_computes separate from recommendation computes; one plan goes directly to template/values review with explicit deploy and plan_id; analysis polling150seconds proposed team value (not final agreement); server-derived analysis explanation;400notready/409ongoing handling; latest isolated backend53dfc2d/migrations0003/0004 with data preservation. No backend source/cloud/Notion changes, no monitoring. New branch codex/backend-plan-readiness. Prior publication approval covered91745a6 only; no publication this follow-up without explicit approval.
+Ownership APIworker types/api/unit/local-integration script; UIworker Applications/browser checks; parent Appbanner/runtime/docs/review. Checks type/lint/unit/build + browser + latest real-local plan→deploy SSE roundtrip. Singleplan requires review, not an extra choice. Missing readiness is unknown, no fabricated support. No dependency/buildconfig changes.
+
+2026-10-02 backend readiness completed locally:35unit/18browser/5liveAPIgroups+reviewPASS. codex/backend-plan-readiness uncommitted/unpushed; no new publication approval. Actual53dfc2d planAPI nowconnected;150secondanalysis deadline provisional;model/cloud unverified.
+
+2026-10-02 publication approval: user explicitly requested commit and push of the verified13-file backend-plan-readiness diff. Existing35unit/18browser/5localAPI results apply; no product changes since final verification. Commit/push only, no PR/merge.
