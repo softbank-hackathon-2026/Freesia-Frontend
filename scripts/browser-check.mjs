@@ -1,7 +1,11 @@
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+const flowerBackup = await readFile(
+  new URL("../public/freesia-flower.svg", import.meta.url),
+  "utf8",
+);
 const server = spawn(
   process.execPath,
   [
@@ -94,11 +98,54 @@ async function navigate(page, name) {
     assert.equal(await page.locator("#primary-navigation").isVisible(), false);
   }
 }
+async function checkSourceBanner(page) {
+  const colors = await page.locator(".source-banner").evaluate((banner) => {
+    const style = window.getComputedStyle(banner);
+    const luminance = (color) => {
+      const channels = color.match(/[\d.]+/g).slice(0, 3).map((value) => {
+        const channel = Number(value) / 255;
+        return channel <= 0.04045
+          ? channel / 12.92
+          : ((channel + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    const foreground = luminance(style.color);
+    const background = luminance(style.backgroundColor);
+    return {
+      color: style.color,
+      background: style.backgroundColor,
+      contrast: (Math.max(foreground, background) + 0.05) /
+        (Math.min(foreground, background) + 0.05),
+      demo: banner.classList.contains("demo"),
+    };
+  });
+  assert.ok(colors.contrast >= 4.5, `Source banner contrast: ${colors.contrast}`);
+  if (colors.demo) {
+    assert.equal(colors.background, "rgb(180, 35, 24)");
+    assert.equal(colors.color, "rgb(255, 255, 255)");
+  }
+}
 async function checkSidebar(page, mobile) {
   const sidebar = page.locator("#primary-navigation");
   const toggle = page.getByRole("button", { name: "주요 메뉴 열기", exact: true });
   assert.equal(await page.locator(".space-map").count(), 0);
-  assert.equal(await sidebar.locator(".brand .brand-flower").count(), 1);
+  const brandIcon = sidebar.locator(".brand .brand-icon");
+  assert.equal(await brandIcon.count(), 1);
+  assert.equal(await brandIcon.getAttribute("src"), "/freesia-mascot.jpg");
+  await brandIcon.evaluate((image) => image.decode());
+  assert.ok(await brandIcon.evaluate((image) => image.naturalWidth > 0));
+  const flower = await page.evaluate((source) => {
+    const svg = new window.DOMParser().parseFromString(source, "image/svg+xml");
+    return {
+      valid: !svg.querySelector("parsererror") &&
+        svg.documentElement.namespaceURI === "http://www.w3.org/2000/svg",
+      viewBox: svg.documentElement.getAttribute("viewBox"),
+      paths: svg.querySelectorAll("path").length,
+    };
+  }, flowerBackup);
+  assert.deepEqual(flower, { valid: true, viewBox: "0 0 54 62", paths: 6 });
+  await checkSourceBanner(page);
   assert.equal(await sidebar.locator(".sidebar-link").count(), 3);
   assert.equal(
     await page.locator('.sidebar-link.active[aria-current="page"]').count(),
@@ -392,6 +439,7 @@ try {
       fullPage: true,
     });
     await page.getByLabel("데이터 소스").selectOption("api");
+    await checkSourceBanner(page);
     await page.getByRole("alert").waitFor();
     assert.match(
       await page.getByRole("alert").innerText(),

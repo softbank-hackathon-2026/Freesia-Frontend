@@ -1,0 +1,46 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  class="brand-flower"
+  viewBox="0 0 54 62"
+  aria-hidden="true"
+  focusable="false"
+>
+  <path
+    d="M15 58C23 46 26 33 35 13M23 44L34 31M27 34L25 24"
+    fill="none"
+    stroke="#3e7050"
+    stroke-width="2.6"
+    stroke-linecap="round"
+  />
+  <path
+    d="M18 53C8 49 5 39 7 32C16 37 20 43 18 53ZM21 48C29 49 36 44 39 37C30 38 24 42 21 48Z"
+    fill="#719052"
+  />
+  <path
+    d="M31 19C31 14 30 11 35 7C37 5 39 6 40 8C40 3 44 3 46 7C50 6 51 10 48 13C44 16 40 20 35 22Z"
+    fill="#f1c44b"
+    stroke="#a9781c"
+    stroke-width="1.2"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M28 31C31 27 32 23 37 23C39 22 41 24 40 26C44 22 47 25 46 28C50 29 49 33 46 34C42 36 37 35 32 35Z"
+    fill="#f5cf63"
+    stroke="#a9781c"
+    stroke-width="1.2"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M25 26C21 25 18 23 17 19C15 17 17 14 20 15C19 11 23 10 25 13C28 11 31 14 29 17C29 21 28 24 25 26Z"
+    fill="#eebc3c"
+    stroke="#a9781c"
+    stroke-width="1.2"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M36 13L40 12M38 29L42 28M22 17L25 18"
+    stroke="#fff2ba"
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+</svg>
