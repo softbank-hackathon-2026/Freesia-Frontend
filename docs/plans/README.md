@@ -1,11 +1,45 @@
-# Development harness
-1. Read the spec and plan; keep scope and backend unsupported capabilities explicit.
-2. Before implementing a sprint, write goal/success/owned-files/tests in its contract. Add a failing behavioral check first.
-3. Run npm run check and npm run test:e2e. Any failure blocks completion.
-4. Independent read-only reviewer checks the contract and desktop/mobile screenshots. Design Quality, Originality, Craft, Functionality must each be >=6/10.
-5. Record results and handoff. Local session state may be tracked separately; commit/push/PR always need explicit human approval.
-Current: Sprint01 and Sprint02 PASS. Final native7/7, browser7 suites, independent scores7/6/7/7. See sprints/sprint-02-eval.md. Initial local implementation complete; live backend/AI/cloud remain unconnected.
-Frontend code lives in this repository; backend is reference-only. Actual AI/API gaps are documented separately, no automatic cloud apply.
+# AI-DLC development harness
 
+기존 `docs/plans`의 spec, plan, sprint contract/eval/handoff로 AI-Driven Development Life Cycle(AI-DLC)을 진행한다. 별도 문서 체계를 만들지 않는다.
 
-Brand refresh complete: [Freesia flower/connected Spaces](2026-09-30-freesia-brand-ui.md), independent8/7/7/7. Same existing check/e2e harness; no dependencies changed.
+## 단계와 승인
+
+| 단계 | 기존 기록 | 사용자 확인 |
+|---|---|---|
+| Ideation | 작업 spec: 문제, 성공 기준, 범위, 제외 범위 | 범위 승인 |
+| Inception | 작업 spec/plan: 요구사항, API 계약, 설계, 작업 분할 | 요구사항과 설계 승인 |
+| Construction | sprint contract → 구현 → eval → handoff | 작업별 구현 계획 승인 후 구현, 검증 결과 확인 |
+| Operation | plan/handoff: 배포, 관측, 롤백, 운영 결과 | 실제 운영 변경의 범위 확인 |
+
+승인은 해당 spec/plan/contract에 날짜, 사용자 요청/승인 근거, 승인한 범위·요구사항·구현 계획을 기록한다.
+여러 단계를 함께 제시한 계획에 명시적인 일괄 승인을 받으면 함께 기록한다. 이미 승인된 범위와 계획은 다시 묻지 않고 진행하며, 범위·완료 조건·핵심 설계가 바뀌면 변경분을 재승인받는다.
+작은 수정은 관련 기존 기록에 반영한다. 기존 spec/plan은 과거 결정의 기록으로 유지하고 후속 변경을 명시한다.
+
+## 구현과 검증 규칙
+
+1. 작업 spec/plan과 [현재·제안 API 계약](../contracts.md)을 읽고, 범위와 backend 미지원 기능을 명시한다. Frontend는 이 저장소에서 구현하고 backend는 읽기 전용으로 참고한다. 클라우드 apply는 자동 실행하지 않는다.
+2. sprint 구현 전에 contract에 목표·성공 기준·담당 파일·검증 방법을 작성하고, 실패하는 행동 검사를 먼저 추가한다.
+3. 앱 구현 변경은 `npm run check`와 `npm run test:e2e`를 실행한다. 실패가 있으면 완료 처리하지 않는다. 문서만 변경하면 diff·링크·지침 일관성을 확인한다.
+4. 독립적인 읽기 전용 리뷰어가 계약과 결과를 확인한다. UI 구현 변경은 desktop/mobile 스크린샷을 평가하며, Design Quality, Originality, Craft, Functionality는 각각 6/10 이상이어야 한다.
+5. eval/handoff에 실행한 검증·미실행 항목·다음 작업을 기록한다. 로컬 세션 상태는 별도로 관리할 수 있으며, commit·push·PR은 각각 사용자의 명시적 승인이 필요하다.
+
+## 문서 기준 상태 — 2026-10-01
+
+이번 지침 변경 승인: 2026-10-01 사용자 `수정해주셈` — `AGENTS.md`와 이 문서의 단계·승인·검증 규칙 보완.
+
+| 항목 | 기록된 상태와 근거 |
+|---|---|
+| 최신 UI 구현 | [Day3 spec](2026-09-30-day3-spec.md) / [plan](2026-09-30-day3-plan.md): 인프라·애플리케이션·통합 진입점, 등록 Repository 선택, 명시적인 DEMO 흐름 |
+| 자동검사·화면 평가 | [Day3 Sprint02 eval](sprints/day3-sprint-02-eval.md): 당시 native 13/13, browser 11/11, 독립 평가 7/7/7/7 PASS. 현재 변경에 대한 재실행 결과는 아님 |
+| 이번 지침 변경 검증 | 2026-10-01: 기존 Node 24.19.0으로 `npm run check`의 TypeScript·ESLint·테스트 14개·빌드 PASS. `npm run test:e2e` 11 묶음 PASS. 실제 backend·배포 검증은 포함하지 않음 |
+| 실제 backend 연동 | 기존 API adapter는 구현됨. 최신 eval에서 live backend는 미검증이며, 신규 앱 생성·인프라 생성/배포·GitHub 통합 API는 미지원 |
+| AI·클라우드·배포 | 고정 샘플/DEMO이며 실제 AI, OAuth, GitHub 쓰기, AWS 배포·고객 앱 헬스체크는 미연결·미검증 |
+| Git publication | [Day3 handoff](sprints/day3-sprint-02-handoff.md)에 commit/push/PR 미수행으로 기록됨. 현재 Git 상태는 별도로 확인 |
+
+`proposed / approved / implemented / tested / live-integrated / deployed / committed / pushed`를 구분하고 PR 생성 여부도 별도로 기록한다. 자동검사 통과로 실제 backend 검증·배포·Git publication 상태를 올리지 않는다. 제안 API를 구현된 endpoint로 취급하거나 DEMO 성공을 실제 배포 성공으로 기록하지 않는다.
+다음 개발 요청은 최신 spec/plan과 계약을 읽고 목표·성공 기준·범위를 정한 뒤, 승인된 작업 계획과 기존 검증 규칙으로 진행한다. 실제 연동이 필요한 작업은 누락된 계약과 검증 환경부터 확인한다.
+
+## 이전 기록
+
+- [초기 frontend spec](2026-09-30-frontend-spec.md) / [plan](2026-09-30-frontend-plan.md) / [Sprint02 eval](sprints/sprint-02-eval.md): 초기 구현의 native 7/7·browser 7 suites·독립 평가 7/6/7/7.
+- [Freesia brand refresh](2026-09-30-freesia-brand-ui.md): 당시 독립 평가 8/7/7/7. 최신 상태와 구분하는 과거 기록이다.
