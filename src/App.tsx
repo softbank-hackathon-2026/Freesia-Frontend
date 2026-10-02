@@ -12,7 +12,7 @@ import type {
 } from "./lib/types.ts";
 import InfraBuilder, { ApiInfraBuilder } from "./components/InfraBuilder.tsx";
 import { canDiscardInfra } from "./lib/infraFlow.ts";
-import Applications from "./components/Applications.tsx";
+import Applications, { type ApplicationTab } from "./components/Applications.tsx";
 import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
 import type { InfraSpaceDraft } from "./components/InfraSpaceForm.tsx";
 import GitHubIntegration from "./components/GitHubIntegration.tsx";
@@ -23,6 +23,17 @@ import {
 } from "./lib/meeting.ts";
 import type { MeetingInfraSpace } from "./lib/meeting.ts";
 const api = createApi(import.meta.env.VITE_API_BASE_URL || "/api");
+type Route = { source: DataMode; page: "infra" | "apps" | "integration"; app: string | null; tab: ApplicationTab };
+function readRoute(): Route {
+  const params = new URLSearchParams(location.search);
+  const requestedPage = params.get("page");
+  const page = requestedPage === "infra" || requestedPage === "apps" || requestedPage === "integration"
+    ? requestedPage : params.get("app") ? "apps" : "infra";
+  const app = page === "apps" ? params.get("app") || null : null;
+  const tab = params.get("tab");
+  return { source: params.get("source") === "api" ? "api" : "demo", page, app,
+    tab: app && (tab === "logs" || tab === "metrics") ? tab : "overview" };
+}
 function load() {
   try {
     return { data: parseDemo(localStorage.getItem(STORE_KEY)), error: "" };
@@ -38,8 +49,8 @@ export default function App() {
   const [loaded] = useState(load);
   const [demo, setDemo] = useState<DemoState>(loaded.data);
   const [storeError, setStoreError] = useState(loaded.error);
-  const [mode, setMode] = useState<DataMode>(() => new URLSearchParams(location.search).get("source") === "api" ? "api" : "demo");
-  const [page, setPage] = useState<"infra" | "apps" | "integration">(() => new URLSearchParams(location.search).has("app") ? "apps" : "infra");
+  const [route, setRoute] = useState(readRoute);
+  const { source: mode, page } = route;
   const [menuOpen, setMenuOpen] = useState(false);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
   const [apiAppDraft, setApiAppDraft] = useState<AppSpaceCreate | null>(null);
@@ -150,36 +161,50 @@ export default function App() {
     },
     [mode],
   );
-  function changeMode(next: DataMode) {
-    if (next === mode) return;
-    discardDialog.current?.close();
+  const applyRoute = useCallback((next: Route) => {
+    if (next.page !== page || next.source !== mode) {
+      discardDialog.current?.close();
+      setMenuOpen(false);
+      setNewInfra(false);
+      setActiveSpaceId("");
+      setSelected(null);
+    }
+    if (next.source !== mode) {
+      setRepositories([]);
+      setRepositoryError("");
+      setRepositoryLoading(next.source === "api");
+      setError("");
+      setLoading(next.source === "api");
+      setAppsLoading(next.source === "api"); setAppsError("");
+      setInfras(next.source === "demo" ? foundations : []);
+      setApps([]);
+    }
+    setRoute(next);
+  }, [mode, page]);
+  useEffect(() => {
+    const restore = () => applyRoute(readRoute());
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [applyRoute]);
+  function navigate(next: Route, replace = false) {
     const url = new URL(location.href);
-    url.searchParams.set("source", next);
-    url.searchParams.delete("app");
-    history.replaceState(null, "", url);
-    setNewInfra(false);
-    setActiveSpaceId("");
-    setMode(next);
-    setRepositories([]);
-    setRepositoryError("");
-    setRepositoryLoading(next === "api");
-    setSelected(null);
-    setError("");
-    setLoading(next === "api");
-    setAppsLoading(next === "api"); setAppsError("");
-    setInfras(next === "demo" ? foundations : []);
-    setApps([]);
+    url.searchParams.set("source", next.source);
+    url.searchParams.set("page", next.page);
+    if (next.app) { url.searchParams.set("app", next.app); url.searchParams.set("tab", next.tab); }
+    else { url.searchParams.delete("app"); url.searchParams.delete("tab"); }
+    if (url.href !== location.href) history[replace ? "replaceState" : "pushState"](null, "", url);
+    applyRoute(next);
   }
-  function nav(next: "infra" | "apps" | "integration") {
+  function changeMode(next: DataMode) {
+    if (next !== mode) navigate({ source: next, page, app: null, tab: "overview" });
+  }
+  function nav(next: Route["page"]) {
     discardDialog.current?.close();
-    const url = new URL(location.href);
-    url.searchParams.delete("app");
-    history.replaceState(null, "", url);
     setMenuOpen(false);
     setNewInfra(false);
     setActiveSpaceId("");
-    setPage(next);
     setSelected(null);
+    navigate({ source: mode, page: next, app: null, tab: "overview" });
   }
   function reset() {
     try {
@@ -257,7 +282,7 @@ export default function App() {
         className={"sidebar" + (menuOpen ? " is-open" : "")}
         id="primary-navigation"
       >
-        <a className="brand" href="#" onClick={() => nav("infra")}>
+        <a className="brand" href="#" onClick={(event) => { event.preventDefault(); nav("infra"); }}>
           <img className="brand-icon" src="/freesia-mascot.jpg" alt="" />
           <span className="brand-name">
             Freesia<small>아이디어가 자라는 공간</small>
@@ -386,6 +411,9 @@ export default function App() {
             <Applications
               key={mode}
               mode={mode}
+              appId={route.app}
+              tab={route.tab}
+              onNavigate={(app, tab = "overview", replace = false) => navigate({ source: mode, page: "apps", app, tab }, replace)}
               apps={shownApps}
               infras={availableInfras}
               designs={mode === "demo" ? demo.designs : []}

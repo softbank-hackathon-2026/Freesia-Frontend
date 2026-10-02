@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { setTimeout, clearTimeout } from "node:timers";
+import { mkdir } from "node:fs/promises";
 import assert from "node:assert/strict";
 
 const port = process.env.UX_CHECK_PORT || "15177";
@@ -21,7 +22,8 @@ try {
   const infra = { id: "infra-ux", name: "UX Infra", description: "", network: "public", computes: ["ecs-fargate"], app_count: 0 };
   const repo = { id: "repo-ux", name: "example/shop", repo_url: "https://github.com/example/shop", branch: "main", created_at: "2026-10-03T00:00:00Z" };
   let apps = [], postCount = 0, createMode = "held", postStarted;
-  let appsFail = false, infraFail = false;
+  let deploymentReadFail = false;
+  let appsFail = false, infraFail = false, appReads = 0, holdApp = false, appReadStarted;
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     const json = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
@@ -36,14 +38,19 @@ try {
       if (createMode === "held") await new Promise(resolve => release = resolve);
       return createMode === "uncertain" ? json({ message: "Response lost after creation" }, 503) : json(app, 201);
     }
+    if (path.endsWith("/deployments/read-failure")) return json({ message: "Deployment status unavailable" }, 500);
+    if (path.endsWith("/logs")) return json({ status: "ok", message: null, lines: [] });
+    if (path.endsWith("/metrics")) return json({ status: "ok", message: null, compute: "ecs-fargate", cpu_percent: 5, memory_percent: 10, response_time_ms: 20, request_count: 2, error_count: 0, measured_at: "2026-10-03T00:00:00Z" });
     const app = apps.find(value => path.endsWith("/" + value.id));
-    if (app) return json(app);
+    if (app) {
+      appReads++;
+      if (holdApp) { appReadStarted?.(); await new Promise(resolve => release = resolve); }
+      return json(deploymentReadFail ? { ...app, latest_deployment_id: "read-failure" } : app).catch(() => {});
+    }
     return json({ message: "Unused fixture route" }, 404);
   });
   const create = async name => {
     await page.getByRole("button", { name: "애플리케이션", exact: true }).click();
-    const back = page.getByRole("button", { name: "앱 목록으로", exact: true });
-    if (await back.isVisible()) await back.click();
     await page.getByRole("button", { name: "애플리케이션 생성", exact: true }).click();
     await page.getByLabel("앱 이름", { exact: true }).fill(name);
     await page.getByLabel("등록한 Repository", { exact: true }).selectOption(repo.id);
@@ -88,6 +95,55 @@ try {
   const infraRow = page.getByRole("row").filter({ has: page.getByRole("button", { name: "UX Infra", exact: true }) });
   await infraRow.getByRole("cell", { name: "4", exact: true }).waitFor();
   console.log("PASS lists: independent failures and app count refresh after creation");
+  await page.getByRole("button", { name: "통합", exact: true }).click();
+  assert.equal(new URL(page.url()).searchParams.get("page"), "integration");
+  await page.reload(); await page.getByRole("heading", { name: "통합", exact: true }).waitFor();
+  await page.getByRole("button", { name: "애플리케이션", exact: true }).click();
+  await page.reload(); await page.getByRole("button", { name: "First app 상세 보기", exact: true }).waitFor();
+  await page.getByRole("button", { name: "First app 상세 보기", exact: true }).click();
+  await page.getByRole("heading", { name: "First app", exact: true }).waitFor();
+  await page.getByRole("tab", { name: "로그", exact: true }).click();
+  await page.getByRole("tab", { name: "모니터링", exact: true }).click();
+  const readsBeforeHistory = appReads;
+  await page.goBack();
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === "로그");
+  await page.goForward();
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === "모니터링");
+  assert.equal(appReads, readsBeforeHistory, "Tab history must not reopen/refetch the app");
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === "모니터링");
+  await mkdir("artifacts", { recursive: true });
+  await page.screenshot({ path: "artifacts/ux-navigation-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: "artifacts/ux-navigation-mobile.png", fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("combobox", { name: "데이터 소스", exact: true }).selectOption("demo");
+  assert.equal(await page.getByRole("heading", { name: "First app", exact: true }).count(), 0);
+  await page.goBack();
+  await page.getByRole("heading", { name: "First app", exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === "모니터링");
+  assert.equal(await page.getByRole("combobox", { name: "데이터 소스", exact: true }).inputValue(), "api");
+  await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+  const slowRead = new Promise(resolve => appReadStarted = resolve); holdApp = true;
+  await page.getByRole("button", { name: "First app 상세 보기", exact: true }).click(); await slowRead;
+  await page.getByRole("button", { name: "통합", exact: true }).click(); release(); holdApp = false;
+  await page.getByRole("heading", { name: "통합", exact: true }).waitFor();
+  assert.equal(await page.getByRole("heading", { name: "First app", exact: true }).count(), 0);
+  appsFail = true;
+  await page.goto(base + "/?source=api&app=app-ux-1");
+  await page.getByRole("heading", { name: "First app", exact: true }).waitFor();
+  appsFail = false; deploymentReadFail = true;
+  await page.goto(base + "/?source=api&app=app-ux-1&tab=metrics");
+  await page.getByRole("alert").filter({ hasText: "Deployment status unavailable" }).waitFor();
+  await page.getByRole("heading", { name: "First app", exact: true }).waitFor();
+  assert.equal(await page.getByRole("tab", { name: "모니터링", exact: true }).getAttribute("aria-selected"), "true");
+  deploymentReadFail = false;
+  await page.goto(base + "/?source=api&page=apps&app=missing-app");
+  await page.getByRole("alert").filter({ hasText: "Unused fixture route" }).waitFor();
+  await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+  await page.getByRole("button", { name: "First app 상세 보기", exact: true }).waitFor();
+  console.log("PASS navigation: pages/tabs/reload/history, source isolation, late reads, legacy deep links and missing apps");
   assert.deepEqual(errors, []);
   console.log("PASS creation: cancel guard, background success, uncertain-outcome reconciliation");
 } finally {

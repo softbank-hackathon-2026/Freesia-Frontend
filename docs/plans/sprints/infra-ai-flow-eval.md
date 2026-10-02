@@ -536,3 +536,7 @@ Creation cancel disabled in flight; late success refreshes canonical list instea
 
 ## UX unit2 verified — 2026-10-03T01:30:51.219602+09:00
 Independent infra/app loading and error states; success creation refreshes linked infra counts; error is not an empty list. Focused RED apps500 removed valid infra then GREEN independent failures/count4; check43 PASS; E2E24 PASS; independent source review PASS. Existing desktop/mobile app list layout preserved. Unit1 published0383c0a; user-approved unit2 commit/push next, then unit3 URL navigation.
+
+
+## UX unit3 verified — 2026-10-03T01:51:48.085139+09:00
+Native page/source/app/tab URL state restores reload and Back/Forward without restarting same-app work. Direct app reads support legacy deep links even when list fails; app GET success plus deployment GET failure preserves app and tabs. Focused RED/GREEN including delayed reads, source switch, unknown app and partial read failure; check43/E2E24 PASS. Independent source review PASS; desktop1440/mobile390 screenshots inspected, no horizontal overflow. No dependency, backend or cloud changes. User-approved unit3 commit/push, then unit4 analysis action copy.
