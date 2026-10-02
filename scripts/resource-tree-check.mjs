@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 // Browser-only fixtures: no backend data or cloud resources are created.
 const base=process.env.TREE_CHECK_URL||'http://localhost:5173';
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
-const app={id:'tree-review',name:'todo-app · 트리 시안',repo_url:'https://github.com/example/todo',branch:'main',infra_id:'infra-review',created_at:'2026-10-02',latest_deployment_id:'tree-deploy'};
+const app={id:'tree-review',name:'todo-app / 트리 시안',repo_url:'https://github.com/example/todo',branch:'main',infra_id:'infra-review',created_at:'2026-10-02',latest_deployment_id:'tree-deploy'};
 const deployment={id:'tree-deploy',app_space_id:app.id,compute:'ecs-fargate',status:'deploying',url:null,reason:null,created_at:'2026-10-02'};
 const resource=(type,state,name='app')=>({address:`${type}.${name}`,type,state,action:'create',reason:null,updated_at:'2026-10-02T05:00:00Z'});
 const sample=[resource('aws_ecs_service','done'),resource('aws_db_instance','done'),resource('aws_s3_bucket','in_progress'),resource('aws_lb','done'),resource('aws_route53_record','pending')];
@@ -35,13 +35,15 @@ try {
  await panel.getByText(app.name,{exact:true}).first().waitFor();
  for(const name of ['서버','저장소','연결'])assert.ok(await panel.getByText(name,{exact:true}).count()>0);
  assert.ok(await panel.getByText('지금 여기',{exact:true}).count()>0);
- const firstSummary=panel.locator('summary').first();await firstSummary.focus();await firstSummary.press('Enter');
+ const firstSummary=panel.locator('summary').first();await firstSummary.focus();
+ assert.equal(await firstSummary.evaluate(el=>window.getComputedStyle(el).outlineStyle),'solid','Resource keyboard focus remains visible with the shared theme');
+ await firstSummary.press('Enter');
  assert.ok(await panel.locator('details').first().evaluate(el=>el.open));await firstSummary.press('Enter');
  await panel.screenshot({path:'artifacts/resource-tree-desktop.png'});
  const preview=await panel.evaluate(el=>{
   const copy=el.cloneNode(true);copy.querySelectorAll('button').forEach(b=>b.remove());
   const css=[...document.styleSheets].map(sheet=>{try{return [...sheet.cssRules].map(rule=>rule.cssText).join('\n');}catch{return '';}}).join('\n');
-  return '<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Freesia 배포 트리 검토</title><style>'+css+' body{padding:24px;background:#faf8f3}main{max-width:820px;margin:auto}.preview-note{margin:0 0 20px;padding:16px;background:#fff1f0;color:#9b1c1c;border-radius:12px}</style><main><p class="preview-note">화면 검토용 샘플 · 실제 AWS 현황이 아닙니다.<br>현재 개발된 React 화면을 저장한 미리보기입니다. 자원을 누르면 상세 정보가 펼쳐집니다.</p>'+copy.outerHTML+'</main></html>';
+  return '<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Freesia 배포 트리 검토</title><style>'+css+' body{padding:24px;background:#faf8f3}main{max-width:820px;margin:auto}.preview-note{margin:0 0 20px;padding:16px;background:#fff1f0;color:#9b1c1c;border-radius:12px}</style><main><p class="preview-note">화면 검토용 샘플 / 실제 AWS 현황이 아닙니다.<br>현재 개발된 React 화면을 저장한 미리보기입니다. 자원을 누르면 상세 정보가 펼쳐집니다.</p>'+copy.outerHTML+'</main></html>';
  });
  await writeFile('artifacts/resource-tree-preview.html',preview);
 

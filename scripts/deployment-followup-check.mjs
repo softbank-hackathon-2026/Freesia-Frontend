@@ -66,7 +66,14 @@ try {
  reset();await open();await prepare();deployConflict=true;await deployButton().click();await page.getByText(/앱을 내리는 중/).first().waitFor();assert.ok(await deployButton().isDisabled());teardownStatus='failed';reason='conflict fixture';await page.getByRole('alert').filter({hasText:'conflict fixture'}).waitFor({timeout:7000});assert.ok(await deployButton().isEnabled());assert.equal(await page.getByText('앱을 내리는 중입니다. 완료 후 다시 배포하세요.',{exact:true}).count(),0);bodies.length=0;
  // Late POST and GET responses must never overwrite another app's detail view.
  reset();hold=true;await open();confirm();const started=page.waitForRequest('**/teardown');await teardown().click();await started;
- await page.getByRole('button',{name:'앱 목록으로',exact:true}).click();await page.getByRole('button',{name:second.name+' 상세 보기',exact:true}).click();release();hold=false;await page.getByRole('heading',{name:second.name,exact:true}).waitFor();assert.equal(await page.getByText(/앱을 내리는 중/).count(),0);
+ await page.getByRole('button',{name:'앱 목록으로',exact:true}).click();
+ // Main's new list toolbar and card navigation coexist with teardown cancellation.
+ const list=page.locator('.app-space-list');
+ await list.getByRole('button',{name:'새로고침',exact:true}).waitFor();
+ assert.ok(await list.getByRole('button',{name:'애플리케이션 생성',exact:true}).isEnabled());
+ assert.ok(await list.getByRole('button',{name:'애플리케이션 삭제',exact:true}).isDisabled());
+ await list.screenshot({path:'artifacts/teardown-merged-app-list.png'});
+ await page.getByRole('button',{name:second.name+' 상세 보기',exact:true}).click();release();hold=false;await page.getByRole('heading',{name:second.name,exact:true}).waitFor();assert.equal(await page.getByText(/앱을 내리는 중/).count(),0);
  reset();teardownStatus='requested';receipt=stamp;await open();await page.getByText(/앱을 내리는 중/).waitFor();holdGet=true;await new Promise(resolve=>holdGetReady=resolve);const inFlightGets=appGets;await page.waitForTimeout(3300);assert.equal(appGets,inFlightGets);await page.getByRole('button',{name:'앱 목록으로',exact:true}).click();await page.getByRole('button',{name:second.name+' 상세 보기',exact:true}).click();holdGet=false;releaseGet();await page.getByRole('heading',{name:second.name,exact:true}).waitFor();assert.equal(await page.getByText(/앱을 내리는 중/).count(),0);const afterNavigation=appGets;await page.waitForTimeout(3300);assert.equal(appGets,afterNavigation);
  reset();
  receipt=null;hasDeployment=false;

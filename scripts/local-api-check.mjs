@@ -43,6 +43,8 @@ try {
   const demoBefore = await page.evaluate(() => localStorage.getItem("freesia.demo.v1"));
   await page.getByLabel("데이터 소스").selectOption("api");
   await navigate("통합");
+  assert.equal(await page.getByLabel("Repository URL").count(), 0);
+  await page.getByRole("button", { name: "등록", exact: true }).click();
   await page.getByLabel("Repository URL").fill(repoURL);
   const registration = page.waitForResponse((r) => r.url().endsWith("/api/repositories") && r.request().method() === "POST");
   await page.getByRole("button", { name: "Repository 등록", exact: true }).click();
@@ -53,6 +55,8 @@ try {
   assert.equal(repo.branch, "main");
   assert.equal(repo.repo_url, repoURL);
   await page.getByRole("button", { name: "등록 해제: " + repo.name + " (main)", exact: true }).waitFor();
+  assert.equal(await page.getByLabel("Repository URL").count(), 0);
+  await page.getByRole("button", { name: "등록", exact: true }).click();
   await page.getByLabel("Repository URL").fill(repoURL);
   await page.getByRole("button", { name: "Repository 등록", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "이미 등록한 Repository" }).waitFor();
@@ -67,13 +71,13 @@ try {
   await page.screenshot({ path: "artifacts/local-api-integration-desktop.png", fullPage: true });
   results.push("repository register201, duplicate409 UI, validation422, reload/list persistence");
 
-  await navigate("애플리케이션 스페이스");
-  await page.getByRole("button", { name: "앱 연결", exact: true }).click();
+  await navigate("애플리케이션");
+  await page.getByRole("button", { name: "애플리케이션 생성", exact: true }).click();
   await page.getByLabel("앱 이름").fill(appName);
   await page.getByLabel("등록한 Repository", { exact: true }).selectOption(repo.id);
   await page.getByLabel("Infra Space", { exact: true }).selectOption(infras[0].id);
   const appCreation = page.waitForResponse((r) => r.url().endsWith("/api/app-spaces") && r.request().method() === "POST");
-  await page.getByRole("button", { name: "앱 만들기", exact: true }).click();
+  await page.getByRole("button", { name: "애플리케이션 생성", exact: true }).click();
   const appResponse = await appCreation;
   assert.equal(appResponse.status(), 201);
   const app = await appResponse.json();
@@ -127,7 +131,7 @@ try {
   await page.waitForFunction(()=>Number(document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value"))>0);
   await page.reload();
   await page.getByLabel("데이터 소스").selectOption("api");
-  await navigate("애플리케이션 스페이스");
+  await navigate("애플리케이션");
   if (await page.getByRole("button",{name:new RegExp(appName)}).count()) await page.getByRole("button",{name:new RegExp(appName)}).click();
   await page.waitForFunction(()=>document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value")==="100",{},{timeout:45000});
   assert.equal((await (await get(`/deployments/${dep.id}`)).json()).status,"success");

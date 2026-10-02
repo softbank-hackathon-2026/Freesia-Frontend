@@ -52,7 +52,7 @@ export default function DeploymentResources({ id, refresh, appName }: { id: stri
       {error && <p role="alert">{error}</p>}
       {!loading && !error && resources?.length === 0 && <p>아직 보고된 자원이 없습니다. 실제 배포 자원 유무는 확인되지 않았습니다.</p>}
       {!error && !!resources?.length && <>
-        <p className="resource-tree-count">{appName} · {resources.length}개 중 {completed}개 완료 <span className="muted">(보고된 자원 기준)</span></p>
+        <p className="resource-tree-count">{appName} / {resources.length}개 중 {completed}개 완료 <span className="muted">(보고된 자원 기준)</span></p>
         <progress max={resources.length} value={completed} aria-label="자원 완료율" />
         <div className="resource-tree-scroll" tabIndex={0} role="region" aria-label="배포 자원 구성도">
           <ul className="resource-tree-root"><li>
@@ -87,15 +87,15 @@ export default function DeploymentResources({ id, refresh, appName }: { id: stri
           </li></ul>
         </div>
         <p className="resource-tree-scroll-hint muted">좌우로 이동해 전체 구성을 확인하세요.</p>
-        <p className="resource-tree-legend">✓ 완료 · … 진행 중 · ＋ 대기 · ! 실패 <span className="muted">· 자원을 누르면 상세 정보</span></p>
+        <p className="resource-tree-legend">✓ 완료 / … 진행 중 / ＋ 대기 / ! 실패 <span className="muted">/ 자원을 누르면 상세 정보</span></p>
         <ul className="resource-tree-totals" aria-label="그룹별 완료 현황">
           {groups.map(group => <li key={group.name}>
             <span>{group.name}{group.items.some(resource => resource.state === 'in_progress') && <em> ← 진행 중</em>}</span>
-            <span>{group.items.filter(resource => resource.state === 'done').length}/{group.items.length} 완료{group.items.some(resource => resource.state === 'failed') && <em className="resource-tree-failed"> · 실패 있음</em>}</span>
+            <span>{group.items.filter(resource => resource.state === 'done').length}/{group.items.length} 완료{group.items.some(resource => resource.state === 'failed') && <em className="resource-tree-failed"> / 실패 있음</em>}</span>
           </li>)}
         </ul>
       </>}
-      <p className="muted resource-tree-note">연결선은 자원 분류를 나타냅니다. 실제 네트워크 연결·의존관계는 제공되지 않습니다.</p>
+      <p className="muted resource-tree-note">연결선은 자원 분류를 나타냅니다. 실제 네트워크 연결/의존관계는 제공되지 않습니다.</p>
     </div>
   </section>;
 }

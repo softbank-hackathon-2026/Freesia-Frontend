@@ -11,7 +11,7 @@ export const templates: Record<
 > = {
   public: {
     name: "Public 중심",
-    summary: "개발·공개 서비스의 공통 기반 샘플",
+    summary: "개발 및 공개 서비스의 인프라 샘플",
     contents: ["Public 진입점", "VPC/Subnet"],
   },
   "multi-az": {

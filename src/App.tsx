@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createApi } from "./lib/api.ts";
 import { foundations, preparedInfraSpaces, initialDemo, parseDemo, STORE_KEY } from "./lib/demo.ts";
 import type { DemoState } from "./lib/demo.ts";
@@ -46,6 +46,9 @@ export default function App() {
   const [newInfra, setNewInfra] = useState(false);
   const [infraDraft, setInfraDraft] = useState<InfraSpaceDraft | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState("");
+  const discardDialog = useRef<HTMLDialogElement>(null);
+  const [discardId, setDiscardId] = useState("");
+  const [discardError, setDiscardError] = useState("");
   const [infras, setInfras] = useState<InfraSpace[]>(foundations);
   const [apps, setApps] = useState<AppSpace[]>([]);
   const [repositories, setRepositories] = useState<Repository[]>([]);
@@ -159,6 +162,7 @@ export default function App() {
   );
   function changeMode(next: DataMode) {
     if (next === mode) return;
+    discardDialog.current?.close();
     const url = new URL(location.href);
     url.searchParams.set("source", next);
     url.searchParams.delete("app");
@@ -176,6 +180,7 @@ export default function App() {
     setApps([]);
   }
   function nav(next: "infra" | "apps" | "integration") {
+    discardDialog.current?.close();
     const url = new URL(location.href);
     url.searchParams.delete("app");
     history.replaceState(null, "", url);
@@ -196,7 +201,12 @@ export default function App() {
     }
   }
   const shownApps = mode === "demo" ? demo.apps : apps;
+  const deployedAppIds = new Set(demo.deployments.map((entry) => entry.app_space_id));
+  const discardableApps = mode === "demo"
+    ? demo.apps.filter((entry) => entry.latest_deployment_id === null && !deployedAppIds.has(entry.id))
+    : [];
   const meeting = demo.meeting ?? newMeetingState();
+  const discardableSpaces = meeting.spaces.filter((space) => canDiscardInfra(space, demo.apps));
   const availableInfras =
     mode === "demo" ? [...foundations, ...readyMeetingSpaces(meeting)] : infras;
   const savedSpace = meeting.spaces.find((s) => s.id === activeSpaceId);
@@ -228,6 +238,18 @@ export default function App() {
     setNewInfra(false);
     setActiveSpaceId(space.id);
   }
+  function discardSpace(id: string) {
+    const space = meeting.spaces.find((entry) => entry.id === id);
+    if (mode !== "demo" || !space || !canDiscardInfra(space, demo.apps))
+      throw new Error("배포 중이거나 연결된 앱이 있는 Space는 삭제할 수 없습니다.");
+    persist({ ...demo, meeting: { ...meeting, spaces: meeting.spaces.filter((entry) => entry.id !== id) } });
+    if (activeSpaceId === id) setActiveSpaceId("");
+  }
+  function discardApp(id: string) {
+    if (mode !== "demo" || !discardableApps.some((entry) => entry.id === id))
+      throw new Error("이 애플리케이션은 삭제할 수 없습니다. 배포 이력과 목록을 확인하세요.");
+    persist({ ...demo, apps: demo.apps.filter((entry) => entry.id !== id) });
+  }
   return (
     <div className="console">
       <a className="skip-link" href="#content">
@@ -257,14 +279,14 @@ export default function App() {
           </button>
           <button
             className={"sidebar-link" + (page === "apps" ? " active" : "")}
-            aria-label="애플리케이션 스페이스"
+            aria-label="애플리케이션"
             aria-current={page === "apps" ? "page" : undefined}
             onClick={() => nav("apps")}
           >
             <span className="sidebar-number" aria-hidden="true">
               02
             </span>
-            <span className="sidebar-label">애플리케이션 스페이스</span>
+            <span className="sidebar-label">애플리케이션</span>
           </button>
           <button
             className={"sidebar-link" + (page === "integration" ? " active" : "")}
@@ -306,7 +328,7 @@ export default function App() {
           <div className="workspace-label">
             <span className="workspace-dot" aria-hidden="true" />
             <span>
-              softbank-hackathon<small>공통 기반에서 애플리케이션까지</small>
+              softbank-hackathon<small>인프라에서 애플리케이션까지</small>
             </span>
           </div>
           <label className="mode-label">
@@ -380,7 +402,11 @@ export default function App() {
               apiRepositories={repositories}
               repositoryLoading={repositoryLoading}
               repositoryError={repositoryError}
-              onRefreshRepositories={() => setReload((n) => n + 1)}
+              onRefresh={() => setReload((n) => n + 1)}
+              loading={mode === "api" && loading}
+              discardableApps={discardableApps}
+              onDiscard={discardApp}
+              storageBlocked={!!storeError}
               onIntegration={() => nav("integration")}
               onStartDeployment={(entry) =>
                 mode === "api" ? updateDeployment(entry) : persist({
@@ -408,11 +434,7 @@ export default function App() {
               onCancel={() => setActiveSpaceId("")}
               readOnly={preparedSpace}
               canDiscard={!preparedSpace && canDiscardInfra(activeSpace, demo.apps)}
-              onDiscard={() => {
-                if (preparedSpace || !canDiscardInfra(activeSpace, demo.apps)) throw new Error("배포 중이거나 연결된 앱이 있는 Space는 삭제할 수 없습니다.");
-                persist({ ...demo, meeting: { ...meeting, spaces: meeting.spaces.filter((space) => space.id !== activeSpace.id) } });
-                setActiveSpaceId("");
-              }}
+              onDiscard={() => discardSpace(activeSpace.id)}
               onSave={(entry) => {
                 if (preparedSpace) throw new Error("미리 준비한 데모 예시는 읽기 전용입니다.");
                 persist({...demo, meeting: {...meeting, spaces: meeting.spaces.map(s => s.id === entry.id ? entry : s)}});
@@ -433,7 +455,7 @@ export default function App() {
               </div>
               {mode === "api" && (
                 <p className="notice">
-                  연동 대기 · Infra Space 생성·인프라 배포 API는 아직 없습니다. 서버 기반은 읽기 전용이며, 대화·코드·Apply 영역은 API 연결 후 사용할 수 있습니다.
+                  연동 대기: Infra Space 생성, 삭제, 인프라 배포 API는 아직 없습니다. 서버 기반은 읽기 전용이며, 대화, 코드, Apply 영역은 API 연결 후 사용할 수 있습니다.
                 </p>
               )}
               {mode === "demo" &&
@@ -503,11 +525,16 @@ export default function App() {
                   <h2 id="infra-list-heading">인프라 스페이스{!loading && !error && ` (${availableInfras.length})`}</h2>
                   <div className="heading-actions">
                     <button
-                      className="secondary"
+                      className="secondary icon-button"
+                      aria-label="새로고침"
+                      title="새로고침"
                       onClick={() => setReload((n) => n + 1)}
                       disabled={loading}
                     >
-                      새로고침
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M20 7v5h-5M4 17v-5h5" />
+                        <path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9" />
+                      </svg>
                     </button>
                     <button
                       className="primary"
@@ -517,7 +544,19 @@ export default function App() {
                         setActiveSpaceId("");
                       }}
                     >
-                      인프라 스페이스 만들기
+                      스페이스 생성
+                    </button>
+                    <button
+                      className="secondary"
+                      disabled={mode === "api" || !discardableSpaces.length || !!storeError}
+                      title={mode === "api" ? "Infra Space 삭제 API가 아직 없습니다." : "미구축 DEMO Space 삭제"}
+                      onClick={() => {
+                        setDiscardId(discardableSpaces[0].id);
+                        setDiscardError("");
+                        discardDialog.current?.showModal();
+                      }}
+                    >
+                      스페이스 삭제
                     </button>
                   </div>
                 </div>
@@ -584,6 +623,29 @@ export default function App() {
                   </>
                 )}
               </section>
+              {mode === "demo" && !discardableSpaces.length && (
+                <p className="muted">삭제할 수 있는 미구축 DEMO Space가 없습니다.</p>
+              )}
+              <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="infra-discard-heading" aria-describedby="infra-discard-description">
+                <h2 id="infra-discard-heading">스페이스 삭제</h2>
+                <p id="infra-discard-description">선택한 DEMO Space의 요구사항과 코드가 브라우저에서 삭제돼요. 실제 AWS 리소스에는 영향을 주지 않아요. 배포 중이거나 앱이 연결된 Space와 준비된 예시는 삭제할 수 없어요.</p>
+                <label htmlFor="infra-discard-target">삭제할 Space</label>
+                <select id="infra-discard-target" value={discardId} onChange={(event) => { setDiscardId(event.target.value); setDiscardError(""); }}>
+                  {discardableSpaces.map((space) => <option key={space.id} value={space.id}>{space.name}</option>)}
+                </select>
+                {discardError && <p className="error" role="alert">{discardError}</p>}
+                <div className="form-actions">
+                  <button className="secondary" onClick={() => discardDialog.current?.close()}>취소</button>
+                  <button className="primary" disabled={!discardableSpaces.some((space) => space.id === discardId)} onClick={() => {
+                    try {
+                      discardSpace(discardId);
+                      discardDialog.current?.close();
+                    } catch (e) {
+                      setDiscardError(e instanceof Error ? e.message : "Space를 삭제하지 못했습니다.");
+                    }
+                  }}>선택한 Space 삭제</button>
+                </div>
+              </dialog>
               {selected && (
                 <section className="panel detail" aria-label="인프라 상세">
                   <div className="section-heading">
