@@ -30,6 +30,20 @@ server.stdout.on("data", (c) => {
 const url = "http://localhost:5173";
 const results = [];
 let browser;
+function luminance(color) {
+  const channels = color.match(/[\d.]+/g).slice(0, 3).map((value) => {
+    const channel = Number(value) / 255;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+function contrastRatio(foreground, background) {
+  const first = luminance(foreground);
+  const second = luminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
 const infra = {
   id: "api-infra",
   name: "API 기반",
@@ -102,33 +116,94 @@ async function navigate(page, name) {
     assert.equal(await page.locator("#primary-navigation").isVisible(), false);
   }
 }
+async function checkDashboardTheme(page) {
+  const colors = await page.evaluate(() => {
+    const root = window.getComputedStyle(document.documentElement);
+    const style = (selector) => window.getComputedStyle(document.querySelector(selector));
+    const primary = style(".primary");
+    const active = style(".sidebar-link.active");
+    const link = style(".text-button");
+    const control = style(".mode-label select");
+    return {
+      canvas: root.backgroundColor,
+      body: window.getComputedStyle(document.body).backgroundColor,
+      sidebar: style(".sidebar").backgroundColor,
+      masthead: style(".masthead").backgroundColor,
+      backdrop: style(".console").backgroundImage,
+      primaryRadius: primary.borderTopLeftRadius,
+      inactiveColor: style(".sidebar-link:not(.active)").color,
+      primaryBackground: primary.backgroundColor,
+      primaryColor: primary.color,
+      primaryBorderWidth: primary.borderTopWidth,
+      secondaryBorderWidth: style(".secondary").borderTopWidth,
+      panelBorderWidth: style(".infra-list").borderTopWidth,
+      bannerBorderWidth: style(".source-banner").borderTopWidth,
+      controlBorder: control.borderTopColor,
+      activeBackground: active.backgroundColor,
+      activeColor: active.color,
+      linkColor: link.color,
+    };
+  });
+  assert.equal(colors.canvas, "rgb(255, 255, 255)");
+  assert.equal(colors.body, "rgb(255, 255, 255)");
+  assert.equal(colors.sidebar, "rgb(255, 255, 255)");
+  assert.match(colors.backdrop, /rgb\(255, 193, 7\)/);
+  assert.match(colors.backdrop, /rgb\(249, 224, 118\)/);
+  assert.equal(colors.masthead, "rgba(0, 0, 0, 0)");
+  assert.equal(colors.inactiveColor, "rgb(43, 46, 70)");
+  assert.ok(contrastRatio(colors.inactiveColor, colors.sidebar) >= 4.5);
+  assert.equal(colors.primaryBackground, "rgb(137, 81, 41)");
+  assert.equal(colors.primaryColor, "rgb(255, 255, 255)");
+  for (const border of [colors.primaryBorderWidth, colors.secondaryBorderWidth, colors.panelBorderWidth, colors.bannerBorderWidth]) {
+    assert.equal(border, "0px");
+  }
+  assert.equal(colors.primaryRadius, "6px");
+  assert.equal(colors.controlBorder, "rgb(98, 103, 124)");
+  assert.ok(contrastRatio(colors.controlBorder, "rgb(255, 255, 255)") >= 3);
+  assert.ok(contrastRatio(colors.controlBorder, "rgb(255, 193, 7)") >= 3);
+  assert.ok(contrastRatio(colors.primaryColor, colors.primaryBackground) >= 4.5);
+  assert.ok(contrastRatio(colors.primaryBackground, "rgb(255, 193, 7)") >= 3);
+  assert.equal(colors.activeBackground, "rgb(255, 247, 223)");
+  assert.equal(colors.activeColor, "rgb(113, 67, 34)");
+  assert.ok(contrastRatio(colors.activeColor, colors.activeBackground) >= 4.5);
+  assert.equal(colors.linkColor, "rgb(137, 81, 41)");
+  assert.ok(contrastRatio(colors.linkColor, "rgb(255, 255, 255)") >= 4.5);
+
+  const primary = page.locator(".primary").first();
+  await primary.hover();
+  const hover = await primary.evaluate((button) => {
+    const style = window.getComputedStyle(button);
+    return { background: style.backgroundColor, color: style.color };
+  });
+  assert.deepEqual(hover, { background: "rgb(113, 67, 34)", color: "rgb(255, 255, 255)" });
+  assert.ok(contrastRatio(hover.color, hover.background) >= 4.5);
+  await page.mouse.move(0, 0);
+}
+async function checkDashboardSurfaces(page) {
+  const surface = await page.locator(".section-heading").first().evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return { background: style.backgroundColor, color: style.color };
+  });
+  assert.deepEqual(surface, { background: "rgb(255, 255, 255)", color: "rgb(43, 46, 70)" });
+  assert.ok(contrastRatio(surface.color, surface.background) >= 4.5);
+  const card = await page.locator(".app-space-card").first().evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return { background: style.backgroundColor, border: style.borderTopWidth };
+  });
+  assert.deepEqual(card, { background: "rgb(255, 255, 255)", border: "0px" });
+}
 async function checkSourceBanner(page) {
   const colors = await page.locator(".source-banner").evaluate((banner) => {
     const style = window.getComputedStyle(banner);
-    const luminance = (color) => {
-      const channels = color.match(/[\d.]+/g).slice(0, 3).map((value) => {
-        const channel = Number(value) / 255;
-        return channel <= 0.04045
-          ? channel / 12.92
-          : ((channel + 0.055) / 1.055) ** 2.4;
-      });
-      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
-    };
-    const foreground = luminance(style.color);
-    const background = luminance(style.backgroundColor);
     return {
       color: style.color,
       background: style.backgroundColor,
-      contrast: (Math.max(foreground, background) + 0.05) /
-        (Math.min(foreground, background) + 0.05),
-      demo: banner.classList.contains("demo"),
     };
   });
+  colors.contrast = contrastRatio(colors.color, colors.background);
   assert.ok(colors.contrast >= 4.5, `Source banner contrast: ${colors.contrast}`);
-  if (colors.demo) {
-    assert.equal(colors.background, "rgb(180, 35, 24)");
-    assert.equal(colors.color, "rgb(255, 255, 255)");
-  }
+  assert.equal(colors.background, "rgb(249, 224, 118)");
+  assert.equal(colors.color, "rgb(43, 46, 70)");
 }
 async function checkSidebar(page, mobile) {
   const sidebar = page.locator("#primary-navigation");
@@ -189,6 +264,22 @@ async function checkSidebar(page, mobile) {
     const link = sidebar.getByRole("button", { name, exact: true, includeHidden: true });
     assert.equal(await link.evaluate((button) => button.scrollWidth > button.clientWidth), false);
     await link.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    const focus = await link.evaluate((button) => {
+      const style = window.getComputedStyle(button);
+      return {
+        visible: button.matches(":focus-visible"),
+        outline: style.outlineColor,
+        style: style.outlineStyle,
+      };
+    });
+    assert.deepEqual(focus, {
+      visible: true,
+      outline: "rgb(137, 81, 41)",
+      style: "solid",
+    });
+    assert.ok(contrastRatio(focus.outline, "rgb(255, 255, 255)") >= 3);
     await page.keyboard.press("Enter");
     assert.equal(await link.getAttribute("aria-current"), "page");
     assert.equal(await sidebar.locator('[aria-current="page"]').count(), 1);
@@ -324,6 +415,7 @@ try {
     await page.goto(url);
     await checkSidebar(page, name === "mobile");
     await page.getByRole("heading", { name: "인프라 스페이스", exact: true }).waitFor();
+    await checkDashboardTheme(page);
     assert.deepEqual(await page.getByRole("columnheader").allTextContents(), ["이름", "네트워크 구성", "연결된 애플리케이션", "생성된 시간"]);
     assert.equal(await page.getByRole("columnheader",{name:"네트워크 유형",exact:true}).count(),0);
     assert.equal(await page.getByRole("columnheader",{name:"배포 대상",exact:true}).count(),0);
@@ -845,6 +937,7 @@ try {
   await cardPage.goto(url + "/?source=api");
   const cardDemoBefore = await cardPage.evaluate(() => localStorage.getItem("freesia.demo.v1"));
   await navigate(cardPage, "애플리케이션 스페이스");
+  await checkDashboardSurfaces(cardPage);
   const mainCard = cardPage.getByRole("button", { name: "운영 웹 상세 보기", exact: true });
   await mainCard.getByText("통합 정보 불러오는 중…", { exact: true }).waitFor();
   assert.match(await mainCard.innerText(), /https:\/\/github\.com\/team\/web/);

@@ -68,3 +68,40 @@ Approval recorded 2026-10-02: user `ㄱ ㄱ` to the preceding combined scope/des
 2026-10-02 unit status: UI-02 implemented/tested/reviewed/committed/pushed (`b566cb4`, matching remote SHA verified). UI-03 in progress under the approved card design and plan.
 
 2026-10-02 final unit status: UI-03 implemented/tested/reviewed/committed/pushed (`0e489d7`, matching remote SHA verified). All three approved units are complete; no remaining implementation or publication gate for this scope. The original proposed/in-progress entries are historical. Final handoff and unverified backend/cloud/deployment limits are recorded in [eval/handoff](infra-ai-flow-eval.md#space-list-uiux-completed-handoff--2026-10-02).
+
+## Honeycomb palette follow-up — 2026-10-02 (proposed)
+Status: user approved the updated emphasis colors and white site background on 2026-10-02. UI-04 implementation, checks and independent review are complete; publication approval for this diff remains pending.
+
+| Unit | Owned files | Design and verification |
+|---|---|---|
+| UI-04 | `src/styles.css`, `scripts/browser-check.mjs`; existing spec/plan/eval docs | Reuse global CSS. `#FFC107` for primary fills with dark text; `#F9E076` for hover/secondary emphasis and non-error mode banners; `#FFFDD0` for soft component surfaces; `#895129` for links, focus and selected accents. Set the document/body canvas to `#FFFFFF`, keep actual error red semantic. Add RED browser checks for canvas/palette/contrast; run required checks; inspect desktop/mobile captures; independent readonly source/visual review; record commit/push approval separately. No behavior/API/data changes. |
+
+Acceptance: normal-size text contrast at least 4.5:1; controls and keyboard focus remain visible; all current routes use the shared Honeycomb palette; page canvas stays white; no interaction or stored data changes. Actual backend/cloud and deployment remain outside scope. Commit/push approval for this new diff is not yet recorded.
+
+2026-10-02 approval: user `ㄱㄱ` approved the Honeycomb palette scope, requirements and UI-04 plan above. Implementation may proceed; commit/push and PR #5 update require separate explicit approval after final diff review.
+
+2026-10-02 completion: implementation, `npm run check`, `npm run test:e2e` (20 browser groups), `git diff --check`, desktop/mobile inspection and independent review passed. Design Quality 8, Originality 7, Craft 8, Functionality 8. Final diff is ready for user review; publication approval remains pending.
+
+## Yellow and charcoal reference revision — 2026-10-02
+Current UI-04 design: the user's new reference explicitly replaces Honeycomb. Reuse the approved CSS-only unit and owned files: `src/styles.css`, `scripts/browser-check.mjs`, existing spec/plan/contract/eval and README. Yellow `#FFE500` masthead/actions/selected navigation, charcoal `#37383E` sidebar/section headings, white canvas/cards, neutral gray support surfaces, flat corners and sans-serif branding. Preserve current screen layout, all interactions and red error semantics.
+
+Implementation plan remains native shared CSS without new assets or dependencies. Revised computed-style assertions must first fail against Honeycomb; checks, desktop/mobile capture inspection and independent read-only review are required again. Text >=4.5:1, interactive borders/focus >=3:1. Current request approves the revised visual requirement under the existing unit plan; implementation is in progress and commit/push/PR update approval remains pending.
+
+2026-10-02 current completion: implementation, `npm run check` (35 native tests/build), `npm run test:e2e` (20 browser groups), fresh desktop/mobile inspection and independent review PASS. Design Quality 8, Originality 7, Craft 8, Functionality 8. This supersedes the in-progress state above and the historical Honeycomb verification. Revised diff remains uncommitted/unpushed and PR update awaits explicit approval.
+
+## Honeycomb restoration — 2026-10-02
+Latest user correction reinstates the approved Honeycomb UI-04 requirements/design and same CSS/browser-check unit plan. Restore the four supplied Honeycomb colors, white surfaces, rounded geometry and earlier typography. Retain brown interactive borders/focus and the corrected pre-activation keyboard test. Existing owned files and behavior/API/data boundaries remain.
+
+2026-10-02 current completion: exact Honeycomb CSS restoration, required `npm run check` (35 native tests/build), `npm run test:e2e` (20 browser groups) and fresh independent source/desktop/mobile review PASS. Design Quality 8, Originality 7, Craft 8, Functionality 8; no blocking findings. Current [eval/handoff](infra-ai-flow-eval.md#honeycomb-restoration--2026-10-02) applies. Git publication is still unapproved.
+
+## Yellow dashboard reference — 2026-10-02
+Current UI-04 requirement is the user's compact dashboard screenshot, with its green upper backdrop replaced by `#FFC107`/`#F9E076` and the page canvas kept white. Reuse the approved native-CSS/browser-check plan: compact white navigation and masthead, modern sans-serif type, violet actions, white cards/table panels, light neutral secondary surfaces and subtle shadows. No extra ticket widgets or statistics. Existing three sidebar labels, linked-app counts and Application relationship fields/actions remain.
+
+Ownership remains `src/styles.css`, `scripts/browser-check.mjs`, existing spec/plan/contract/eval and README. Add a failing backdrop/theme/contrast assertion before CSS; run both required commands and fresh independent source/desktop/mobile review with all four design scores >=6. Controls/focus >=3:1 and normal text >=4.5:1. The explicit current instruction approves the changed visual requirements within this existing unit plan. Handlers, markup, data, API, storage, routes and dependencies are outside the diff. Commit/push/PR update remain pending explicit approval.
+
+2026-10-02 current completion: native shared-CSS implementation, `npm run check` (35 native tests/build), `npm run test:e2e` (20 browser groups) and fresh independent source/desktop/mobile review PASS. Design Quality 8, Originality 7, Craft 8, Functionality 8; no blocking findings. This supersedes prior theme verification. The reviewed seven-file diff is uncommitted/unpushed.
+
+### Brown borderless correction — 2026-10-02
+The current explicit correction authorizes brown actions (`#895129`, hover `#714322`) and borderless ordinary buttons/cards/panels with warm `#FFF7DF` secondary/selected fills. Reuse existing UI-04 design/implementation/verification ownership; current yellow dashboard layout and behavior stay unchanged. Remove frame borders and active-menu edge stripe; preserve input boundaries, row dividers, semantic errors and visible keyboard focus. Acceptance: no violet accents, zero-width ordinary button/card/panel borders, text >=4.5:1 and necessary control/focus indicators >=3:1, required check/E2E and independent desktop/mobile review with all four scores >=6. No publication approval.
+
+2026-10-02 current completion: implementation, required check (35 native tests/build), E2E (20 browser groups) and independent source/desktop/mobile review PASS. Design Quality 8, Originality 7, Craft 8, Functionality 8; no blockers. Ordinary default/hover frame borders are absent, input/error boundaries and focus remain accessible. Prior violet results are historical; current diff remains unpublished.
