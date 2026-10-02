@@ -781,6 +781,8 @@ try {
         ...app,
         latest_deployment_id: hasDeployment ? "dep-api" : null,
       };
+    else if (path.endsWith("/logs")) value = {status:"waiting",message:"서버 로그 수집 대기",lines:[]};
+    else if (path.endsWith("/metrics")) value = {status:"waiting",message:"서버 지표 수집 대기",compute:"ecs-fargate",cpu_percent:null,memory_percent:null,response_time_ms:null,request_count:null,error_count:null,measured_at:null};
     else if (path.endsWith("/analysis")) value = analysis;
     else if (path.endsWith("/plans")) return route.fulfill({status:404,contentType:"application/json",body:JSON.stringify({detail:"Not Found"})});
     else if (path.endsWith("/resources")) value = [{address:"aws_ecs_service.web",type:"aws_ecs_service",action:"create",state:"done",reason:null,updated_at:"now"}];
@@ -939,10 +941,12 @@ try {
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,3,"refresh restores app and terminal snapshot");
   await apiPage.getByRole("tab", { name: "로그", exact: true }).click();
-  assert.match(await apiPage.locator(".log-output").innerText(),/연동 대기/);
-  assert.doesNotMatch(await apiPage.locator(".log-output").innerText(),/HTTP server started|GET \/ -> 200/);
+  await apiPage.getByText("서버 로그 수집 대기",{exact:true}).waitFor();
+  assert.equal(await apiPage.locator(".log-output").count(),0,"waiting API logs never display demo lines");
+  assert.ok(calls.some(call=>call.path.endsWith("/logs?limit=100") || call.path.endsWith("/logs")));
   await apiPage.getByRole("tab",{name:"모니터링",exact:true}).click();
-  assert.deepEqual(await apiPage.locator(".metrics strong").allTextContents(),["—","—","—"]);
+  await apiPage.getByText("서버 지표 수집 대기",{exact:true}).waitFor();
+  assert.doesNotMatch(await apiPage.getByRole("region",{name:"모니터링",exact:true}).innerText(),/24%|38%|128 ms/);
   assert.equal(await apiPage.locator(".metrics meter").count(),0);
   await apiPage.screenshot({path:"artifacts/api-metrics-parity-mobile.png",fullPage:true});
   assert.equal(

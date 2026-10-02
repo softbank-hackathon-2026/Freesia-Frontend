@@ -516,3 +516,15 @@ Handoff: UI/demo preparation implemented/tested locally, production latest-code/
 
 ### Redeployment UI publication authorization — 2026-10-02T23:20:43.815775+09:00
 User explicitly requested commit, then push of the current verified diff on codex/app-redeploy-flow. Source/test files are unchanged after the successful check41/E2E24/focused regression results; fresh git diff --check/status and verification timestamps were inspected. Publish only this branch. No PR/main merge/deployment/issue edit is authorized. Verify remote SHA after push; API latest-code/config-reuse support is still pending.
+
+
+## Logs API integration verified — 2026-10-03T00:05:57.966227+09:00
+Unit1 on codex/app-monitoring-api: validated GET logs(limit100), API status/error/retry states, local timestamps/escaped output, sequential15s poll and cancel-on-context-change; demo retains labeled samples and zero monitoring HTTP. No CSS/dependency/backend/AWS changes.
+Verification: logs adapter test RED->GREEN; npm run check PASS(TypeScript, ESLint,42native tests,build); BROWSER_CHECK_PORT15175 npm run test:e2e PASS; focused node scripts/monitoring-check.mjs PASS(initial/state/empty/500/invalid/recovery/poll/no-overlap/app-tab-source-abort/demo isolation/XSS/desktop1440/mobile390). Whole harness initially failed obsolete API-unsupported assertions, now uses server waiting response; scoped ESLint/diff check PASS. Parent reviewed source/key lifecycle and both screenshots, no blocker. Actual CloudWatch/production API unverified.
+User authorized this feature's commit and push on codex/app-monitoring-api. Next unit: metrics; no PR/merge/deployment.
+
+
+## Metrics API integration verified — 2026-10-03T00:21:02.655594+09:00
+Unit2 on codex/app-monitoring-api after logs0b386ce: GET metrics shape/type validation, five business states and transport errors, Fargate5/Lambda3/EC2CPU-only cards, null-versus-zero and measured_at distinction, native two-decimal formatting, manual/sequential15s reads with app/source/deployment/teardown cancellation. Existing demo samples and CSS/dependencies unchanged; Fargate errors explicitly mean target/app5xx, not ALB-origin errors.
+Verification: API regression RED->GREEN; npm run check PASS(TypeScript/ESLint/43native tests/build); BROWSER_CHECK_PORT15175 npm run test:e2e PASS24groups; node scripts/monitoring-check.mjs PASS8groups covering logs plus metrics support/partial-null/realzero/timestamps/businessstates/HTTP500/invalid/retry/poll/no-overlap/tab-app-source-abort/demozeroHTTP/teardownlate-response isolation. Parent source review and1440/390screenshots inspected; worker inspected final long-decimal captures, scopedlint PASS; diff check PASS. No P1/P2 blocker found in scoped review.
+Current implementation and local verification complete. User authorized separate feature commit/push, no PR/main merge/deploy/Notion/backend changes. Publish this metrics unit separately from0b386ce; remote exact-SHA checkpoint recorded in workspace/wiki after publication. Actual CloudWatch collection and deployed backend end-to-end remain unverified; tests use controlled responses and no real AWS operation.

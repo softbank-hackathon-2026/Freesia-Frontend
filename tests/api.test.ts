@@ -479,3 +479,60 @@ test("resource API accepts deleted but rejects unknown states", async () => {
   assert.deepEqual(await response("deleted"), [resource]);
   await assert.rejects(response("unexpected"), {code:"invalid_response"});
 });
+
+
+test("logs use encoded GET route and validate every monitoring state and line", async () => {
+  const calls: {url:string; init?:RequestInit}[] = [];
+  const data = {status:"ok",message:null,lines:[{at:"2026-10-02T12:00:00Z",message:"<script>not markup</script>"}]};
+  const controller = new AbortController();
+  const api = createApi("/api/", async (url,init) => {
+    calls.push({url:String(url),init});
+    return new Response(JSON.stringify(data));
+  });
+  assert.deepEqual(await api.logs("app/one",controller.signal),data);
+  assert.equal(calls[0].url,"/api/app-spaces/app%2Fone/logs?limit=100");
+  assert.equal(calls[0].init?.method,"GET");
+  assert.equal(calls[0].init?.body,undefined);
+  assert.equal(calls[0].init?.signal,controller.signal);
+  for (const status of ["waiting","not_deployed","unsupported","error"]) {
+    const body={status,message:"server explanation",lines:[]};
+    assert.deepEqual(await createApi("/api",async()=>new Response(JSON.stringify(body))).logs("a"),body);
+  }
+  for (const patch of [{status:"healthy"},{message:3},{lines:null},{lines:[{at:1,message:"bad"}]},{lines:[{at:"now",message:[]}]},{lines:[null]}]) {
+    await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify({...data,...patch}))).logs("a"),{code:"invalid_response"});
+  }
+  await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify({error:"not_found",message:"missing app"}),{status:404})).logs("a"),{status:404,code:"not_found"});
+  controller.abort();
+  await assert.rejects(api.logs("a",controller.signal),{name:"AbortError"});
+  assert.equal(calls.length,1);
+});
+
+
+test("metrics preserve partial null and real zero with compute-specific validated GET data", async () => {
+  const data = {status:"ok",message:null,compute:"ecs-fargate",cpu_percent:24.5,memory_percent:null,response_time_ms:12.5,request_count:42,error_count:0,measured_at:"2026-10-02T12:00:00Z"};
+  const calls: {url:string;init?:RequestInit}[]=[];
+  const controller=new AbortController();
+  const api=createApi("/api",async(url,init)=>{
+    calls.push({url:String(url),init});
+    return new Response(JSON.stringify(data));
+  });
+  assert.deepEqual(await api.metrics("app/one",controller.signal),data);
+  assert.equal(calls[0].url,"/api/app-spaces/app%2Fone/metrics");
+  assert.equal(calls[0].init?.method,"GET");
+  assert.equal(calls[0].init?.body,undefined);
+  assert.equal(calls[0].init?.signal,controller.signal);
+  const empty={cpu_percent:null,memory_percent:null,response_time_ms:null,request_count:null,error_count:null,measured_at:null};
+  for (const compute of ["ecs-fargate","lambda","ec2",null]) {
+    for (const status of ["ok","waiting","not_deployed","unsupported","error"]) {
+      const body={...data,...empty,compute,status};
+      assert.deepEqual(await createApi("/api",async()=>new Response(JSON.stringify(body))).metrics("a"),body);
+    }
+  }
+  for (const patch of [{status:"healthy"},{compute:"unknown"},{cpu_percent:"24"},{cpu_percent:-1},{memory_percent:false},{response_time_ms:[]},{request_count:1.5},{error_count:-1},{measured_at:42},{message:[]},{cpu_percent:undefined}]) {
+    await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify({...data,...patch}))).metrics("a"),{code:"invalid_response"});
+  }
+  await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify({error:"unavailable",message:"try later"}),{status:503})).metrics("a"),{status:503,code:"unavailable"});
+  controller.abort();
+  await assert.rejects(api.metrics("a",controller.signal),{name:"AbortError"});
+  assert.equal(calls.length,1);
+});

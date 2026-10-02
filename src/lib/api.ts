@@ -1,4 +1,4 @@
-import type { Analysis, AppSpace, AppSpaceCreate, Deployment, DeploymentEvent, InfraSpace, Repository, DeploymentResource, PlanSet, TeardownReceipt } from "./types.ts";
+import type { Analysis, AppLogs, AppMetrics, AppSpace, AppSpaceCreate, Deployment, DeploymentEvent, InfraSpace, Repository, DeploymentResource, PlanSet, TeardownReceipt } from "./types.ts";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -48,7 +48,27 @@ function planSetShape(value: unknown): boolean {
     return !!p && fields(p,["id","name","summary","template"]) && strings(p.pros) && strings(p.cons) && !!record(p.values) && jsonValue(p.values);
   });
 }
+function monitoringShape(v: Record<string, unknown>): boolean {
+  return typeof v.status === "string" && ["ok","waiting","not_deployed","unsupported","error"].includes(v.status) && nullableString(v.message);
+}
+function logsShape(value: unknown): boolean {
+  const v = record(value);
+  return !!v && monitoringShape(v) && Array.isArray(v.lines) && v.lines.every(item => {
+    const line = record(item);
+    return !!line && fields(line,["at","message"]);
+  });
+}
+function metricsShape(value: unknown): boolean {
+  const v = record(value);
+  return !!v && monitoringShape(v)
+    && (v.compute === null || (typeof v.compute === "string" && ["ecs-fargate","lambda","ec2"].includes(v.compute)))
+    && ["cpu_percent","memory_percent","response_time_ms","request_count","error_count"].every(key => v[key] === null || (typeof v[key] === "number" && Number.isFinite(v[key]) && v[key] >= 0))
+    && ["request_count","error_count"].every(key => v[key] === null || Number.isInteger(v[key]))
+    && nullableString(v.measured_at);
+}
 function validShape(path: string, value: unknown, post: boolean): boolean {
+  if (/^\/app-spaces\/[^/]+\/metrics$/.test(path)) return metricsShape(value);
+  if (/^\/app-spaces\/[^/]+\/logs(?:\?|$)/.test(path)) return logsShape(value);
   if (path.endsWith("/teardown")) {
     const v = record(value);
     return !!v && fields(v,["app_space_id","requested_at"]) && v.status === "requested";
@@ -141,6 +161,8 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
     infra: (id:string, signal?:AbortSignal) => request<InfraSpace>(`/infra-spaces/${encodeURIComponent(id)}`,undefined,"GET",signal),
     apps: (signal?:AbortSignal) => request<AppSpace[]>("/app-spaces",undefined,"GET",signal),
     app: (id:string, signal?:AbortSignal) => request<AppSpace>(appPath(id),undefined,"GET",signal),
+    metrics: (id:string, signal?:AbortSignal) => request<AppMetrics>(`${appPath(id)}/metrics`,undefined,"GET",signal),
+    logs: (id:string, signal?:AbortSignal) => request<AppLogs>(`${appPath(id)}/logs?limit=100`,undefined,"GET",signal),
     deleteApp: (id:string, signal?:AbortSignal) => request<void>(appPath(id),undefined,"DELETE",signal),
     createApp: (body:AppSpaceCreate, signal?:AbortSignal) => request<AppSpace>("/app-spaces",body,"POST",signal),
     analyze,
