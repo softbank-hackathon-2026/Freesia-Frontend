@@ -98,3 +98,15 @@ export type AppLogs = {
   message: string | null;
   lines: { at: string; message: string }[];
 };
+
+export type AppMetrics = {
+  status: MonitoringStatus;
+  message: string | null;
+  compute: "ecs-fargate" | "lambda" | "ec2" | null;
+  cpu_percent: number | null;
+  memory_percent: number | null;
+  response_time_ms: number | null;
+  request_count: number | null;
+  error_count: number | null;
+  measured_at: string | null;
+};

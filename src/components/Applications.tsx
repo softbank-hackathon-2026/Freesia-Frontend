@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import DeploymentResources from "./DeploymentResources.tsx";
 import ApplicationLogs from "./ApplicationLogs.tsx";
+import ApplicationMetrics from "./ApplicationMetrics.tsx";
 import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
 import {
   availableCandidates,
@@ -1023,37 +1024,7 @@ export default function Applications({
             ) : tab === "logs" ? (
               <ApplicationLogs key={`${mode}:${selected.id}:${deployment?.id ?? selected.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected.teardown_status ?? "none"}:${selected.teardown_requested_at ?? ""}:${selected.teardown_finished_at ?? ""}`} id={selected.id} mode={mode}/>
             ) : (
-              <section className="panel">
-                <div className="section-heading">
-                  <h2>모니터링</h2>
-                  <span className="badge">
-                    {mode === "demo" ? "샘플 수치" : "API 미지원"}
-                  </span>
-                </div>
-                <div className="panel-body">
-                  <p>{mode === "demo" ? "실제 앱 관측 데이터가 아닌 고정 샘플입니다." : "연동 대기 · 메트릭·알림 API가 아직 없습니다."}</p>
-                  <div className="metrics">
-                    <div>
-                      <span>CPU</span>
-                      <strong>{mode === "demo" ? "24%" : "—"}</strong>
-                      {mode === "demo" ? <meter min={0} max={100} value={24} aria-label="샘플 CPU" /> : <small>연동 대기</small>}
-                    </div>
-                    <div>
-                      <span>메모리</span>
-                      <strong>{mode === "demo" ? "38%" : "—"}</strong>
-                      {mode === "demo" ? <meter min={0} max={100} value={38} aria-label="샘플 메모리" /> : <small>연동 대기</small>}
-                    </div>
-                    <div>
-                      <span>응답 시간</span>
-                      <strong>{mode === "demo" ? "128 ms" : "—"}</strong>
-                      <small>{mode === "demo" ? "샘플" : "연동 대기"}</small>
-                    </div>
-                  </div>
-                  <p className="notice">
-                    {mode === "demo" ? "알림: 고정 시연 화면입니다. 실제 정상 상태를 의미하지 않습니다." : "알림: 연동 대기입니다. 지표가 없는 상태를 정상이나 0으로 표시하지 않습니다."}
-                  </p>
-                </div>
-              </section>
+              <ApplicationMetrics key={`${mode}:${selected.id}:${deployment?.id ?? selected.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected.teardown_status ?? "none"}:${selected.teardown_requested_at ?? ""}:${selected.teardown_finished_at ?? ""}`} id={selected.id} mode={mode}/>
             )}
           </div>
         </>

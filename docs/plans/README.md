@@ -229,3 +229,7 @@ User authorized commit/push of the verified redeployment UI preparation on codex
 Current active unit: logs API connection, then metrics. User approved implementation plus feature-separated commit/push on codex/app-monitoring-api; backend3d04671 contracts verified read-only. No PR/main merge/deployment/Notion changes.
 
 Logs unit verified 2026-10-03T00:05:57.966227+09:00: check42/E2E/focused/source+visual PASS. Authorized separate commit/push next; metrics unit remains pending.
+
+Logs unit published0b386ce; remote exact/clean verified. Metrics unit now active under the same user approval; separate commit/push after checks.
+
+Monitoring implementation complete 2026-10-03T00:21:02.655594+09:00: logs0b386ce already published; metrics validated check43/E2E24/focused8/source+visual. Feature-separated publication approved on codex/app-monitoring-api. No live monitoring verification, PR/main merge or deployment in this task.
