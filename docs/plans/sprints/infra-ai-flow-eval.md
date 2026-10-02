@@ -147,3 +147,21 @@ Feedback preview: workspace output/html/Freesia-resource-tree-preview.html plus 
 
 
 2026-10-02T15:57:11.741576+09:00 publication gate: user explicitly requested committing and pushing the current resource-tree work to a non-main branch. Target codex/deployment-resource-tree; no PR/merge/deploy requested. Fresh checks PASS: node scripts/check.mjs (35 unit tests, TypeScript, ESLint, build), node scripts/resource-tree-check.mjs, full scripts/browser-check.mjs via temporary port15173 copy (20 groups, temporary file removed), git diff --check. Local API london resources[] and demo-mode exclusion are verified limitations; fixtures do not prove real AWS callback integration. Commit/push follows this gate; verify remote SHA before reporting publication.
+
+
+## Deployment follow-up verified — 2026-10-02T16:20:58.920421+09:00
+Implemented container-port summary for container plans (3000/80 preserved, invalid/missing warning, no override), PR13 bodyless teardown adapter with202/matchingapp validation, optional app receipt schema, explicit confirmation, receipt/unknown outcome UI and duplicate/redeployment guard. Unsupported old backend field stays disabled. No fake completion/URL clearing. Knownreceipt restores fromGET; unknown-clientlock only lasts mountedApplicationsview, serveridempotency/terminalcontract stillrequired.
+Evidence: API tests RED2/GREEN3 then full node scripts/check.mjs PASS (38tests, TypeScript,ESLint,build). Focused browser script deployment-followup-check.mjs first RED missingbutton then GREEN atisolated15174 and current5173, coversport/types/nooverride/plan_id, unsupported/confirmcancel/receipt/reload,409/502/network/404, pendingduplicate/redeploy and lateA/B. Existing20group browser-check PASS on temporary15173copy, removed. Local-callback-check realFastAPI53dfc2d+temporarySQLite+synchronoussignedcallbacks+realSSE+React PASS: invalidHMAC401/nodatachange, callback204/save, tree0/3->1/3->2/3, failurereason, reload, terminal409. Testserver/tempDBcleanup passed; originalDB/source notmodified. Scopedlint PASS; final diff --check PASS. Visual screenshots port/teardownreceipt inspected; section-heading/panel-body reused afterinitialspacingfix. Independentreview P1destroy/applyrace and P2ambiguousretry werefixed/reviewed; knowncrossunmountlocklimit documented.
+Localread-onlyevidence: london plan-e56719a270b6 container_port80 despite sampleanalysisHTTP3000; maintainerPR13 usesanalysisvalues but main31a0fd5 stilldefaults. Existingplansremainunchanged. Runtime53dfc2d notupgraded. OwnVite5173restarted PID16564->29536 toclearstale servedmodule; latestapi confirmed.
+No realAWS/GitHubworkflow/AI/teardown execution, noNotionwrites or newcommit/push/PR. Branch codex/deployment-resource-tree latestpublished66fabd5; followupdiffunpublished. Teamquestions below are drafts only.
+
+
+### Team question draft — not sent
+태원님·소정님, 프론트에서 포트 확인, 내리기 요청 접수, 자원 트리 연결을 보완했습니다. 격리된 로컬 서버에서 서명 콜백 → DB → SSE → 트리 갱신은 확인했습니다. 아래 세 가지 확인 부탁드립니다.
+
+1. 포트: 현재 로컬 샘플 분석에는3000이 표시되지만 저장된 구성안은80입니다. PR13 반영 후3000포트 샘플 앱을 재분석하고 새 구성안을 만들면 최종plan.values.container_port에도3000이 들어오는지 확인 부탁드립니다. 기본값으로 대체된 경우 프론트에 알려줄 방법도 있을까요?
+2. 실제 배포: DEPLOY_SIMULATE=false로 함께 테스트할 수 있는 시점과 샘플 앱을 알려주세요. 시작 시 전체 자원목록과 진행 중 자원별 상태도 콜백에 포함되는지 확인 부탁드립니다.
+3. 내리기: 콜백 수신주소·본문과 프론트 조회용상태/실패이유를 확정 부탁드립니다. 중복 내리기, 내리는 중 재배포를 서버에서 막는지와 완료/재배포 때teardown_requested_at을 어떻게 정리할지도 필요합니다. 현재 프론트는 요청접수만 표시하고 완료여부 미확인 중에는 내리기·재배포를 막고 있습니다.
+
+
+2026-10-02T16:52:15.576988+09:00 publication approval: user explicitly requested commit and push of the current follow-up diff. Target codex/deployment-resource-tree. Scope: port display, request-only teardown with guards, unit/browser/isolated callback checks and related docs. Existing verification38unit/20browser/focused/isolatedcallback PASS remains applicable; no subsequent product changes. Fresh git diff --check PASS. No PR/merge/deploy requested. Publication result will be tracked in session/wiki after remote SHA verification.

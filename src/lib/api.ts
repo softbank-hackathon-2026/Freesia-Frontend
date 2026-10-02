@@ -1,4 +1,4 @@
-import type { Analysis, AppSpace, AppSpaceCreate, Deployment, DeploymentEvent, InfraSpace, Repository, DeploymentResource, PlanSet } from "./types.ts";
+import type { Analysis, AppSpace, AppSpaceCreate, Deployment, DeploymentEvent, InfraSpace, Repository, DeploymentResource, PlanSet, TeardownReceipt } from "./types.ts";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -16,7 +16,7 @@ function repositoryShape(value: unknown): boolean {
 }
 function appShape(value: unknown): boolean {
   const v = record(value);
-  return !!v && fields(v,["id","name","repo_url","branch","infra_id","created_at"]) && nullableString(v.latest_deployment_id);
+  return !!v && fields(v,["id","name","repo_url","branch","infra_id","created_at"]) && nullableString(v.latest_deployment_id) && (v.teardown_requested_at === undefined || nullableString(v.teardown_requested_at));
 }
 function deploymentShape(value: unknown): boolean {
   const v = record(value);
@@ -47,6 +47,10 @@ function planSetShape(value: unknown): boolean {
   });
 }
 function validShape(path: string, value: unknown, post: boolean): boolean {
+  if (path.endsWith("/teardown")) {
+    const v = record(value);
+    return !!v && fields(v,["app_space_id","requested_at"]) && v.status === "requested";
+  }
   if (/^\/deployments\/[^/]+\/resources$/.test(path)) return Array.isArray(value) && value.every(resourceShape);
   if (/\/plans(?:\?|$)/.test(path)) return planSetShape(value);
   if (path === "/repositories") return post ? repositoryShape(value) : Array.isArray(value) && value.every(repositoryShape);
@@ -91,7 +95,7 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
       const error = record(data);
       throw new ApiError(typeof error?.message === "string" ? error.message : `요청 실패 (HTTP ${response.status})`, response.status, typeof error?.error === "string" ? error.error : undefined);
     }
-    if (!validShape(path, data, method === "POST")) throw new ApiError("백엔드 응답 형식이 올바르지 않습니다.",response.status,"invalid_response");
+    if ((path.endsWith("/teardown") && response.status !== 202) || !validShape(path, data, method === "POST")) throw new ApiError("백엔드 응답 형식이 올바르지 않습니다.",response.status,"invalid_response");
     return data as T;
   }
   const appPath = (id: string) => `/app-spaces/${encodeURIComponent(id)}`;
@@ -140,6 +144,11 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
     createPlans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),
     plans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans?compute=${encodeURIComponent(compute)}`,undefined,"GET",signal),
     deploy: (id:string,compute:string,planId?:string,signal?:AbortSignal) => request<Deployment>(`${appPath(id)}/deployments`,{compute,...(planId ? {plan_id:planId} : {})},"POST",signal),
+    teardown: async (id:string,signal?:AbortSignal) => {
+      const receipt = await request<TeardownReceipt>(`${appPath(id)}/teardown`,undefined,"POST",signal);
+      if (receipt.app_space_id !== id) throw new ApiError("내리기 응답의 앱이 요청과 다릅니다.",202,"invalid_response");
+      return receipt;
+    },
     deployment: (id:string,signal?:AbortSignal) => request<Deployment>(`/deployments/${encodeURIComponent(id)}`,undefined,"GET",signal),
     resources: (id:string,signal?:AbortSignal) => request<DeploymentResource[]>(`/deployments/${encodeURIComponent(id)}/resources`,undefined,"GET",signal),
   };
