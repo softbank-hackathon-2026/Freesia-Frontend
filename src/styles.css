@@ -53,7 +53,8 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-pre:focus-visible {
+pre:focus-visible,
+[role="tabpanel"]:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 4px;
 }

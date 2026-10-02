@@ -233,3 +233,33 @@ Logs unit verified 2026-10-03T00:05:57.966227+09:00: check42/E2E/focused/source+
 Logs unit published0b386ce; remote exact/clean verified. Metrics unit now active under the same user approval; separate commit/push after checks.
 
 Monitoring implementation complete 2026-10-03T00:21:02.655594+09:00: logs0b386ce already published; metrics validated check43/E2E24/focused8/source+visual. Feature-separated publication approved on codex/app-monitoring-api. No live monitoring verification, PR/main merge or deployment in this task.
+
+
+## Five frontend UX fixes — approved 2026-10-03T01:17:33.173690+09:00
+User approved new branch codex/frontend-ux-fixes, ordered units1–5, separate commit and push after each verified unit. Approval covers requirements/design/implementation and publication of each described unit; no PR/merge/deployment/backend/Notion work. Existing architecture, React/native browser APIs and installed dependencies are reused.
+1. Creation safety: block cancel while creating, retain successful server result across view changes, reconcile uncertain outcomes by listing apps; prevent accidental duplicate submit.
+2. List accuracy: independent infra/apps loading/errors so one failure cannot erase the other; refresh infra counts after successful app creation.
+3. Navigation: persist page/app/tab in query parameters, reload restoration and Back/Forward via browser history; preserve existing app/source deep links and cancel stale async view work.
+4. Action copy: code analysis start/reanalysis labels match POST behavior; actual deployment wording remains separate.
+5. Keyboard: mobile menu focus on open/return on close; proper tab roving focus, arrows/Home/End and tab-panel association.
+Verification per unit: focused behavior regression, npm run check, npm run test:e2e, source review; UI units also desktop/mobile inspection. Existing docs/plans and sprint evaluation record each result. Product unit ownership is sequential to avoid conflicts in App.tsx/Applications.tsx. Follow-up work (polling layout, repository confirmation, demo infra reset) excluded.
+
+
+## UX unit1 verified — 2026-10-03T01:25:19.234760+09:00
+Creation cancel disabled in flight; late success refreshes canonical list instead of overwriting current view/draft; uncertain network/5xx/invalid-success results reconcile via GET without retrying POST. Focused RED(cancel enabled) then GREEN(cancel guard, GET-before-POST race, unknown503/no retry); check43 PASS; full browser see artifact groups PASS; independent source review PASS after stale-response fix. No actual backend/AWS mutations. User-approved unit1 commit/push on codex/frontend-ux-fixes.
+
+
+## UX unit2 verified — 2026-10-03T01:30:51.219602+09:00
+Independent infra/app loading and error states; success creation refreshes linked infra counts; error is not an empty list. Focused RED apps500 removed valid infra then GREEN independent failures/count4; check43 PASS; E2E24 PASS; independent source review PASS. Existing desktop/mobile app list layout preserved. Unit1 published0383c0a; user-approved unit2 commit/push next, then unit3 URL navigation.
+
+
+## UX unit3 verified — 2026-10-03T01:51:48.085139+09:00
+Native page/source/app/tab URL state restores reload and Back/Forward without restarting same-app work. Direct app reads support legacy deep links even when list fails; app GET success plus deployment GET failure preserves app and tabs. Focused RED/GREEN including delayed reads, source switch, unknown app and partial read failure; check43/E2E24 PASS. Independent source review PASS; desktop1440/mobile390 screenshots inspected, no horizontal overflow. No dependency, backend or cloud changes. User-approved unit3 commit/push, then unit4 analysis action copy.
+
+
+## UX unit4 verified — 2026-10-03T01:56:07.865869+09:00
+Analysis button says 코드 분석 시작 / 다시 분석; existing deployment history action remains 설정 변경 · 재분석 and actual deploy actions unchanged. Matching existing test selectors updated. Focused label/API regression RED then GREEN (two analysis POSTs); check43/E2E24 and independent source review PASS. User-approved individual commit/push before unit5 keyboard focus.
+
+
+## UX unit5 verified — 2026-10-03T02:06:34.121726+09:00
+Mobile disclosure focuses first navigation item on open and restores the visible toggle after close/navigation. Escape is scoped to menu/toggle targets so native dialogs keep their own cancellation. App tabs use one Tab stop, arrows/wrap/Home/End via existing navigation, associated focusable panel and visible focus styles. Focused RED tabIndex then GREEN; extra RED native dialog Escape conflict fixed and regression GREEN. Final check43/E2E24 and independent re-review PASS;1440/390 focus screenshots inspected. No new dependencies. All five approved units complete; unit5 separate commit/push on codex/frontend-ux-fixes. Main merge, PR and deployment are outside this authorization.

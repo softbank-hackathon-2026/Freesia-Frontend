@@ -12,7 +12,7 @@ import type {
 } from "./lib/types.ts";
 import InfraBuilder, { ApiInfraBuilder } from "./components/InfraBuilder.tsx";
 import { canDiscardInfra } from "./lib/infraFlow.ts";
-import Applications from "./components/Applications.tsx";
+import Applications, { type ApplicationTab } from "./components/Applications.tsx";
 import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
 import type { InfraSpaceDraft } from "./components/InfraSpaceForm.tsx";
 import GitHubIntegration from "./components/GitHubIntegration.tsx";
@@ -23,6 +23,17 @@ import {
 } from "./lib/meeting.ts";
 import type { MeetingInfraSpace } from "./lib/meeting.ts";
 const api = createApi(import.meta.env.VITE_API_BASE_URL || "/api");
+type Route = { source: DataMode; page: "infra" | "apps" | "integration"; app: string | null; tab: ApplicationTab };
+function readRoute(): Route {
+  const params = new URLSearchParams(location.search);
+  const requestedPage = params.get("page");
+  const page = requestedPage === "infra" || requestedPage === "apps" || requestedPage === "integration"
+    ? requestedPage : params.get("app") ? "apps" : "infra";
+  const app = page === "apps" ? params.get("app") || null : null;
+  const tab = params.get("tab");
+  return { source: params.get("source") === "api" ? "api" : "demo", page, app,
+    tab: app && (tab === "logs" || tab === "metrics") ? tab : "overview" };
+}
 function load() {
   try {
     return { data: parseDemo(localStorage.getItem(STORE_KEY)), error: "" };
@@ -38,9 +49,29 @@ export default function App() {
   const [loaded] = useState(load);
   const [demo, setDemo] = useState<DemoState>(loaded.data);
   const [storeError, setStoreError] = useState(loaded.error);
-  const [mode, setMode] = useState<DataMode>(() => new URLSearchParams(location.search).get("source") === "api" ? "api" : "demo");
-  const [page, setPage] = useState<"infra" | "apps" | "integration">(() => new URLSearchParams(location.search).has("app") ? "apps" : "infra");
+  const [route, setRoute] = useState(readRoute);
+  const { source: mode, page } = route;
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuToggle = useRef<HTMLButtonElement>(null);
+  const firstNav = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const toggle = menuToggle.current;
+    const menu = firstNav.current?.closest("aside");
+    firstNav.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && event.target instanceof Node
+        && (menu?.contains(event.target) || toggle?.contains(event.target))) {
+        event.preventDefault();
+        setMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (toggle?.getClientRects().length) toggle.focus();
+    };
+  }, [menuOpen]);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
   const [apiAppDraft, setApiAppDraft] = useState<AppSpaceCreate | null>(null);
   const [newInfra, setNewInfra] = useState(false);
@@ -49,43 +80,33 @@ export default function App() {
   const discardDialog = useRef<HTMLDialogElement>(null);
   const [discardId, setDiscardId] = useState("");
   const [discardError, setDiscardError] = useState("");
-  const [infras, setInfras] = useState<InfraSpace[]>(foundations);
+  const [infras, setInfras] = useState<InfraSpace[]>([]);
   const [apps, setApps] = useState<AppSpace[]>([]);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [repositoryLoading, setRepositoryLoading] = useState(false);
   const [repositoryError, setRepositoryError] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(mode === "api");
+  const [appsLoading, setAppsLoading] = useState(mode === "api");
+  const [appsError, setAppsError] = useState("");
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<InfraSpace | null>(null);
   useEffect(() => {
+    if (mode !== "api") return;
     let active = true;
-    if (mode === "api") {
-      Promise.resolve().then(() => {
-        if (active) {
-          setLoading(true);
-          setError("");
-          setInfras([]);
-          setApps([]);
-        }
-      });
-      Promise.all([api.infras(), api.apps()])
-        .then(([foundations, applications]) => {
-          if (active) {
-            setInfras(foundations);
-            setApps(applications);
-          }
-        })
-        .catch((e) => {
-          if (active) setError(e instanceof Error ? e.message : "요청 실패");
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    }
-    return () => {
-      active = false;
-    };
+    Promise.resolve().then(() => {
+      if (active) {
+        setLoading(true); setError("");
+        setAppsLoading(true); setAppsError("");
+      }
+    });
+    api.infras().then(items => { if (active) setInfras(items); })
+      .catch(e => { if (active) { setInfras([]); setError(e instanceof Error ? e.message : "인프라 목록 조회 실패"); } })
+      .finally(() => { if (active) setLoading(false); });
+    api.apps().then(items => { if (active) setApps(items); })
+      .catch(e => { if (active) { setApps([]); setAppsError(e instanceof Error ? e.message : "앱 목록 조회 실패"); } })
+      .finally(() => { if (active) setAppsLoading(false); });
+    return () => { active = false; };
   }, [mode, reload]);
   useEffect(() => {
     if (mode !== "api") return;
@@ -160,35 +181,50 @@ export default function App() {
     },
     [mode],
   );
-  function changeMode(next: DataMode) {
-    if (next === mode) return;
-    discardDialog.current?.close();
+  const applyRoute = useCallback((next: Route) => {
+    if (next.page !== page || next.source !== mode) {
+      discardDialog.current?.close();
+      setMenuOpen(false);
+      setNewInfra(false);
+      setActiveSpaceId("");
+      setSelected(null);
+    }
+    if (next.source !== mode) {
+      setRepositories([]);
+      setRepositoryError("");
+      setRepositoryLoading(next.source === "api");
+      setError("");
+      setLoading(next.source === "api");
+      setAppsLoading(next.source === "api"); setAppsError("");
+      setInfras(next.source === "demo" ? foundations : []);
+      setApps([]);
+    }
+    setRoute(next);
+  }, [mode, page]);
+  useEffect(() => {
+    const restore = () => applyRoute(readRoute());
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [applyRoute]);
+  function navigate(next: Route, replace = false) {
     const url = new URL(location.href);
-    url.searchParams.set("source", next);
-    url.searchParams.delete("app");
-    history.replaceState(null, "", url);
-    setNewInfra(false);
-    setActiveSpaceId("");
-    setMode(next);
-    setRepositories([]);
-    setRepositoryError("");
-    setRepositoryLoading(next === "api");
-    setSelected(null);
-    setError("");
-    setLoading(false);
-    setInfras(next === "demo" ? foundations : []);
-    setApps([]);
+    url.searchParams.set("source", next.source);
+    url.searchParams.set("page", next.page);
+    if (next.app) { url.searchParams.set("app", next.app); url.searchParams.set("tab", next.tab); }
+    else { url.searchParams.delete("app"); url.searchParams.delete("tab"); }
+    if (url.href !== location.href) history[replace ? "replaceState" : "pushState"](null, "", url);
+    applyRoute(next);
   }
-  function nav(next: "infra" | "apps" | "integration") {
+  function changeMode(next: DataMode) {
+    if (next !== mode) navigate({ source: next, page, app: null, tab: "overview" });
+  }
+  function nav(next: Route["page"]) {
     discardDialog.current?.close();
-    const url = new URL(location.href);
-    url.searchParams.delete("app");
-    history.replaceState(null, "", url);
     setMenuOpen(false);
     setNewInfra(false);
     setActiveSpaceId("");
-    setPage(next);
     setSelected(null);
+    navigate({ source: mode, page: next, app: null, tab: "overview" });
   }
   function reset() {
     try {
@@ -266,7 +302,7 @@ export default function App() {
         className={"sidebar" + (menuOpen ? " is-open" : "")}
         id="primary-navigation"
       >
-        <a className="brand" href="#" onClick={() => nav("infra")}>
+        <a className="brand" href="#" onClick={(event) => { event.preventDefault(); nav("infra"); }}>
           <img className="brand-icon" src="/freesia-mascot.jpg" alt="" />
           <span className="brand-name">
             Freesia<small>아이디어가 자라는 공간</small>
@@ -274,6 +310,7 @@ export default function App() {
         </a>
         <nav className="sidebar-nav" aria-label="주요 메뉴">
           <button
+            ref={firstNav}
             className={"sidebar-link" + (page === "infra" ? " active" : "")}
             aria-label="인프라 스페이스"
             aria-current={page === "infra" ? "page" : undefined}
@@ -310,8 +347,9 @@ export default function App() {
       </aside>
       <header className="masthead">
         <button
+          ref={menuToggle}
           className="sidebar-toggle"
-          aria-label="주요 메뉴 열기"
+          aria-label={menuOpen ? "주요 메뉴 닫기" : "주요 메뉴 열기"}
           aria-controls="primary-navigation"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}
@@ -368,13 +406,17 @@ export default function App() {
               <button onClick={reset}>손상된 데모 데이터 초기화</button>
             </div>
           )}
-          {error && (
+          {error && page !== "integration" && (
             <div className="error" role="alert">
-              <strong>데이터를 불러오지 못했습니다.</strong>
+              <strong>인프라 목록을 불러오지 못했습니다.</strong>
               <p>{error}</p>
               <button onClick={() => setReload((n) => n + 1)}>다시 시도</button>
             </div>
           )}
+          {appsError && page === "apps" && <div className="error" role="alert">
+            <strong>애플리케이션 목록을 불러오지 못했습니다.</strong>
+            <p>{appsError}</p><button onClick={() => setReload(n => n + 1)}>앱 목록 다시 조회</button>
+          </div>}
           {page === "integration" ? (
             <GitHubIntegration
               key={mode}
@@ -391,6 +433,9 @@ export default function App() {
             <Applications
               key={mode}
               mode={mode}
+              appId={route.app}
+              tab={route.tab}
+              onNavigate={(app, tab = "overview", replace = false) => navigate({ source: mode, page: "apps", app, tab }, replace)}
               apps={shownApps}
               infras={availableInfras}
               designs={mode === "demo" ? demo.designs : []}
@@ -398,7 +443,7 @@ export default function App() {
               onCreate={(app) => {
                 if (mode === "demo")
                   persist({ ...demo, apps: [app, ...demo.apps] });
-                else setApps((current) => [app, ...current]);
+                else { setApps((current) => [app, ...current.filter(entry => entry.id !== app.id)]); setReload(n => n + 1); }
                 if (mode === "demo") setAppDraft(null);
                 else setApiAppDraft(null);
               }}
@@ -410,7 +455,8 @@ export default function App() {
               repositoryLoading={repositoryLoading}
               repositoryError={repositoryError}
               onRefresh={() => setReload((n) => n + 1)}
-              loading={mode === "api" && loading}
+              loading={mode === "api" && appsLoading}
+              loadError={mode === "api" ? appsError : ""}
               discardableApps={discardableApps}
               onDiscard={discardApp}
               storageBlocked={!!storeError}

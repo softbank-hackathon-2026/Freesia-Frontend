@@ -528,3 +528,23 @@ User authorized this feature's commit and push on codex/app-monitoring-api. Next
 Unit2 on codex/app-monitoring-api after logs0b386ce: GET metrics shape/type validation, five business states and transport errors, Fargate5/Lambda3/EC2CPU-only cards, null-versus-zero and measured_at distinction, native two-decimal formatting, manual/sequential15s reads with app/source/deployment/teardown cancellation. Existing demo samples and CSS/dependencies unchanged; Fargate errors explicitly mean target/app5xx, not ALB-origin errors.
 Verification: API regression RED->GREEN; npm run check PASS(TypeScript/ESLint/43native tests/build); BROWSER_CHECK_PORT15175 npm run test:e2e PASS24groups; node scripts/monitoring-check.mjs PASS8groups covering logs plus metrics support/partial-null/realzero/timestamps/businessstates/HTTP500/invalid/retry/poll/no-overlap/tab-app-source-abort/demozeroHTTP/teardownlate-response isolation. Parent source review and1440/390screenshots inspected; worker inspected final long-decimal captures, scopedlint PASS; diff check PASS. No P1/P2 blocker found in scoped review.
 Current implementation and local verification complete. User authorized separate feature commit/push, no PR/main merge/deploy/Notion/backend changes. Publish this metrics unit separately from0b386ce; remote exact-SHA checkpoint recorded in workspace/wiki after publication. Actual CloudWatch collection and deployed backend end-to-end remain unverified; tests use controlled responses and no real AWS operation.
+
+
+## UX unit1 verified — 2026-10-03T01:25:19.234760+09:00
+Creation cancel disabled in flight; late success refreshes canonical list instead of overwriting current view/draft; uncertain network/5xx/invalid-success results reconcile via GET without retrying POST. Focused RED(cancel enabled) then GREEN(cancel guard, GET-before-POST race, unknown503/no retry); check43 PASS; full browser see artifact groups PASS; independent source review PASS after stale-response fix. No actual backend/AWS mutations. User-approved unit1 commit/push on codex/frontend-ux-fixes.
+
+
+## UX unit2 verified — 2026-10-03T01:30:51.219602+09:00
+Independent infra/app loading and error states; success creation refreshes linked infra counts; error is not an empty list. Focused RED apps500 removed valid infra then GREEN independent failures/count4; check43 PASS; E2E24 PASS; independent source review PASS. Existing desktop/mobile app list layout preserved. Unit1 published0383c0a; user-approved unit2 commit/push next, then unit3 URL navigation.
+
+
+## UX unit3 verified — 2026-10-03T01:51:48.085139+09:00
+Native page/source/app/tab URL state restores reload and Back/Forward without restarting same-app work. Direct app reads support legacy deep links even when list fails; app GET success plus deployment GET failure preserves app and tabs. Focused RED/GREEN including delayed reads, source switch, unknown app and partial read failure; check43/E2E24 PASS. Independent source review PASS; desktop1440/mobile390 screenshots inspected, no horizontal overflow. No dependency, backend or cloud changes. User-approved unit3 commit/push, then unit4 analysis action copy.
+
+
+## UX unit4 verified — 2026-10-03T01:56:07.865869+09:00
+Analysis button says 코드 분석 시작 / 다시 분석; existing deployment history action remains 설정 변경 · 재분석 and actual deploy actions unchanged. Matching existing test selectors updated. Focused label/API regression RED then GREEN (two analysis POSTs); check43/E2E24 and independent source review PASS. User-approved individual commit/push before unit5 keyboard focus.
+
+
+## UX unit5 verified — 2026-10-03T02:06:34.121726+09:00
+Mobile disclosure focuses first navigation item on open and restores the visible toggle after close/navigation. Escape is scoped to menu/toggle targets so native dialogs keep their own cancellation. App tabs use one Tab stop, arrows/wrap/Home/End via existing navigation, associated focusable panel and visible focus styles. Focused RED tabIndex then GREEN; extra RED native dialog Escape conflict fixed and regression GREEN. Final check43/E2E24 and independent re-review PASS;1440/390 focus screenshots inspected. No new dependencies. All five approved units complete; unit5 separate commit/push on codex/frontend-ux-fixes. Main merge, PR and deployment are outside this authorization.

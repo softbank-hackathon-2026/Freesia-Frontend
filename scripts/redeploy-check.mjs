@@ -136,7 +136,7 @@ try {
   assert.deepEqual(await saved(),state);
   apiApp={...apiApp,latest_deployment_id:null};holdAnalysis=false;
   await page.goto(`${base}/?source=api&app=${app.id}`);
-  await page.getByRole('button',{name:'배포',exact:true}).click();
+  await page.getByRole('button',{name:'코드 분석 시작',exact:true}).click();
   await page.getByRole('button',{name:'이 후보 선택',exact:true}).click();
   await page.getByRole('button',{name:'선택한 환경으로 구성안 조회',exact:true}).click();
   await page.getByRole('checkbox',{name:'설정값을 확인했습니다'}).check();

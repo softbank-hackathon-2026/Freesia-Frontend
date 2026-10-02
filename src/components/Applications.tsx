@@ -31,10 +31,16 @@ import {
   startDemoDeployment,
 } from "../lib/pipeline.ts";
 import type { AppPlan } from "../lib/pipeline.ts";
+export type ApplicationTab = "overview" | "logs" | "metrics";
+const appTabs = [
+  { id: "overview", label: "개요" },
+  { id: "logs", label: "로그" },
+  { id: "metrics", label: "모니터링" },
+] as const;
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const api = createApi(apiBase);
 export default function Applications({
-  mode,
+  mode, appId, tab, onNavigate,
   apps,
   infras,
   designs,
@@ -47,14 +53,18 @@ export default function Applications({
   initialForm,
   onDraftChange,
   apiRepositories, repositoryLoading, repositoryError, onRefresh,
-  loading, discardableApps, onDiscard, storageBlocked,
+  loading, loadError, discardableApps, onDiscard, storageBlocked,
 }: {
   mode: DataMode;
+  appId: string | null;
+  tab: ApplicationTab;
+  onNavigate: (appId: string | null, tab?: ApplicationTab, replace?: boolean) => void;
   apiRepositories: Repository[];
   repositoryLoading: boolean;
   repositoryError: string;
   onRefresh: () => void;
   loading: boolean;
+  loadError: string;
   discardableApps: AppSpace[];
   onDiscard: (id: string, signal?: AbortSignal) => void | Promise<void>;
   storageBlocked: boolean;
@@ -72,7 +82,8 @@ export default function Applications({
 }) {
   const session = useRef(0);
   const request = useRef<AbortController | null>(null);
-  const restored = useRef(false);
+  const restoredApp = useRef<string | null>(null);
+  const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const teardownRequest = useRef<string | null>(null);
   const teardownBaseline = useRef(new Map<string, string | null | undefined>());
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
@@ -108,7 +119,6 @@ export default function Applications({
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [event, setEvent] = useState<DeploymentEvent | null>(null);
   const [streamId, setStreamId] = useState("");
-  const [tab, setTab] = useState<"overview" | "logs" | "metrics">("overview");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [teardownError, setTeardownError] = useState("");
@@ -277,6 +287,7 @@ export default function Applications({
   }, [deployment, mode, onDeployment]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     const token = session.current;
     if (mode === "api" && (repositoryLoading || repositoryError)) {
       setError("Repository 목록을 먼저 불러오세요.");
@@ -317,17 +328,24 @@ export default function Applications({
               latest_deployment_id: null,
             }
           : await api.createApp(clean);
-      if (token !== session.current) return;
+      if (token !== session.current) { onRefresh(); return; }
       onCreate(app);
       setCreating(false);
-      restored.current = true;
-      const url = new URL(window.location.href); url.searchParams.set("app", app.id); url.searchParams.set("source", mode); history.replaceState(null, "", url);
+      restoredApp.current = app.id;
+      onNavigate(app.id);
       setSelected(app);
       setAnalysis(null);
       setDeployment(null);
     } catch (e) {
-      if (token === session.current)
-        setError(e instanceof Error ? e.message : "앱 생성 실패");
+      const uncertain = mode === "api" && e instanceof ApiError &&
+        (!e.status || e.status >= 500 || e.status < 300);
+      if (uncertain) onRefresh();
+      if (token === session.current) {
+        if (uncertain) setCreating(false);
+        setError(uncertain
+          ? "생성 결과를 확인하지 못했습니다. 목록을 다시 조회합니다. 같은 앱이 있는지 확인한 뒤 다시 시도하세요."
+          : e instanceof Error ? e.message : "앱 생성 실패");
+      }
     } finally {
       if (token === session.current) setBusy(false);
     }
@@ -357,20 +375,23 @@ export default function Applications({
       setRedeployError(e instanceof Error ? e.message : "재배포를 저장하지 못했습니다.");
     }
   }
-  function backToList() {
+  function resetDetail() {
     redeployDialog.current?.close(); redeployTarget.current = null;
+    discardDialog.current?.close();
     request.current?.abort();
     discardRequest.current?.abort();
     session.current++;
     setBusy(false);
     setDiscarding(false);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("app");
-    history.replaceState(null, "", url);
     setSelected(null);
     setCreating(false);
     setStreamId("");
     setError("");
+  }
+  function backToList(replace = false) {
+    resetDetail();
+    restoredApp.current = null;
+    onNavigate(null, "overview", replace);
   }
   async function discard() {
     if (discardRequest.current || (selected && selected.id !== discardId) || !discardableApps.some(app => app.id === discardId)) return;
@@ -383,7 +404,7 @@ export default function Applications({
       await onDiscard(discardId, controller.signal);
       if (token === session.current && !controller.signal.aborted) {
         discardDialog.current?.close();
-        if (selected?.id === discardId) backToList();
+        if (selected?.id === discardId) backToList(true);
       }
     } catch (e) {
       if (token === session.current && !controller.signal.aborted)
@@ -393,17 +414,12 @@ export default function Applications({
       if (token === session.current) setDiscarding(false);
     }
   }
-  async function open(app: AppSpace) {
-    redeployDialog.current?.close(); redeployTarget.current = null;
-    restored.current = true;
-    request.current?.abort();
-    const url = new URL(window.location.href);
-    url.searchParams.set("app", app.id);
-    url.searchParams.set("source", mode);
-    history.replaceState(null, "", url);
-    const token = ++session.current;
-    setBusy(false);
-    setSelected(app);
+  async function restoreApp(id: string) {
+    resetDetail();
+    const token = session.current;
+    const app = apps.find(entry => entry.id === id);
+    setBusy(mode === "api");
+    setSelected(app ?? null);
     setTeardownError("");
     setCreating(false);
     setAnalysis(null);
@@ -415,14 +431,13 @@ export default function Applications({
     setEvent(null);
     setStreamId("");
     setError("");
-    setTab("overview");
     setDeployment(
       mode === "demo"
-        ? (deployments.find((d) => d.id === app.latest_deployment_id) ?? null)
+        ? (deployments.find((d) => d.id === app?.latest_deployment_id) ?? null)
         : null,
     );
     if (mode === "demo") {
-      const saved = deployments.find((d) => d.id === app.latest_deployment_id);
+      const saved = deployments.find((d) => d.id === app?.latest_deployment_id);
       if (saved?.demo_pipeline) {
         setAnalysis(sampleAnalysis);
         setChosen(saved.compute);
@@ -431,34 +446,42 @@ export default function Applications({
       if (saved && !["success", "failed"].includes(saved.status))
         setStreamId(saved.id);
     }
+    if (mode === "demo" && !app) setError("애플리케이션을 찾을 수 없습니다.");
     if (mode === "api") {
+      const controller = new AbortController();
+      request.current = controller;
+      let appLoaded = false;
       try {
-        const fresh = await api.app(app.id);
-        if (token !== session.current) return;
+        const fresh = await api.app(id, controller.signal);
+        if (token !== session.current || controller.signal.aborted) return;
+        appLoaded = true;
         setSelected(fresh);
         if (fresh.latest_deployment_id) {
-          const value = await api.deployment(fresh.latest_deployment_id);
-          if (token !== session.current) return;
+          const value = await api.deployment(fresh.latest_deployment_id, controller.signal);
+          if (token !== session.current || controller.signal.aborted) return;
           setDeployment(value);
           setStreamId(value.id);
         }
       } catch (e) {
-        if (token === session.current)
+        if (token === session.current && !controller.signal.aborted) {
+          if (!appLoaded) setSelected(null);
           setError(e instanceof Error ? e.message : "상태 조회 실패");
+        }
+      } finally {
+        if (token === session.current && !controller.signal.aborted) setBusy(false);
       }
     }
   }
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("app");
-    if (restored.current || !id || !apps.length) return;
-    restored.current = true;
-    const app = apps.find(a => a.id === id);
-    // URL restoration synchronizes this view with browser navigation.
+    if (restoredApp.current === appId) return;
+    restoredApp.current = appId;
+    // Only a different app changes the session; tab/history changes retain active work.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (app) void open(app);
-    // Restore only on entry; app updates must not restart an active request.
+    if (appId) void restoreApp(appId);
+    else resetDetail();
+    // List refreshes must not restart analysis, SSE or teardown guards.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apps]);
+  }, [appId]);
   async function analyze() {
     if (!selected || busy || discarding || !!streamId || teardownUnconfirmed) return;
     request.current?.abort();
@@ -470,7 +493,7 @@ export default function Applications({
     try {
       const result = mode === "demo" ? sampleAnalysis : await api.analyzeUntilDone(selected.id, {signal: controller.signal});
       if (token !== session.current || controller.signal.aborted) return;
-      if(result.status === "failed") throw new Error("분석에 실패했습니다. 배포 버튼으로 다시 분석하세요.");
+      if(result.status === "failed") throw new Error("분석에 실패했습니다. 코드 분석을 다시 시작하세요.");
       setAnalysis(result);
     } catch (e) {
       if (token === session.current && !controller.signal.aborted)
@@ -594,7 +617,7 @@ export default function Applications({
         <div>
           <div className="eyebrow">APPLICATION</div>
           <h1>
-            {selected ? selected.name : creating ? "애플리케이션 생성" : "애플리케이션"}
+            {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
           </h1>
           <p>
             {selected
@@ -602,7 +625,7 @@ export default function Applications({
               : "통합에 등록한 Repository와 준비된 Infra Space를 선택하세요."}
           </p>
         </div>
-        {(selected || creating) && (
+        {(appId || selected || creating) && (
           <div className="heading-actions">
             {selected && <button className="secondary"
               disabled={discarding || busy || teardownUnconfirmed || !!deployment && !["success", "failed"].includes(deployment.status) || (mode === "demo" && storageBlocked) || !discardableApps.some(app => app.id === selected.id)}
@@ -610,7 +633,7 @@ export default function Applications({
               onClick={() => { setDiscardId(selected.id); setDiscardError(""); discardDialog.current?.showModal(); }}>
               애플리케이션 삭제
             </button>}
-            <button disabled={discarding} onClick={backToList}>앱 목록으로</button>
+            <button disabled={discarding} onClick={() => backToList()}>앱 목록으로</button>
           </div>
         )}
       </div>
@@ -693,15 +716,17 @@ export default function Applications({
             Terraform 설계는 적용·리소스 동기화 후 사용할 수 있습니다. 현재 이
             과정은 연결되지 않았습니다.
           </p>
+          {busy && <p role="status">앱을 생성하고 있습니다. 화면을 이동해도 서버의 생성 작업은 계속됩니다.</p>}
           <div className="form-actions">
             <button className="primary" disabled={busy}>
               {busy ? "생성 중…" : "애플리케이션 생성"}
             </button>
             <button
               type="button"
+              disabled={busy}
               onClick={() => {
                 request.current?.abort();
-              session.current++;
+                session.current++;
                 setBusy(false);
                 setCreating(false);
               }}
@@ -713,29 +738,31 @@ export default function Applications({
       ) : selected ? (
         <>
           <div className="tabs" role="tablist" aria-label="앱 상세">
-            <button
-              role="tab"
-              aria-selected={tab === "overview"}
-              onClick={() => setTab("overview")}
-            >
-              개요
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "logs"}
-              onClick={() => setTab("logs")}
-            >
-              로그
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "metrics"}
-              onClick={() => setTab("metrics")}
-            >
-              모니터링
-            </button>
+            {appTabs.map((item, index) => (
+              <button
+                key={item.id}
+                ref={node => { tabButtons.current[index] = node; }}
+                id={`application-tab-${item.id}`}
+                role="tab"
+                aria-selected={tab === item.id}
+                aria-controls="application-panel"
+                tabIndex={tab === item.id ? 0 : -1}
+                onClick={() => onNavigate(appId, item.id)}
+                onKeyDown={event => {
+                  const next = event.key === "ArrowRight" ? (index + 1) % appTabs.length
+                    : event.key === "ArrowLeft" ? (index + appTabs.length - 1) % appTabs.length
+                    : event.key === "Home" ? 0 : event.key === "End" ? appTabs.length - 1 : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  tabButtons.current[next]?.focus();
+                  onNavigate(appId, appTabs[next].id);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
-          <div role="tabpanel">
+          <div id="application-panel" role="tabpanel" aria-labelledby={`application-tab-${tab}`} tabIndex={0}>
             {tab === "overview" ? (
               <>
                 <section className="panel detail">
@@ -775,7 +802,7 @@ export default function Applications({
                         ? analysisPending ? "분석 중…" : "요청 중…"
                         : hasDeploymentHistory
                           ? "설정 변경 · 재분석"
-                          : analysis ? "분석 다시 보기" : "배포"}
+                          : analysis ? "다시 분석" : "코드 분석 시작"}
                     </button>
                   </div>
                   <div className="panel-body">
@@ -1028,13 +1055,18 @@ export default function Applications({
             )}
           </div>
         </>
+      ) : appId ? (
+        <section className="panel">
+          {error ? <p>애플리케이션 정보를 확인하지 못했습니다. 앱 목록으로 돌아가 다시 선택하세요.</p>
+            : <p role="status">애플리케이션 정보를 불러오는 중…</p>}
+        </section>
       ) : (
         <>
         <section className="panel app-space-list">
           <div className="section-heading">
             <h2>애플리케이션</h2>
             <div className="heading-actions">
-              <span className="badge">{apps.length}개</span>
+              <span className="badge">{loading ? "조회 중" : loadError ? "조회 실패" : `${apps.length}개`}</span>
               <button className="secondary icon-button" aria-label="새로고침" title="새로고침" disabled={loading || repositoryLoading} onClick={onRefresh}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M20 7v5h-5M4 17v-5h5" />
@@ -1049,7 +1081,7 @@ export default function Applications({
                   session.current++;
                   setBusy(false);
                   setCreating(true);
-                  setAnalysis(null); setChosen(""); setPlan(null); setEvent(null); setDeployment(null); setTab("overview");
+                  setAnalysis(null); setChosen(""); setPlan(null); setEvent(null); setDeployment(null);
                   setError("");
                 }}
               >
@@ -1062,7 +1094,7 @@ export default function Applications({
               </button>
             </div>
           </div>
-          {loading ? <div className="empty" role="status">애플리케이션 불러오는 중…</div> : apps.length ? (
+          {loading ? <div className="empty" role="status">애플리케이션 불러오는 중…</div> : loadError ? <p className="empty">목록을 확인하지 못했습니다. 앱 목록을 다시 조회하세요.</p> : apps.length ? (
             <div className="app-space-cards">
               {apps.map((app) => {
                 const cardId = `app-card-${encodeURIComponent(app.id)}`;
@@ -1072,7 +1104,7 @@ export default function Applications({
                   : mode === "api" && repositoryError ? "통합 정보 조회 실패"
                   : repository ? repository.name.trim() || "통합 이름 미제공" : "통합 등록 정보 없음";
                 return (
-                  <button className="app-space-card" key={app.id} aria-label={`${app.name} 상세 보기`} aria-describedby={`${cardId}-integration ${cardId}-infra ${cardId}-branch`} onClick={() => open(app)}>
+                  <button className="app-space-card" key={app.id} aria-label={`${app.name} 상세 보기`} aria-describedby={`${cardId}-integration ${cardId}-infra ${cardId}-branch`} onClick={() => onNavigate(app.id)}>
                     <span className="app-card-field">
                       <span className="app-card-label">애플리케이션 이름</span>
                       <strong className="app-card-name">{app.name}</strong>
