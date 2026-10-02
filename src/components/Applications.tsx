@@ -831,7 +831,7 @@ export default function Applications({
                     </div>
                   </section>
                 )}
-                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={event?.at ?? "initial"}/>}
+                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={event?.at ?? "initial"} appName={selected.name}/>}
               </>
             ) : tab === "logs" ? (
               <section className="panel">

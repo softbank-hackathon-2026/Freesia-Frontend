@@ -111,3 +111,12 @@ User explicitly requested adding the previously described favicon fix to PR #5. 
 2026-10-02 verification complete: check35/browser20/favicon200/built asset PASS. Automatic approval review rejected commit for lack of explicit current-diff commit wording. Commit/push remain pending fresh user approval; previous scope interpretation above does not constitute publication evidence.
 
 2026-10-02 publication approval: user explicitly answered "ㅇㅇ 반영해줘" to the request to commit and push the verified three-file favicon diff on feat/ui into PR #5. Prior approval-review block resolved by this explicit approval. Product diff unchanged since check35/browser20/favicon200 verification; git diff --check PASS. No merge or deployment authorized.
+
+
+## Deployment resource tree — 2026-10-02
+User approved the preceding screenshot-based bounded design with "일단 만들고 확인을 받는건 어떰?". App root -> server/storage/connection (other for unmapped types) -> actual resources; completion counts/progress, concurrent active highlights, failure reasons and group summaries. Display grouping only, not dependency edges. Keep current SSE-triggered GET/abort/manual refresh; no polling or backend/schema changes. Unknown/empty data cannot become fabricated resources. API data view is the scope; browser fixtures give an explicit review preview. No Notion writes, no Git publication or cloud mutation. Branch codex/deployment-resource-tree from origin/main c9baa52. Product owner worker: DeploymentResources.tsx/styles.css/minimal Applications.tsx props; parent owns browser regression/docs/review. Gate: focused fixture check RED/GREEN, check, full browser regression, desktop/mobile visual review.
+
+2026-10-02 resource tree complete locally: check35/full browser20/focused tree and review PASS; explicitly labeled review HTML generated. No real AWS validation or publication. See infra-ai-flow-eval latest record.
+
+
+2026-10-02T15:57:11.741576+09:00 publication gate: user explicitly requested committing and pushing the current resource-tree work to a non-main branch. Target codex/deployment-resource-tree; no PR/merge/deploy requested. Fresh checks PASS: node scripts/check.mjs (35 unit tests, TypeScript, ESLint, build), node scripts/resource-tree-check.mjs, full scripts/browser-check.mjs via temporary port15173 copy (20 groups, temporary file removed), git diff --check. Local API london resources[] and demo-mode exclusion are verified limitations; fixtures do not prove real AWS callback integration. Commit/push follows this gate; verify remote SHA before reporting publication.
