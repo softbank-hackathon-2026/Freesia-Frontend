@@ -199,7 +199,7 @@ async function checkSidebar(page, mobile) {
   }
 }
 async function createInfra(page,name) {
- await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
+ await page.getByRole("button",{name:"인프라 스페이스 만들기",exact:true}).click();
  assert.equal(await page.locator(".app-form input").count(),1);
  assert.equal(await page.locator(".app-form select").count(),0);
  await page.getByLabel("Space 이름",{exact:true}).fill(name);
@@ -323,15 +323,35 @@ try {
     );
     await page.goto(url);
     await checkSidebar(page, name === "mobile");
-    await page.getByRole("heading", { name: "인프라", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "인프라 스페이스", exact: true }).waitFor();
+    assert.deepEqual(await page.getByRole("columnheader").allTextContents(), ["이름", "네트워크 구성", "연결된 애플리케이션", "생성된 시간"]);
     assert.equal(await page.getByRole("columnheader",{name:"네트워크 유형",exact:true}).count(),0);
     assert.equal(await page.getByRole("columnheader",{name:"배포 대상",exact:true}).count(),0);
     assert.equal(await page.getByRole("columnheader",{name:"네트워크 구성",exact:true}).count(),1);
     assert.match(await page.locator("table").innerText(),/인터넷 경로 포함/);
+    const infraPanel = page.locator(".infra-list");
+    assert.equal(await infraPanel.getByRole("heading", { name: "인프라 스페이스 (3)", exact: true }).count(), 1);
+    assert.equal(await infraPanel.locator(".section-heading").getByRole("button", { name: "새로고침", exact: true }).count(), 1);
+    assert.equal(await infraPanel.locator(".section-heading").getByRole("button", { name: "인프라 스페이스 만들기", exact: true }).count(), 1);
+    assert.deepEqual(await infraPanel.locator("tbody tr").evaluateAll((rows) => rows.map((row) => [row.cells[2].textContent.trim(), row.cells[3].textContent.trim()])), [["0", "미제공"], ["0", "미제공"], ["0", "미제공"]]);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    if (name === "mobile") {
+      const scroller = infraPanel.locator(".table-scroll");
+      assert.equal(await scroller.evaluate((element) => element.scrollWidth > element.clientWidth), true);
+      await scroller.focus();
+      await page.keyboard.press("ArrowRight");
+      await page.waitForFunction(() => document.querySelector(".infra-list .table-scroll").scrollLeft > 0);
+      await scroller.evaluate((element) => { element.scrollLeft = 0; });
+    }
+    await page.screenshot({ path: `artifacts/ui-02-infra-list-${name}.png`, fullPage: true });
 
     const seedStorage = await page.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
     for (const [index, service] of ["쇼핑몰 서비스","사내 업무 서비스","결제 서비스"].entries()) {
-      await page.getByRole("button",{name:service,exact:true}).click();
+      const spaceLink = page.getByRole("button",{name:service,exact:true});
+      if (index === 0) {
+        await spaceLink.focus();
+        await page.keyboard.press("Enter");
+      } else await spaceLink.click();
       await page.getByRole("region",{name:"인프라 질의응답",exact:true}).waitFor();
       assert.equal(await page.getByRole("heading",{name:service,exact:true}).count(),1);
       assert.match(await page.getByLabel("Terraform 코드").innerText(),/resource "aws_vpc"/);
@@ -509,7 +529,8 @@ try {
     const appStore = await page.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
     await navigate(page,"인프라 스페이스");
     const shopRow = page.getByRole("row").filter({has:page.getByRole("button",{name:"쇼핑몰 서비스",exact:true})});
-    assert.equal(await shopRow.getByRole("cell").last().innerText(),String(JSON.parse(appStore).apps.filter(app=>app.infra_id==="demo-public").length));
+    assert.equal(await shopRow.getByRole("cell").nth(2).innerText(),String(JSON.parse(appStore).apps.filter(app=>app.infra_id==="demo-public").length));
+    assert.equal(await shopRow.getByRole("cell").nth(3).innerText(), "미제공");
     await page.getByRole("button",{name:"쇼핑몰 서비스",exact:true}).click();
     await page.getByRole("button",{name:"목록으로",exact:true}).click();
     assert.equal(await page.evaluate(()=>localStorage.getItem("freesia.demo.v1")),appStore);
@@ -521,6 +542,10 @@ try {
       /테스트 백엔드 연결 실패/,
     );
     await navigate(page, "인프라 스페이스");
+    assert.equal(await page.locator(".infra-list .section-heading").getByRole("button", { name: "인프라 스페이스 만들기", exact: true }).count(), 1);
+    assert.equal(await page.locator(".infra-list .section-heading").getByRole("button", { name: "새로고침", exact: true }).isEnabled(), true);
+    assert.equal(await page.locator(".infra-list .section-heading").getByRole("heading").innerText(), "인프라 스페이스");
+    assert.equal(await page.getByText("등록된 기반이 없습니다.", { exact: true }).count(), 0);
     assert.equal(
       await page
         .getByRole("button", { name: "쇼핑몰 서비스", exact: true })
@@ -551,6 +576,19 @@ try {
     });
     await page.close();
   }
+  const countPage = await browser.newPage();
+  await countPage.goto(url);
+  await countPage.evaluate((value) => localStorage.setItem("freesia.demo.v1", JSON.stringify(value)), {
+    ...initialDemo(),
+    apps: [{ ...app, id: "count-first", infra_id: "demo-public" }, { ...app, id: "count-second", infra_id: "demo-public" }],
+  });
+  await countPage.reload();
+  const multipleAppRow = countPage.getByRole("row").filter({ has: countPage.getByRole("button", { name: "쇼핑몰 서비스", exact: true }) });
+  assert.equal(await multipleAppRow.getByRole("cell").nth(2).innerText(), "2");
+  assert.equal(await multipleAppRow.getByRole("cell").nth(3).innerText(), "미제공");
+  await countPage.close();
+  results.push({ name: "infra-linked-app-counts", checks: "zero and multiple demo app relations; unavailable creation dates passed" });
+
   const apiPage = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
   });
@@ -559,6 +597,7 @@ try {
   let serverStatus = "pending";
   let hasDeployment = false;
   let apiRepositories = [repository];
+  let apiInfras = [infra], infraRequestHold;
   await apiPage.route("**/api/**", async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname.replace("/api", "");
@@ -576,7 +615,7 @@ try {
       apiRepositories = apiRepositories.filter(repo=>repo.id!==path.split("/").at(-1));
       return route.fulfill({status:204});
     }
-    else if (path === "/infra-spaces") value = [infra];
+    else if (path === "/infra-spaces") { if (infraRequestHold) await infraRequestHold; value = apiInfras; }
     else if (path === "/app-spaces" && req.method() === "GET") value = [app];
     else if (path === "/app-spaces") value = {...app,...req.postDataJSON(),id:"app-created"};
     else if (path === "/app-spaces/app-api")
@@ -617,10 +656,33 @@ try {
     localStorage.getItem("freesia.demo.v1"),
   );
   await apiPage.getByLabel("데이터 소스").selectOption("api");
+  await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
+  const apiInfraPanel = apiPage.locator(".infra-list");
+  const apiInfraRow = apiInfraPanel.getByRole("row").filter({ has: apiPage.getByRole("button", { name: "API 기반", exact: true }) });
+  assert.equal(await apiInfraRow.getByRole("cell").nth(2).innerText(), "0", "keep server app_count even when the app list contains a linked app");
+  assert.equal(await apiInfraRow.getByRole("cell").nth(3).innerText(), "미제공");
+  apiInfras = [];
+  let releaseInfra;
+  infraRequestHold = new Promise((resolve) => { releaseInfra = resolve; });
+  await apiInfraPanel.getByRole("button", { name: "새로고침", exact: true }).click();
+  await apiInfraPanel.getByText("불러오는 중…", { exact: true }).waitFor();
+  assert.equal(await apiInfraPanel.getByRole("button", { name: "새로고침", exact: true }).isDisabled(), true);
+  assert.equal(await apiInfraPanel.getByRole("button", { name: "인프라 스페이스 만들기", exact: true }).isVisible(), true);
+  assert.equal(await apiInfraPanel.locator(".section-heading").getByRole("heading").innerText(), "인프라 스페이스");
+  releaseInfra();
+  infraRequestHold = undefined;
+  await apiInfraPanel.getByText("등록된 기반이 없습니다.", { exact: true }).waitFor();
+  assert.equal(await apiInfraPanel.getByRole("heading", { name: "인프라 스페이스 (0)", exact: true }).count(), 1);
+  apiInfras = [infra];
+  await apiInfraPanel.getByRole("button", { name: "새로고침", exact: true }).click();
+  await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
 
   for (const [size,width,height] of [["desktop",1440,1000],["mobile",390,844]]) {
     await apiPage.setViewportSize({width,height});
-    await apiPage.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
+    assert.equal(await apiInfraRow.getByRole("cell").nth(2).innerText(), "0");
+    assert.equal(await apiPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await apiPage.screenshot({ path: `artifacts/ui-02-api-infra-list-${size}.png`, fullPage: true });
+    await apiPage.getByRole("button",{name:"인프라 스페이스 만들기",exact:true}).click();
     await apiPage.getByLabel("Space 이름",{exact:true}).fill("not-created");
     assert.equal(await apiPage.getByRole("button",{name:"Space 생성",exact:true}).isDisabled(),true);
     await apiPage.getByRole("button",{name:"목록으로",exact:true}).click();
@@ -939,7 +1001,7 @@ try {
       fullPage: true,
     });
     await page
-      .getByRole("button", { name: "Infra Space 만들기", exact: true })
+      .getByRole("button", { name: "인프라 스페이스 만들기", exact: true })
       .click();
     await page
       .getByLabel("Space 이름", { exact: true })
@@ -947,14 +1009,14 @@ try {
     await navigate(page, "통합");
     await navigate(page, "인프라 스페이스");
     await page
-      .getByRole("button", { name: "Infra Space 만들기", exact: true })
+      .getByRole("button", { name: "인프라 스페이스 만들기", exact: true })
       .click();
     assert.equal(
       await page.getByLabel("Space 이름", { exact: true }).inputValue(),
       "preserved-foundation",
     );
     for (let i=0;i<3;i++) {
-      if (i) await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
+      if (i) await page.getByRole("button",{name:"인프라 스페이스 만들기",exact:true}).click();
       await page.getByLabel("Space 이름",{exact:true}).fill("sample-"+i);
       assert.equal(await page.locator(".app-form input").count(),1);
       assert.equal(await page.locator(".app-form select").count(),0);
@@ -974,7 +1036,7 @@ try {
       await page.getByRole("button",{name:"목록으로",exact:true}).click();
       assert.equal(await page.getByRole("button",{name:"sample-"+i,exact:true}).count(),1);
       const row=page.getByRole("row").filter({has:page.getByRole("button",{name:"sample-"+i,exact:true})});
-      assert.match(await row.innerText(),/외부 직접 경로 없음 · 다중 AZ/);
+      assert.match(await row.innerText(),/외부 직접 경로 없음, 다중 AZ/);
       assert.doesNotMatch(await row.innerText(),/ecs-fargate|\blambda\b|\bec2\b|AWS 샘플 대상/);
     }
     await page.screenshot({
@@ -1073,7 +1135,7 @@ try {
     assert.equal(await page.getByRole("button",{name:"Repository 등록",exact:true}).isDisabled(),true);
     assert.equal(await page.locator(".repository-row").count(),0);
     await navigate(page, "인프라 스페이스");
-    assert.equal(await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).count(),1);
+    assert.equal(await page.getByRole("button",{name:"인프라 스페이스 만들기",exact:true}).count(),1);
     for (const name of [
       "AI로 인프라 설계",
       "인프라 배포 · 데모",
@@ -1135,7 +1197,7 @@ try {
     const accepted = cancelPage.waitForEvent("dialog");
     const acceptClick = cancelPage.getByRole("button",{name:"작성 취소",exact:true}).click();
     await (await accepted).accept(); await acceptClick;
-    await cancelPage.getByRole("heading",{name:"인프라",exact:true}).waitFor();
+    await cancelPage.getByRole("heading",{name:"인프라 스페이스",exact:true}).waitFor();
     const after = await cancelPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")));
     assert.deepEqual(after,{...before,meeting:{...before.meeting,spaces:[preserved]}});
     await cancelPage.reload();
@@ -1245,7 +1307,7 @@ try {
   });
   await infraQuota.goto(url);
   await infraQuota
-    .getByRole("button", { name: "Infra Space 만들기", exact: true })
+    .getByRole("button", { name: "인프라 스페이스 만들기", exact: true })
     .click();
   await infraQuota
     .getByLabel("Space 이름", { exact: true })

@@ -337,6 +337,23 @@ td small {
   background: transparent;
   color: var(--green-dark);
 }
+.infra-page-heading { margin-bottom: 20px; }
+.infra-page-heading h1 { font-size: 26px; }
+.infra-list { background: #fff; }
+.infra-list .section-heading { background: #fff; border-bottom: 0; padding-bottom: 16px; }
+.infra-list .heading-actions { gap: 8px; }
+.infra-list .heading-actions button { min-height: 38px; padding: 8px 16px; border-radius: 999px; }
+.infra-list .table-scroll { margin: 0 20px 20px; }
+.infra-list .table-scroll:focus-visible { outline: 3px solid var(--green); outline-offset: 4px; }
+.infra-list table { min-width: 720px; }
+.infra-list th { background: #fff; font-size: 12px; font-weight: 600; padding: 12px 16px; text-align: start; }
+.infra-list td { padding: 16px; vertical-align: top; }
+.infra-list th:nth-child(n + 3) { white-space: nowrap; }
+.infra-list td:first-child { width: 36%; overflow-wrap: anywhere; }
+.infra-list td:nth-child(3) { font-variant-numeric: tabular-nums; }
+.infra-list td:nth-child(4) { white-space: nowrap; }
+.infra-list .text-button { overflow-wrap: anywhere; }
+.infra-list .scroll-hint { padding-top: 0; }
 .empty {
   padding: 48px 24px;
   text-align: center;
@@ -820,6 +837,8 @@ progress {
   .scroll-hint {
     display: block;
   }
+  .infra-list .section-heading { align-items: flex-start; flex-wrap: wrap; }
+  .infra-list .table-scroll { margin: 0 16px 16px; }
   table {
     min-width: 570px;
   }

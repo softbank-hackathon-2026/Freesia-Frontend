@@ -209,13 +209,13 @@ export default function App() {
     if (choices) return [
       choices.visibility === "public" ? "인터넷 경로 포함" : "외부 직접 경로 없음",
       choices.availability === "multi" ? "다중 AZ" : "단일 AZ",
-    ].join(" · ");
+    ].join(", ");
     return {
       public: "인터넷 경로 포함",
       private: "외부 직접 경로 없음",
-      ha: "고가용성 · 접근 방식/AZ 상세 미제공",
-      "multi-az": "다중 AZ · 접근 방식 상세 미제공",
-      "db-isolated": "DB 격리 · 접근 방식 상세 미제공",
+      ha: "고가용성, 접근 방식/AZ 상세 미제공",
+      "multi-az": "다중 AZ, 접근 방식 상세 미제공",
+      "db-isolated": "DB 격리, 접근 방식 상세 미제공",
     }[infra.network];
   }
   function createSpace(space: MeetingInfraSpace) {
@@ -422,32 +422,13 @@ export default function App() {
             <ApiInfraBuilder space={selected} onCancel={() => setSelected(null)} />
           ) : (
             <>
-              <div className="page-heading">
+              <div className="page-heading infra-page-heading">
                 <div>
                   <div className="eyebrow">INFRA SPACE</div>
-                  <h1>인프라</h1>
+                  <h1>인프라 스페이스</h1>
                   <p>
-                    VPC·Subnet 등 공통 네트워크 기반을 설계하고, 연결된 앱을 확인하세요.
+                    VPC, Subnet 등 공통 네트워크 기반을 설계하고, 연결된 애플리케이션을 확인하세요.
                   </p>
-                </div>
-                <div className="heading-actions">
-                  <button
-                    className="secondary"
-                    onClick={() => setReload((n) => n + 1)}
-                    disabled={loading}
-                  >
-                    새로고침
-                  </button>
-                  <button
-                    className="primary"
-                    onClick={() => {
-                      setNewInfra(true);
-                      setSelected(null);
-                      setActiveSpaceId("");
-                    }}
-                  >
-                    Infra Space 만들기
-                  </button>
                 </div>
               </div>
               {mode === "api" && (
@@ -517,72 +498,92 @@ export default function App() {
                   </details>
                 </section>
               )}
-              {loading ? (
-                <div className="empty" aria-live="polite">
-                  불러오는 중…
+              <section className="panel infra-list" aria-labelledby="infra-list-heading">
+                <div className="section-heading">
+                  <h2 id="infra-list-heading">인프라 스페이스{!loading && !error && ` (${availableInfras.length})`}</h2>
+                  <div className="heading-actions">
+                    <button
+                      className="secondary"
+                      onClick={() => setReload((n) => n + 1)}
+                      disabled={loading}
+                    >
+                      새로고침
+                    </button>
+                    <button
+                      className="primary"
+                      onClick={() => {
+                        setNewInfra(true);
+                        setSelected(null);
+                        setActiveSpaceId("");
+                      }}
+                    >
+                      인프라 스페이스 만들기
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <section className="panel">
-                  <div className="section-heading">
-                    <h2>준비된 기반</h2>
-                    <span className="badge">{availableInfras.length}개</span>
-                  </div>
-                  <p className="scroll-hint">
-                    작은 화면에서는 표를 좌우로 스크롤하세요.
-                  </p>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Infra Space 이름</th>
-                          <th>네트워크 구성</th>
-                          <th>연결된 앱</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {availableInfras.map((infra) => (
-                          <tr key={infra.id}>
-                            <td>
-                              <button
-                                className="text-button"
-                                onClick={() => {
-                                  if (
-                                    mode === "demo" && (meeting.spaces.some(
-                                      (s) => s.id === infra.id,
-                                    ) || preparedInfraSpaces.some((s) => s.id === infra.id))
-                                  ) {
-                                    setActiveSpaceId(infra.id);
-                                    setSelected(null);
-                                  } else {
-                                    setSelected(infra);
-                                    setActiveSpaceId("");
-                                  }
-                                }}
-                              >
-                                {infra.name}
-                              </button>
-                              <small>{infra.id}</small>
-                            </td>
-                            <td>
-                              <span>{networkSummary(infra)}</span>
-                            </td>
-                            <td>
-                              {mode === "demo"
-                                ? demo.apps.filter(
-                                    (a) => a.infra_id === infra.id,
-                                  ).length
-                                : infra.app_count}
-                            </td>
+                {loading ? (
+                  <div className="empty" aria-live="polite">불러오는 중…</div>
+                ) : (
+                  <>
+                    <p className="scroll-hint">
+                      작은 화면에서는 표를 좌우로 스크롤하세요.
+                    </p>
+                    <div className="table-scroll" tabIndex={0}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th scope="col">이름</th>
+                            <th scope="col">네트워크 구성</th>
+                            <th scope="col">연결된 애플리케이션</th>
+                            <th scope="col">생성된 시간</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {!availableInfras.length && !error && (
-                    <div className="empty">등록된 기반이 없습니다.</div>
-                  )}
-                </section>
-              )}
+                        </thead>
+                        <tbody>
+                          {availableInfras.map((infra) => (
+                            <tr key={infra.id}>
+                              <td>
+                                <button
+                                  className="text-button"
+                                  onClick={() => {
+                                    if (
+                                      mode === "demo" && (meeting.spaces.some(
+                                        (s) => s.id === infra.id,
+                                      ) || preparedInfraSpaces.some((s) => s.id === infra.id))
+                                    ) {
+                                      setActiveSpaceId(infra.id);
+                                      setSelected(null);
+                                    } else {
+                                      setSelected(infra);
+                                      setActiveSpaceId("");
+                                    }
+                                  }}
+                                >
+                                  {infra.name}
+                                </button>
+                                <small>{infra.id}</small>
+                              </td>
+                              <td>
+                                <span>{networkSummary(infra)}</span>
+                              </td>
+                              <td>
+                                {mode === "demo"
+                                  ? demo.apps.filter(
+                                      (a) => a.infra_id === infra.id,
+                                    ).length
+                                  : infra.app_count}
+                              </td>
+                              <td className="muted">미제공</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {!availableInfras.length && !error && (
+                      <div className="empty">등록된 기반이 없습니다.</div>
+                    )}
+                  </>
+                )}
+              </section>
               {selected && (
                 <section className="panel detail" aria-label="인프라 상세">
                   <div className="section-heading">

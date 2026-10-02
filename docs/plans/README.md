@@ -93,3 +93,7 @@ Status: design and unit plans proposed; combined Ideation/Inception/Construction
 2026-10-02 current status: user `ㄱ ㄱ` approved the preceding scope/design and all three Construction units together. Implementation started with UI-01 on `feat/ui`; each unit must pass checks and independent review before its authorized commit/push. Latest execution evidence will be recorded in [eval/handoff](sprints/infra-ai-flow-eval.md#space-list-uiux-implementation--2026-10-02).
 
 2026-10-02 UI-01 verified: sidebar implementation, `npm run check` (35 native tests) and `npm run test:e2e` (18 browser groups) PASS; independent source/desktop/open-mobile review PASS (7/6/8/8). Authorized unit commit/push is the next action. UI-02/03 remain approved and unimplemented; actual backend/cloud/deployment not verified by this UI-only work.
+
+2026-10-02 UI-01 published: `bdaa4bb` on `feat/ui`, push and matching remote SHA confirmed. UI-02 Infra list implementation in progress; UI-03 approved and pending.
+
+2026-10-02 UI-02 verified: reference-like Infra table/header and explicit unavailable timestamps, `npm run check` (35 native tests) and `npm run test:e2e` (19 browser groups) PASS; independent Demo/API desktop/mobile source/visual review PASS (8/6/8/8). Authorized unit commit/push next; UI-03 remains approved and pending. Current evidence is in eval/handoff.

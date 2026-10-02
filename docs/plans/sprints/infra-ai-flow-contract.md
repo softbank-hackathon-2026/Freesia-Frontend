@@ -62,3 +62,5 @@ Gate per unit: meaningful browser assertion RED before implementation; `npm run 
 Approval record pending: capture date and the user's exact combined approval covering Ideation scope, Inception requirements/architecture and all three Construction unit plans. Do not implement before this is recorded. Real backend/cloud execution and deployment are unverified and outside this contract.
 
 Approval recorded 2026-10-02: user `ㄱ ㄱ` to the preceding combined scope/design/three-unit proposal. Ideation, Inception and UI-01/02/03 Construction plans approved together. Status now approved; UI-01 in progress. Original per-unit commit/push instruction authorizes publication after each unit's tests/review. Backend/cloud/deployment remain outside the scope.
+
+2026-10-02 unit status: UI-01 implemented/tested/reviewed/committed/pushed (`bdaa4bb`, matching remote SHA verified). UI-02 in progress; UI-03 approved and pending. Exact execution evidence is in eval/handoff.
