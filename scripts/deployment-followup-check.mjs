@@ -35,7 +35,7 @@ try {
  const open=async()=>{await page.goto(`${base}/?source=api&app=${app.id}`);await page.getByRole('heading',{name:app.name,exact:true}).waitFor();};
  const teardown=()=>page.getByRole('button',{name:'앱 내리기',exact:true});
  const confirm=()=>page.once('dialog',dialog=>dialog.accept());
- const prepare=async()=>{await page.getByRole('button',{name:'배포',exact:true}).click();await page.getByRole('button',{name:'이 후보 선택',exact:true}).click();await page.getByRole('button',{name:'선택한 환경으로 구성안 조회',exact:true}).click();await page.getByRole('checkbox',{name:'설정값을 확인했습니다'}).check();};
+ const prepare=async()=>{await page.getByRole('button',{name:hasDeployment?'설정 변경 · 재분석':'배포',exact:true}).click();await page.getByRole('button',{name:'이 후보 선택',exact:true}).click();await page.getByRole('button',{name:'선택한 환경으로 구성안 조회',exact:true}).click();await page.getByRole('checkbox',{name:'설정값을 확인했습니다'}).check();};
  const deployButton=()=>page.getByRole('button',{name:'선택한 구성안으로 배포',exact:true});
  const reset=()=>{receipt=null;teardownStatus=null;finished=null;reason=null;responseCode=202;errorCode='';appError=false;deployConflict=false;};
  // Existing servers without teardown fields stay safely disabled.
@@ -43,8 +43,8 @@ try {
  fieldKnown=true;await open();await teardown().waitFor();page.once('dialog',dialog=>dialog.dismiss());await teardown().click();assert.equal(posts,0);
  confirm();await teardown().click();await page.getByText(/앱을 내리는 중/).waitFor();assert.equal(posts,1);assert.ok(await teardown().isDisabled());
  // Reload resumes polling. No new POST is sent; deployment controls remain blocked.
- await open();await page.getByText(/앱을 내리는 중/).waitFor();assert.equal(posts,1);await prepare();assert.ok(await deployButton().isDisabled());
- teardownStatus='success';finished=stamp;await page.getByText(/내림 완료/).waitFor({timeout:7000});assert.equal(await page.getByText(deployment.url,{exact:true}).count(),0);assert.ok(await teardown().isDisabled());assert.ok(await deployButton().isEnabled());await page.locator('.resource-tree-node.state-deleted').waitFor();assert.equal(await page.getByRole('progressbar',{name:'자원 완료율'}).count(),0);
+ await open();await page.getByText(/앱을 내리는 중/).waitFor();assert.equal(posts,1);assert.ok(await page.getByRole('button',{name:'설정 변경 · 재분석',exact:true}).isDisabled());assert.ok(await page.getByRole('button',{name:'새 버전 재배포',exact:true}).isDisabled());
+ teardownStatus='success';finished=stamp;await page.getByText(/내림 완료/).waitFor({timeout:7000});assert.equal(await page.getByText(deployment.url,{exact:true}).count(),0);assert.ok(await teardown().isDisabled());await prepare();assert.ok(await deployButton().isEnabled());await page.locator('.resource-tree-node.state-deleted').waitFor();assert.equal(await page.getByRole('progressbar',{name:'자원 완료율'}).count(),0);
  await page.getByRole('region',{name:'앱 내리기',exact:true}).screenshot({path:'artifacts/teardown-receipt.png'});
  const terminalGets=appGets;await page.waitForTimeout(3300);assert.equal(appGets,terminalGets);
  await open();await page.getByText(/내림 완료/).waitFor();assert.equal(await page.getByText(deployment.url,{exact:true}).count(),0);

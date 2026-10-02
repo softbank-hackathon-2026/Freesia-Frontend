@@ -215,3 +215,11 @@ Current follow-up: detail app deletion and delete-before-cancel action order app
 Detail-deletion/action-order follow-up verified: check41/E2E24/focused desktop-mobile+demo/review PASS. Local uncommitted diff; no new commit/push/merge/deployment.
 
 2026-10-02T22:24:32.665610+09:00 Detail-deletion follow-up commit/push authorized by user; verified source/test diff unchanged. Publishing current branch only; main merge/deployment not included.
+
+
+## Active — redeployment entry (2026-10-02)
+User authorized branch implementation on codex/app-redeploy-flow. Current scope is in the appended Day3 spec/plan and infra-ai-flow-contract: demo configuration reuse and explicit API waiting state until verified latest-code/config-reuse contract. No publication authorization.
+
+Redeployment UI preparation completed locally: check41/fullE2E24/focused redeploy+teardown PASS and parent source/visual review. See latest infra-ai-flow-eval. API latest-code/config-reuse integration remains unavailable pending backend contract; uncommitted/unpushed.
+
+User authorized commit/push of the verified redeployment UI preparation on codex/app-redeploy-flow. Implementation/check results unchanged; PR/main merge/deployment are not included. See latest eval publication record.
