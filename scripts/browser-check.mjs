@@ -153,6 +153,9 @@ async function checkSidebar(page, mobile) {
   assert.deepEqual(flower, { valid: true, viewBox: "0 0 54 62", paths: 6 });
   await checkSourceBanner(page);
   assert.equal(await sidebar.locator(".sidebar-link").count(), 3);
+  const labels = ["인프라 스페이스", "애플리케이션 스페이스", "통합"];
+  assert.deepEqual(await sidebar.locator(".sidebar-label").allTextContents(), labels);
+  assert.deepEqual(await sidebar.locator(".sidebar-link").evaluateAll((links) => links.map((link) => link.getAttribute("aria-label"))), labels);
   assert.equal(
     await page.locator('.sidebar-link.active[aria-current="page"]').count(),
     1,
@@ -170,6 +173,7 @@ async function checkSidebar(page, mobile) {
     const contentBox = await page.locator(".workspace").boundingBox();
     assert.ok(sidebarBox.y >= headerBox.y + headerBox.height - 1);
     assert.ok(contentBox.y >= sidebarBox.y + sidebarBox.height - 1);
+    await page.screenshot({ path: "artifacts/ui-01-sidebar-mobile.png", fullPage: true });
     await toggle.click();
     assert.equal(await sidebar.isVisible(), false);
   } else {
@@ -178,10 +182,21 @@ async function checkSidebar(page, mobile) {
     const sidebarBox = await sidebar.boundingBox();
     const contentBox = await page.locator(".workspace").boundingBox();
     assert.ok(sidebarBox.x + sidebarBox.width <= contentBox.x + 1);
+    await page.screenshot({ path: "artifacts/ui-01-sidebar-desktop.png", fullPage: true });
   }
-  await navigate(page, "애플리케이션");
-  await navigate(page, "통합");
-  await navigate(page, "인프라");
+  for (const name of [labels[1], labels[2], labels[0]]) {
+    if (mobile) await toggle.click();
+    const link = sidebar.getByRole("button", { name, exact: true, includeHidden: true });
+    assert.equal(await link.evaluate((button) => button.scrollWidth > button.clientWidth), false);
+    await link.focus();
+    await page.keyboard.press("Enter");
+    assert.equal(await link.getAttribute("aria-current"), "page");
+    assert.equal(await sidebar.locator('[aria-current="page"]').count(), 1);
+    if (mobile) {
+      assert.equal(await toggle.getAttribute("aria-expanded"), "false");
+      assert.equal(await sidebar.isVisible(), false);
+    }
+  }
 }
 async function createInfra(page,name) {
  await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).click();
@@ -203,7 +218,7 @@ async function appForm(page, name, infraId) {
     await page.getByLabel("Repository URL",{exact:true}).fill("https://github.com/softbank-hackathon-2026/Freesia-Frontend");
     await page.getByRole("button",{name:"Repository 등록",exact:true}).click();
   }
-  await navigate(page, "애플리케이션");
+  await navigate(page, "애플리케이션 스페이스");
   await page.getByRole("button", { name: "앱 연결", exact: true }).click();
   await page.getByLabel("앱 이름", { exact: true }).fill(name);
   await page
@@ -349,7 +364,7 @@ try {
     const downloaded=page.waitForEvent("download");
     await page.getByRole("button",{name:".tf 다운로드"}).click();
     assert.equal((await downloaded).suggestedFilename(),"main.tf");
-    await navigate(page,"통합"); await navigate(page,"인프라");
+    await navigate(page,"통합"); await navigate(page,"인프라 스페이스");
     await page.getByRole("button",{name:"Space 상세: conversation-foundation",exact:true}).click();
     await page.getByLabel("Terraform 코드").waitFor();
     await page.reload();
@@ -385,7 +400,7 @@ try {
     await page.getByRole("button",{name:"답변 수정 · 이후 결과 초기화",exact:true}).click();
     assert.equal(await page.getByLabel("Terraform 코드").count(),0);
     assert.equal(await page.getByRole("region",{name:"인프라 Apply 결과"}).count(),0);
-    await navigate(page, "애플리케이션");
+    await navigate(page, "애플리케이션 스페이스");
     await page.getByRole("button", { name: "앱 연결", exact: true }).click();
     await page
       .getByRole("heading", {
@@ -399,7 +414,7 @@ try {
     await appForm(page, "demo-web", "demo-public");
     assert.equal(await page.locator("#registered-repo option").count(), 2);
     await navigate(page, "통합");
-    await navigate(page, "애플리케이션");
+    await navigate(page, "애플리케이션 스페이스");
     await page.getByRole("button", { name: "앱 연결", exact: true }).click();
     assert.equal(
       await page.getByLabel("앱 이름", { exact: true }).inputValue(),
@@ -478,7 +493,7 @@ try {
       .click();
     await page.getByRole("button", { name: "앱 목록으로" }).click();
     await page.reload();
-    await navigate(page, "애플리케이션");
+    await navigate(page, "애플리케이션 스페이스");
     await page.getByRole("button", { name: /demo-web/ }).click();
     await page.getByText("success", { exact: true }).waitFor();
     await page.screenshot({path:`artifacts/day3-pipeline-result-${name}.png`,fullPage:true});
@@ -492,7 +507,7 @@ try {
     });
 
     const appStore = await page.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
-    await navigate(page,"인프라");
+    await navigate(page,"인프라 스페이스");
     const shopRow = page.getByRole("row").filter({has:page.getByRole("button",{name:"쇼핑몰 서비스",exact:true})});
     assert.equal(await shopRow.getByRole("cell").last().innerText(),String(JSON.parse(appStore).apps.filter(app=>app.infra_id==="demo-public").length));
     await page.getByRole("button",{name:"쇼핑몰 서비스",exact:true}).click();
@@ -505,7 +520,7 @@ try {
       await page.getByRole("alert").first().innerText(),
       /테스트 백엔드 연결 실패/,
     );
-    await navigate(page, "인프라");
+    await navigate(page, "인프라 스페이스");
     assert.equal(
       await page
         .getByRole("button", { name: "쇼핑몰 서비스", exact: true })
@@ -636,7 +651,7 @@ try {
   assert.equal(await apiPage.getByLabel("Repository URL",{exact:true}).inputValue(),"https://github.com/team/conflict");
   await apiPage.getByRole("button",{name:"등록 해제: team/added (main)",exact:true}).click();
   await apiPage.getByRole("button",{name:"등록 해제: team/added (main)",exact:true}).waitFor({state:"detached"});
-  await navigate(apiPage,"애플리케이션");
+  await navigate(apiPage,"애플리케이션 스페이스");
   await apiPage.getByRole("button",{name:"앱 연결",exact:true}).click();
   assert.equal(await apiPage.locator("#repo-url").count(),0);
   assert.deepEqual(await apiPage.locator("#infra-select option").evaluateAll(items=>items.map(item=>item.value)),["","api-infra"]);
@@ -764,7 +779,7 @@ try {
   await racePage
     .getByRole("button", { name: "API 기반", exact: true })
     .waitFor();
-  await navigate(racePage, "애플리케이션");
+  await navigate(racePage, "애플리케이션 스페이스");
   await racePage.getByRole("button", { name: /app-A/ }).click();
   const analysisStarted = racePage.waitForRequest("**/app-a/analysis");
   await racePage
@@ -847,7 +862,7 @@ try {
   await listOnly
     .getByRole("button", { name: "API 기반", exact: true })
     .waitFor();
-  await navigate(listOnly, "애플리케이션");
+  await navigate(listOnly, "애플리케이션 스페이스");
   await listOnly.getByRole("button",{name:"앱 연결",exact:true}).click();
   await listOnly.getByLabel("앱 이름",{exact:true}).fill("late-created");
   await listOnly.getByLabel("등록한 Repository",{exact:true}).selectOption("repo-api");
@@ -912,7 +927,7 @@ try {
       }),
     );
     await page.goto(url);
-    for (const name of ["인프라", "애플리케이션", "통합"])
+    for (const name of ["인프라 스페이스", "애플리케이션 스페이스", "통합"])
       assert.equal(
         await page
           .getByRole("button", { name, exact: true, includeHidden: true })
@@ -930,7 +945,7 @@ try {
       .getByLabel("Space 이름", { exact: true })
       .fill("preserved-foundation");
     await navigate(page, "통합");
-    await navigate(page, "인프라");
+    await navigate(page, "인프라 스페이스");
     await page
       .getByRole("button", { name: "Infra Space 만들기", exact: true })
       .click();
@@ -988,7 +1003,7 @@ try {
       path: "artifacts/day3-integration-" + viewportName + ".png",
       fullPage: true,
     });
-    await navigate(page, "애플리케이션");
+    await navigate(page, "애플리케이션 스페이스");
     await page.getByRole("button", { name: "앱 연결", exact: true }).click();
     await page.getByLabel("앱 이름", { exact: true }).fill("sample-foundation-web");
     await page
@@ -1057,7 +1072,7 @@ try {
     await page.getByRole("button",{name:"Repository 다시 조회",exact:true}).waitFor();
     assert.equal(await page.getByRole("button",{name:"Repository 등록",exact:true}).isDisabled(),true);
     assert.equal(await page.locator(".repository-row").count(),0);
-    await navigate(page, "인프라");
+    await navigate(page, "인프라 스페이스");
     assert.equal(await page.getByRole("button",{name:"Infra Space 만들기",exact:true}).count(),1);
     for (const name of [
       "AI로 인프라 설계",
@@ -1149,7 +1164,7 @@ try {
   await branchPage.goto(url);
   await branchPage.evaluate((github)=>localStorage.setItem("freesia.demo.v1",JSON.stringify({version:1,designs:[],apps:[],deployments:[],meeting:{spaces:[],github}})),branchRepositories);
   await branchPage.reload();
-  await navigate(branchPage,"애플리케이션");
+  await navigate(branchPage,"애플리케이션 스페이스");
   await branchPage.getByRole("button",{name:"앱 연결",exact:true}).click();
   const branchOptions = await branchPage.locator("#registered-repo option").evaluateAll(items=>items.map(item=>item.value));
   assert.equal(new Set(branchOptions).size,branchOptions.length);

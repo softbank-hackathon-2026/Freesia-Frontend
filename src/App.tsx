@@ -246,25 +246,25 @@ export default function App() {
         <nav className="sidebar-nav" aria-label="주요 메뉴">
           <button
             className={"sidebar-link" + (page === "infra" ? " active" : "")}
-            aria-label="인프라"
+            aria-label="인프라 스페이스"
             aria-current={page === "infra" ? "page" : undefined}
             onClick={() => nav("infra")}
           >
             <span className="sidebar-number" aria-hidden="true">
               01
             </span>
-            <span className="sidebar-label">인프라</span>
+            <span className="sidebar-label">인프라 스페이스</span>
           </button>
           <button
             className={"sidebar-link" + (page === "apps" ? " active" : "")}
-            aria-label="애플리케이션"
+            aria-label="애플리케이션 스페이스"
             aria-current={page === "apps" ? "page" : undefined}
             onClick={() => nav("apps")}
           >
             <span className="sidebar-number" aria-hidden="true">
               02
             </span>
-            <span className="sidebar-label">애플리케이션</span>
+            <span className="sidebar-label">애플리케이션 스페이스</span>
           </button>
           <button
             className={"sidebar-link" + (page === "integration" ? " active" : "")}

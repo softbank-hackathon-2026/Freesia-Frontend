@@ -103,9 +103,9 @@ a {
 .sidebar-link {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
-  padding: 14px 16px;
+  padding: 14px 10px;
   text-align: start;
   border-color: transparent;
   background: transparent;
@@ -118,7 +118,7 @@ a {
 .sidebar-link.active:hover { background: #294f39; border-color: #294f39; }
 .sidebar-number { color: var(--muted); font-size: 12px; }
 .sidebar-link.active .sidebar-number { color: #f2d071; }
-.sidebar-label { font-size: 15px; font-weight: 600; }
+.sidebar-label { min-width: 0; font-size: 14px; font-weight: 600; word-break: keep-all; }
 .sidebar-toggle { display: none; }
 .sidebar-toggle-icon { width: 18px; height: 18px; }
 .masthead {

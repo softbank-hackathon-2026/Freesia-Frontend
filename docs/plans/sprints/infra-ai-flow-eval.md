@@ -81,3 +81,23 @@ Verification final: scripts/check.mjs PASS TypeScript/ESLint/native35/build; scr
 Independent source+visual review PASS: Design8/Originality7/Craft8/Functionality8. Final single-plan fullwidth capture and no-obsolete-notice assertions PASS. Artifacts browser-results.json/local-api-results.json/local-api-plan-ready-desktop.png/api-existing-deployment-409.png. FinaldiffcheckPASS. Work remains local, uncommitted/unpushed; priorpublication91745a6 unchanged.
 
 2026-10-02 publication approval: user explicitly requested commit and push of the verified13-file backend-plan-readiness diff. Existing35unit/18browser/5localAPI results apply; no product changes since final verification. Commit/push only, no PR/merge.
+
+## Space list UI/UX proposal — 2026-10-02
+State: proposed, implementation approval pending. Current branch `feat/ui`, baseline `d9a0205`; working tree was clean at inspection. User requested presentation-only changes and per-unit commit/push. Existing completed-unit test results above do not verify this new work.
+
+Read-only inspection: linked app counts already exist; Infra creation time is absent; app cards can reuse registered Repository URL+branch and Infra-ID lookups. Independent source inspection confirmed the minimal files and shared `.app-list` styling risk. Proposed units are sidebar, Infra table and Application cards, each with separate verification and publication.
+
+Documentation verification, 2026-10-02: `git diff --check` PASS; `python3` read-only check of added Markdown links/heading anchors and prohibited characters PASS (6 documents, 8 local links). Independent read-only review of the documentation diff against source/AGENTS PASS: scope, data boundaries, approval/publication distinction, branch and unit verification are consistent. Application checks `npm run check` and `npm run test:e2e`: NOT RUN for this proposal. No product code, backend, dependencies or cloud changes; no commit/push. No visual quality score or live integration result is claimed.
+
+Handoff: present the linked spec/plan/contract together for approval of scope, requirements/architecture and all three unit plans. After approval, complete and test each unit sequentially, update this record with dated results, review screenshots and publish only the verified unit to `feat/ui`. The user's requested commit/push authorization is retained; approval is not requested again for the same publication scope.
+
+## Space list UI/UX implementation — 2026-10-02
+Combined approval received: user `ㄱ ㄱ` approved the presented scope/design and UI-01/02/03 plans; original per-unit publication request retained. UI-01 in progress. Tests and commit/push for the new units are pending; the preceding documentation-only proposal record remains historical.
+
+### UI-01 — sidebar verified (2026-10-02)
+- Implemented: exact visible/accessible destination labels, scoped spacing for longer names; existing navigation and mobile menu state unchanged. Existing browser/local-API navigation selectors updated. No data/API/storage/creation/detail changes.
+- RED: `CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run test:e2e` failed on old sidebar labels before product edits (`checkSidebar`, expected three new names). Log: `/private/tmp/freesia-ui-01-red.log`.
+- Final required checks: `npm run check` PASS (TypeScript, ESLint, 35/35 native tests, Vite build); `CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run test:e2e` PASS, 18 browser groups. Logs: `/private/tmp/freesia-ui-01-{check,e2e}.log`; current `artifacts/browser-results.json` records passed results.
+- Earlier attempts: sandbox blocked localhost binding, resolved by allowing test execution; browser harness needed `includeHidden: true` after mobile navigation and one remaining old menu-name array. These were test corrections, with no product workaround. Final commands above completed successfully.
+- Visual/source review PASS: `artifacts/ui-01-sidebar-desktop.png` and `artifacts/ui-01-sidebar-mobile.png` (opened mobile menu), parent inspection and independent read-only reviewer. Design Quality 7 / Originality 6 / Craft 8 / Functionality 8; no blocking findings. Exact names fit, active/focus state is visible, Enter navigation and mobile closure are verified. `git diff --check` PASS; added lines contain no prohibited character.
+- Publication at verification freeze: authorized, commit/push next on `feat/ui`. Live backend, AWS and deployment NOT RUN; local-API script navigation selectors updated but actual local backend roundtrip NOT RUN for this UI-only unit.
