@@ -393,3 +393,48 @@ test("analysis deadline is 150 seconds while plan deadline remains 60 seconds",a
   await plans;
   assert.equal(aborted,2);
 });
+
+
+test("teardown accepts only a matching request receipt and preserves abort/errors", async () => {
+  const receipt = { app_space_id: "app/a", status: "requested", requested_at: "2026-10-02T07:00:00Z" };
+  const calls: {url:string; init?:RequestInit}[]=[];
+  const api=createApi("/api",async(url,init)=>{calls.push({url:String(url),init});return new Response(JSON.stringify(receipt),{status:202});});
+  assert.deepEqual(await api.teardown("app/a"),receipt);
+  assert.equal(calls[0].url,"/api/app-spaces/app%2Fa/teardown");
+  assert.equal(calls[0].init?.method,"POST");
+  assert.equal(calls[0].init?.body,undefined);
+  for (const data of [{...receipt,status:"done"},{...receipt,app_space_id:"another"},{...receipt,requested_at:null}]) {
+    await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify(data),{status:202})).teardown("app/a"), /응답/);
+  }
+  await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify(receipt),{status:200})).teardown("app/a"), /응답/);
+  for(const [status,code] of [[409,"not_deployed"],[409,"deployment_in_progress"],[502,"teardown_failed"],[404,"http_error"]] as const) {
+    await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify({error:code,message:"server reason"}),{status})).teardown("app/a"),{status,code,message:"server reason"});
+  }
+  const controller=new AbortController();controller.abort();
+  let fetched=false;
+  await assert.rejects(createApi("/api",async()=>{fetched=true;return new Response();}).teardown("a",controller.signal),{name:"AbortError"});
+  assert.equal(fetched,false);
+});
+
+test("app teardown receipt is optional for older backends but validated when supplied", async()=>{
+  const app={id:"a",name:"app",repo_url:"https://github.com/a/b",branch:"main",infra_id:"i",created_at:"now",latest_deployment_id:null};
+  for(const extra of [{},{teardown_requested_at:null},{teardown_requested_at:"2026-10-02T07:00:00Z"}]) {
+    const data={...app,...extra};
+    assert.deepEqual(await createApi("/api",async()=>new Response(JSON.stringify(data))).app("a"),data);
+  }
+  await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify({...app,teardown_requested_at:42}))).app("a"),/응답/);
+});
+
+test("plan container port is preserved and deployment uses the reviewed plan identity",async()=>{
+  const plan={status:"done",compute:"ecs-fargate",plans:[{id:"port-plan",name:"port plan",summary:"",pros:[],cons:[],template:"ecs-fargate/basic",values:{container_port:3000}}]};
+  let posted:unknown;
+  const api=createApi("/api",async(url,init)=>{
+    if(String(url).endsWith("/plans"))return new Response(JSON.stringify(plan));
+    posted=JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({id:"d",app_space_id:"a",compute:"ecs-fargate",status:"pending",url:null,reason:null,created_at:"now"}));
+  });
+  const result=await api.createPlans("a","ecs-fargate");
+  assert.equal(result.plans[0].values.container_port,3000);
+  await api.deploy("a",result.compute,result.plans[0].id);
+  assert.deepEqual(posted,{compute:"ecs-fargate",plan_id:"port-plan"});
+});

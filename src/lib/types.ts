@@ -26,6 +26,12 @@ export type AppSpace = AppSpaceCreate & {
   branch: string;
   created_at: string;
   latest_deployment_id: string | null;
+  teardown_requested_at?: string | null;
+};
+export type TeardownReceipt = {
+  app_space_id: string;
+  status: "requested";
+  requested_at: string;
 };
 export type Analysis = {
   status: "pending" | "running" | "done" | "failed";

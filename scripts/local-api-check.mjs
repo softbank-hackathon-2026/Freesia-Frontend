@@ -145,7 +145,10 @@ try {
     await page.getByRole("button",{name:"앱 목록으로",exact:true}).click();
     await page.getByRole("button",{name:new RegExp(process.env.LOCAL_RESOURCE_APP_NAME)}).click();
     const resourcePanel=page.getByRole("region",{name:"배포 자원 상태",exact:true});
-    await resourcePanel.getByText(/1\/3개 완료/).waitFor();
+    const completion=resourcePanel.getByRole("progressbar",{name:"자원 완료율"});
+    await completion.waitFor();
+    assert.equal(await completion.getAttribute("value"),"1");
+    assert.equal(await completion.getAttribute("max"),"3");
     assert.match(await resourcePanel.innerText(),/완료/);
     assert.match(await resourcePanel.innerText(),/진행 중/);
     assert.match(await resourcePanel.innerText(),/실패/);

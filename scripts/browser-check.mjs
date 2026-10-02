@@ -931,6 +931,7 @@ try {
   await apiPage.getByText("success",{exact:true}).waitFor();
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,2,"terminal deployment receives current snapshot after reentry");
+  await apiPage.locator("details").filter({hasText:"aws_ecs_service.web"}).locator("summary").click();
   await apiPage.getByText("aws_ecs_service.web",{exact:true}).waitFor();
   await apiPage.reload();
   await apiPage.getByText("success",{exact:true}).waitFor();
