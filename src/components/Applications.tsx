@@ -47,7 +47,7 @@ export default function Applications({
   initialForm,
   onDraftChange,
   apiRepositories, repositoryLoading, repositoryError, onRefresh,
-  loading, discardableApps, onDiscard, storageBlocked,
+  loading, loadError, discardableApps, onDiscard, storageBlocked,
 }: {
   mode: DataMode;
   apiRepositories: Repository[];
@@ -55,6 +55,7 @@ export default function Applications({
   repositoryError: string;
   onRefresh: () => void;
   loading: boolean;
+  loadError: string;
   discardableApps: AppSpace[];
   onDiscard: (id: string, signal?: AbortSignal) => void | Promise<void>;
   storageBlocked: boolean;
@@ -1044,7 +1045,7 @@ export default function Applications({
           <div className="section-heading">
             <h2>애플리케이션</h2>
             <div className="heading-actions">
-              <span className="badge">{apps.length}개</span>
+              <span className="badge">{loading ? "조회 중" : loadError ? "조회 실패" : `${apps.length}개`}</span>
               <button className="secondary icon-button" aria-label="새로고침" title="새로고침" disabled={loading || repositoryLoading} onClick={onRefresh}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M20 7v5h-5M4 17v-5h5" />
@@ -1072,7 +1073,7 @@ export default function Applications({
               </button>
             </div>
           </div>
-          {loading ? <div className="empty" role="status">애플리케이션 불러오는 중…</div> : apps.length ? (
+          {loading ? <div className="empty" role="status">애플리케이션 불러오는 중…</div> : loadError ? <p className="empty">목록을 확인하지 못했습니다. 앱 목록을 다시 조회하세요.</p> : apps.length ? (
             <div className="app-space-cards">
               {apps.map((app) => {
                 const cardId = `app-card-${encodeURIComponent(app.id)}`;

@@ -532,3 +532,7 @@ Current implementation and local verification complete. User authorized separate
 
 ## UX unit1 verified — 2026-10-03T01:25:19.234760+09:00
 Creation cancel disabled in flight; late success refreshes canonical list instead of overwriting current view/draft; uncertain network/5xx/invalid-success results reconcile via GET without retrying POST. Focused RED(cancel enabled) then GREEN(cancel guard, GET-before-POST race, unknown503/no retry); check43 PASS; full browser see artifact groups PASS; independent source review PASS after stale-response fix. No actual backend/AWS mutations. User-approved unit1 commit/push on codex/frontend-ux-fixes.
+
+
+## UX unit2 verified — 2026-10-03T01:30:51.219602+09:00
+Independent infra/app loading and error states; success creation refreshes linked infra counts; error is not an empty list. Focused RED apps500 removed valid infra then GREEN independent failures/count4; check43 PASS; E2E24 PASS; independent source review PASS. Existing desktop/mobile app list layout preserved. Unit1 published0383c0a; user-approved unit2 commit/push next, then unit3 URL navigation.

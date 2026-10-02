@@ -21,13 +21,14 @@ try {
   const infra = { id: "infra-ux", name: "UX Infra", description: "", network: "public", computes: ["ecs-fargate"], app_count: 0 };
   const repo = { id: "repo-ux", name: "example/shop", repo_url: "https://github.com/example/shop", branch: "main", created_at: "2026-10-03T00:00:00Z" };
   let apps = [], postCount = 0, createMode = "held", postStarted;
+  let appsFail = false, infraFail = false;
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     const json = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
     if (path.endsWith("/repositories")) return json([repo]);
-    if (path.endsWith("/infra-spaces")) return json([{ ...infra, app_count: apps.length }]);
+    if (path.endsWith("/infra-spaces")) return infraFail ? json({ message: "Infra list unavailable" }, 500) : json([{ ...infra, app_count: apps.length }]);
     if (path.endsWith("/app-spaces")) {
-      if (route.request().method() !== "POST") return json(apps);
+      if (route.request().method() !== "POST") return appsFail ? json({ message: "App list unavailable" }, 500) : json(apps);
       postCount++;
       const app = { ...route.request().postDataJSON(), id: `app-ux-${postCount}`, created_at: "2026-10-03T00:00:00Z", latest_deployment_id: null };
       apps = [...apps, app];
@@ -72,6 +73,21 @@ try {
   await page.getByRole("alert").filter({ hasText: "생성 결과" }).waitFor();
   await page.getByRole("button", { name: "Uncertain app 상세 보기", exact: true }).waitFor();
   assert.equal(postCount, 3, "Uncertain creation must never automatically retry POST");
+  appsFail = true;
+  await page.goto(base + "/?source=api");
+  await page.getByRole("button", { name: "UX Infra", exact: true }).waitFor();
+  appsFail = false; infraFail = true;
+  await page.reload();
+  await page.getByRole("button", { name: "애플리케이션", exact: true }).click();
+  await page.getByRole("button", { name: "First app 상세 보기", exact: true }).waitFor();
+  infraFail = false; createMode = "ok";
+  await page.goto(base + "/?source=api");
+  await create("Count app");
+  await page.getByRole("heading", { name: "Count app", exact: true }).waitFor();
+  await page.getByRole("button", { name: "인프라 스페이스", exact: true }).click();
+  const infraRow = page.getByRole("row").filter({ has: page.getByRole("button", { name: "UX Infra", exact: true }) });
+  await infraRow.getByRole("cell", { name: "4", exact: true }).waitFor();
+  console.log("PASS lists: independent failures and app count refresh after creation");
   assert.deepEqual(errors, []);
   console.log("PASS creation: cancel guard, background success, uncertain-outcome reconciliation");
 } finally {

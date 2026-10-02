@@ -49,43 +49,33 @@ export default function App() {
   const discardDialog = useRef<HTMLDialogElement>(null);
   const [discardId, setDiscardId] = useState("");
   const [discardError, setDiscardError] = useState("");
-  const [infras, setInfras] = useState<InfraSpace[]>(foundations);
+  const [infras, setInfras] = useState<InfraSpace[]>([]);
   const [apps, setApps] = useState<AppSpace[]>([]);
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [repositoryLoading, setRepositoryLoading] = useState(false);
   const [repositoryError, setRepositoryError] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(mode === "api");
+  const [appsLoading, setAppsLoading] = useState(mode === "api");
+  const [appsError, setAppsError] = useState("");
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<InfraSpace | null>(null);
   useEffect(() => {
+    if (mode !== "api") return;
     let active = true;
-    if (mode === "api") {
-      Promise.resolve().then(() => {
-        if (active) {
-          setLoading(true);
-          setError("");
-          setInfras([]);
-          setApps([]);
-        }
-      });
-      Promise.all([api.infras(), api.apps()])
-        .then(([foundations, applications]) => {
-          if (active) {
-            setInfras(foundations);
-            setApps(applications);
-          }
-        })
-        .catch((e) => {
-          if (active) setError(e instanceof Error ? e.message : "요청 실패");
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    }
-    return () => {
-      active = false;
-    };
+    Promise.resolve().then(() => {
+      if (active) {
+        setLoading(true); setError("");
+        setAppsLoading(true); setAppsError("");
+      }
+    });
+    api.infras().then(items => { if (active) setInfras(items); })
+      .catch(e => { if (active) { setInfras([]); setError(e instanceof Error ? e.message : "인프라 목록 조회 실패"); } })
+      .finally(() => { if (active) setLoading(false); });
+    api.apps().then(items => { if (active) setApps(items); })
+      .catch(e => { if (active) { setApps([]); setAppsError(e instanceof Error ? e.message : "앱 목록 조회 실패"); } })
+      .finally(() => { if (active) setAppsLoading(false); });
+    return () => { active = false; };
   }, [mode, reload]);
   useEffect(() => {
     if (mode !== "api") return;
@@ -175,7 +165,8 @@ export default function App() {
     setRepositoryLoading(next === "api");
     setSelected(null);
     setError("");
-    setLoading(false);
+    setLoading(next === "api");
+    setAppsLoading(next === "api"); setAppsError("");
     setInfras(next === "demo" ? foundations : []);
     setApps([]);
   }
@@ -368,13 +359,17 @@ export default function App() {
               <button onClick={reset}>손상된 데모 데이터 초기화</button>
             </div>
           )}
-          {error && (
+          {error && page !== "integration" && (
             <div className="error" role="alert">
-              <strong>데이터를 불러오지 못했습니다.</strong>
+              <strong>인프라 목록을 불러오지 못했습니다.</strong>
               <p>{error}</p>
               <button onClick={() => setReload((n) => n + 1)}>다시 시도</button>
             </div>
           )}
+          {appsError && page === "apps" && <div className="error" role="alert">
+            <strong>애플리케이션 목록을 불러오지 못했습니다.</strong>
+            <p>{appsError}</p><button onClick={() => setReload(n => n + 1)}>앱 목록 다시 조회</button>
+          </div>}
           {page === "integration" ? (
             <GitHubIntegration
               key={mode}
@@ -398,7 +393,7 @@ export default function App() {
               onCreate={(app) => {
                 if (mode === "demo")
                   persist({ ...demo, apps: [app, ...demo.apps] });
-                else setApps((current) => [app, ...current]);
+                else { setApps((current) => [app, ...current.filter(entry => entry.id !== app.id)]); setReload(n => n + 1); }
                 if (mode === "demo") setAppDraft(null);
                 else setApiAppDraft(null);
               }}
@@ -410,7 +405,8 @@ export default function App() {
               repositoryLoading={repositoryLoading}
               repositoryError={repositoryError}
               onRefresh={() => setReload((n) => n + 1)}
-              loading={mode === "api" && loading}
+              loading={mode === "api" && appsLoading}
+              loadError={mode === "api" ? appsError : ""}
               discardableApps={discardableApps}
               onDiscard={discardApp}
               storageBlocked={!!storeError}
