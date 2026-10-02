@@ -184,3 +184,5 @@ Owned files: the six existing contracts/spec/plan/README/evaluation documents; `
 Verification: required `npm run check` and `npm run test:e2e`, focused resource-tree and deployment-follow-up browser fixtures, local script syntax, diff/marker/link checks and desktop/mobile inspection. Real backend/callback/cloud work is not executed in this merge task. Normal merge publication preserves both parents; verify `HEAD` against `git ls-remote origin refs/heads/main` after push.
 
 2026-10-02 current integration result: implementation and required verification complete within the user's pull/conflict-resolution/push request. Check38/build, E2E24 and focused resource-tree/port-teardown fixtures PASS; current source/copy/focus/data boundaries preserved. Publication remains the authorized next action.
+
+2026-10-02 publication complete: normal signed merge `655847c073004c4b1e71fe73fc7ef68bb9d1daac` is pushed to `origin/main`, exact remote SHA verified and working tree clean. This supersedes prior publication-next status. Final documentation records remain within the same approved action; tested product files are unchanged.

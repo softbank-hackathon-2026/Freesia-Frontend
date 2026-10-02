@@ -2,7 +2,7 @@
 
 기존 `docs/plans`의 spec, plan, sprint contract/eval/handoff로 AI-Driven Development Life Cycle(AI-DLC)을 진행한다. 별도 문서 체계를 만들지 않는다.
 
-최신 작업 기준: [main 병합 및 충돌 해소 기록](sprints/infra-ai-flow-eval.md#main-integration--2026-10-02). 기존 목록/삭제 UI와 원격의 자원 트리, 포트 확인, 내리기 요청 UI를 함께 보존했다. 최종 check38, E2E24와 집중 검사가 통과했으며 사용자 승인에 따라 main 병합 커밋과 푸시를 진행한다.
+최신 작업 기준: [main 병합 완료 기록](sprints/infra-ai-flow-eval.md#main-integration-publication--2026-10-02). 기존 목록/삭제 UI와 원격의 자원 트리, 포트 확인, 내리기 요청 UI를 함께 보존했다. check38, E2E24와 집중 검사가 통과했고 병합 커밋 `655847c`를 main에 푸시해 원격 SHA 일치까지 확인했다.
 
 ## 단계와 승인
 

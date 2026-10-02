@@ -466,3 +466,11 @@ Git commit/push are authorized but not yet executed. Real backend integration, s
 
 
 2026-10-02 integration verification complete: final check38/build, E2E24, both focused browser scripts, 91 local links/anchors, CSS-token/character/diff/syntax checks and source/desktop/mobile inspection PASS. Product/test hashes are unchanged after final E2E. The temporary 15173 fixture server was stopped; no pre-existing preview server was stopped. All 11 file conflicts are resolved in the working tree; index resolution and the authorized normal merge commit/push are next. No real backend/callback/AI/cloud/deployment verification is claimed.
+
+
+### Main integration publication — 2026-10-02
+Current applicable completion: integration is implemented, tested, reviewed locally, committed and pushed to `main`. User authorization is the current pull/conflict-resolution/push request. Signed merge commit `655847c073004c4b1e71fe73fc7ef68bb9d1daac` (`merge: integrate deployment follow-up with current UI`) retains parents `962670d3354a20015e20c2207c941fc13512fb16` and `58e3314c058b25f12c7655b007796149e20bc6e4`.
+
+`git push origin main` returned exit 0 (`58e3314..655847c`). `git ls-remote origin refs/heads/main` returned the exact merge SHA above; local HEAD/tracking ref matched and the working tree was clean. Both original histories and both approved feature sets are retained. Final check38/build, E2E24, focused fixtures and 91 local-link/syntax/character/diff checks above apply to unchanged product/test blobs. Earlier pending publication statements are historical snapshots.
+
+These final README/contract/evaluation publication records are documentation only under the same user approval. Verify their diff/links/instruction consistency, commit and push them; unchanged application checks need no rerun. Real backend/callback/AI/AWS operation, teardown completion and deployment remain unexecuted in this integration task.
