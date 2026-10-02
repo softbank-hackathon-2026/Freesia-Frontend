@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import DeploymentResources from "./DeploymentResources.tsx";
+import ApplicationLogs from "./ApplicationLogs.tsx";
 import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
 import {
   availableCandidates,
@@ -1020,17 +1021,7 @@ export default function Applications({
                 {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
               </>
             ) : tab === "logs" ? (
-              <section className="panel">
-                <div className="section-heading">
-                  <h2>애플리케이션 로그</h2>
-                  <span className="badge">
-                    {mode === "demo" ? "샘플" : "API 미지원"}
-                  </span>
-                </div>
-                <pre className="log-output">{mode === "demo"
-                  ? `[DEMO] 12:00:01 INFO HTTP server started on :3000\n[DEMO] 12:00:02 INFO GET / -> 200\n[DEMO] 12:00:03 INFO Sample log; no application connection`
-                  : "연동 대기 · 로그 조회 API가 아직 없습니다.\n실제 애플리케이션 로그를 수집하거나 조회하지 않습니다."}</pre>
-              </section>
+              <ApplicationLogs key={`${mode}:${selected.id}:${deployment?.id ?? selected.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected.teardown_status ?? "none"}:${selected.teardown_requested_at ?? ""}:${selected.teardown_finished_at ?? ""}`} id={selected.id} mode={mode}/>
             ) : (
               <section className="panel">
                 <div className="section-heading">

@@ -91,3 +91,10 @@ export type PlanSet = {
   compute: string;
   plans: DeploymentPlan[];
 };
+
+export type MonitoringStatus = "ok" | "waiting" | "not_deployed" | "unsupported" | "error";
+export type AppLogs = {
+  status: MonitoringStatus;
+  message: string | null;
+  lines: { at: string; message: string }[];
+};

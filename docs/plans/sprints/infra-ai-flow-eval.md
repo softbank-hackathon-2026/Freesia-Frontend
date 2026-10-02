@@ -516,3 +516,9 @@ Handoff: UI/demo preparation implemented/tested locally, production latest-code/
 
 ### Redeployment UI publication authorization — 2026-10-02T23:20:43.815775+09:00
 User explicitly requested commit, then push of the current verified diff on codex/app-redeploy-flow. Source/test files are unchanged after the successful check41/E2E24/focused regression results; fresh git diff --check/status and verification timestamps were inspected. Publish only this branch. No PR/main merge/deployment/issue edit is authorized. Verify remote SHA after push; API latest-code/config-reuse support is still pending.
+
+
+## Logs API integration verified — 2026-10-03T00:05:57.966227+09:00
+Unit1 on codex/app-monitoring-api: validated GET logs(limit100), API status/error/retry states, local timestamps/escaped output, sequential15s poll and cancel-on-context-change; demo retains labeled samples and zero monitoring HTTP. No CSS/dependency/backend/AWS changes.
+Verification: logs adapter test RED->GREEN; npm run check PASS(TypeScript, ESLint,42native tests,build); BROWSER_CHECK_PORT15175 npm run test:e2e PASS; focused node scripts/monitoring-check.mjs PASS(initial/state/empty/500/invalid/recovery/poll/no-overlap/app-tab-source-abort/demo isolation/XSS/desktop1440/mobile390). Whole harness initially failed obsolete API-unsupported assertions, now uses server waiting response; scoped ESLint/diff check PASS. Parent reviewed source/key lifecycle and both screenshots, no blocker. Actual CloudWatch/production API unverified.
+User authorized this feature's commit and push on codex/app-monitoring-api. Next unit: metrics; no PR/merge/deployment.

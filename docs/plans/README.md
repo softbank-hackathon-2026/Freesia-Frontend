@@ -223,3 +223,9 @@ User authorized branch implementation on codex/app-redeploy-flow. Current scope 
 Redeployment UI preparation completed locally: check41/fullE2E24/focused redeploy+teardown PASS and parent source/visual review. See latest infra-ai-flow-eval. API latest-code/config-reuse integration remains unavailable pending backend contract; uncommitted/unpushed.
 
 User authorized commit/push of the verified redeployment UI preparation on codex/app-redeploy-flow. Implementation/check results unchanged; PR/main merge/deployment are not included. See latest eval publication record.
+
+
+## Application monitoring approval — 2026-10-02T23:55:24.590378+09:00
+Current active unit: logs API connection, then metrics. User approved implementation plus feature-separated commit/push on codex/app-monitoring-api; backend3d04671 contracts verified read-only. No PR/main merge/deployment/Notion changes.
+
+Logs unit verified 2026-10-03T00:05:57.966227+09:00: check42/E2E/focused/source+visual PASS. Authorized separate commit/push next; metrics unit remains pending.

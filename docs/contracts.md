@@ -157,3 +157,8 @@ Verified read-only against backend origin/main506f7f4f99fdc422049f48589e9b373f47
 - The existing explicit analysis -> configuration review -> deploy path remains available as a separate operation that may change configuration. New-version redeployment does not automatically enter it.
 Pending backend agreement: how to request reuse of the last successful template/values and obtain/pin a target commit; expose current/source and target deployment identities, commit SHA and config provenance. This section proposes no new route, payload field or fixed deployment guarantee.
 Evidence: app/schemas.py103-172,233-247; app/routers/app_spaces.py212-283,373-407 in the verified snapshot. User-reported Test002 success is not a test executed by this frontend task.
+
+
+## Application logs — 2026-10-02 (current, supersedes logs unsupported above)
+Backend main3d04671 exposes GET /api/app-spaces/{id}/logs?limit=100. The response is {status,message,lines:[{at,message}]}; status is ok/waiting/not_deployed/unsupported/error and message is nullable. Business states are HTTP200; transport/HTTP/invalid JSON/shape failures are separately visible. Last1hour, last100lines in chronological order; Fargate/Lambda supported and EC2 currently unsupported.
+Only the mounted API logs tab reads immediately, sequentially15seconds after each completion, or on manual refresh. Reads are aborted/ignored when app, source, deployment or teardown context changes or the tab unmounts. No SSE/live tail, no API mutation, no stale data disguised as current results, and no demo fallback. Demo keeps explicitly labeled local sample logs with zero monitoring requests. CloudWatch collection/permissions and live runtime are not verified by frontend fixtures.
