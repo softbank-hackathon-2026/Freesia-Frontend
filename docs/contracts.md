@@ -89,3 +89,13 @@ This proposal changes presentation only; current API payloads, storage and actio
 - Team questions: final container_port source/fallback and plan regeneration; full initial resource list plus ongoing state callbacks; teardown callback URL/body/read-model/status/reason and duplicate protection/reset semantics.
 
 Implementation limit: unknown-outcome request locks are scoped to the mounted Applications view (including navigation between its app details). Reload or switching to Infra/Integrations can unmount the view and lose an unacknowledged lock. A saved202receipt restores via GET app. Cross-client/reload duplicate prevention and redeploy-versus-destroy exclusion require backend operation/idempotency guarantees; this client guard is not a substitute.
+
+
+## Teardown lifecycle contract — 2026-10-02 (supersedes request-only follow-up)
+Verified against backend origin/main6da543a, merged PR13. User reports deployed server; no destructive production request was made to verify that claim.
+- GET app returns nullable teardown_status (requested/success/failed), teardown_requested_at, teardown_finished_at, teardown_reason. Missing fields remain compatible with older servers; malformed supplied fields are rejected, no demo fallback.
+- POST teardown remains bodyless,202 matching app receipt. Poll GET app sequentially every3seconds while requested, abort/ignore old app responses on navigation/unmount, stop at terminal status, restore by GET after reload. Read failure is visible and retryable; never infer success from timeout or receipt alone.
+- success displays completion/time and hides the old app URL; failed displays reason and enables an explicit confirmed retry. Both deploy and teardown409 teardown_in_progress recover through GET and block mutations while requested. No automatic destructive retry.
+- Backend retains terminal fields after redeployment and old Deployment.url after teardown; compare new deployment.created_at against teardown_requested_at so historical success does not hide a newer deployment URL. No fabricated server reset.
+- Backend _tearing_down expires its request guard after30minutes without changing GET teardown_status. Frontend follows requested conservatively; stale requested recovery/timeout remains a server concern and is not reported as completion.
+- Actual GitHub/AWS destruction is not executed by frontend tests. UI assertions use controlled API responses; real deployment remains a separate smoke test.

@@ -129,3 +129,11 @@ User requested all previously listed remaining local work and teammate questions
 
 
 2026-10-02T16:52:15.576988+09:00 publication approval: user explicitly requested commit and push of the current follow-up diff. Target codex/deployment-resource-tree. Scope: port display, request-only teardown with guards, unit/browser/isolated callback checks and related docs. Existing verification38unit/20browser/focused/isolatedcallback PASS remains applicable; no subsequent product changes. Fresh git diff --check PASS. No PR/merge/deploy requested. Publication result will be tracked in session/wiki after remote SHA verification.
+
+
+## Teardown lifecycle — approved 2026-10-02
+User explicitly approved implementing the four previously presented steps: optional status/finished/reason schema, requested-state polling with reload restoration, terminal result/URL/retry handling, and deploy/teardown conflict recovery. Branch codex/teardown-status from main58e3314. Backend main6da543a (PR13 merged) verified. Keep existing confirmation, native AbortController and app/session isolation; 3-second sequential GET polling, terminal stop and visible retryable read errors. Terminal teardown records persist across redeployment: compare latest deployment creation time against teardown_requested_at before hiding a new URL. No dependency/backend/cloud/Notion changes and no publication approval. Parent owns schema/API/unit tests/docs; worker owns Applications and focused browser regression. Verify RED/GREEN, check, full browser regression, focused teardown lifecycle, source review. This supersedes request-only limitations for the approved scope; real AWS remains untested.
+
+2026-10-02 teardown lifecycle completed/tested/reviewed locally: check39/fullbrowser20/focusedPASS; see latest eval. Branch codex/teardown-status uncommitted/unpushed. New UI main22b7b33 inspected but notintegrated.
+
+2026-10-02T17:43:56.246687+09:00 Publication approval: user explicitly requested commit & push of current verified teardown lifecycle diff on codex/teardown-status. check39/fullbrowser20/focusedPASS unchanged; fresh diffcheckPASS. Latest main UI remains unintegrated. No PR/merge/deploy authorization.

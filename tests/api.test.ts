@@ -407,7 +407,7 @@ test("teardown accepts only a matching request receipt and preserves abort/error
     await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify(data),{status:202})).teardown("app/a"), /응답/);
   }
   await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify(receipt),{status:200})).teardown("app/a"), /응답/);
-  for(const [status,code] of [[409,"not_deployed"],[409,"deployment_in_progress"],[502,"teardown_failed"],[404,"http_error"]] as const) {
+  for(const [status,code] of [[409,"not_deployed"],[409,"deployment_in_progress"],[409,"teardown_in_progress"],[502,"teardown_failed"],[404,"http_error"]] as const) {
     await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify({error:code,message:"server reason"}),{status})).teardown("app/a"),{status,code,message:"server reason"});
   }
   const controller=new AbortController();controller.abort();
@@ -437,4 +437,19 @@ test("plan container port is preserved and deployment uses the reviewed plan ide
   assert.equal(result.plans[0].values.container_port,3000);
   await api.deploy("a",result.compute,result.plans[0].id);
   assert.deepEqual(posted,{compute:"ecs-fargate",plan_id:"port-plan"});
+});
+
+
+test("app teardown lifecycle validates status and nullable metadata on detail and list", async()=>{
+  const app={id:"a",name:"app",repo_url:"https://github.com/a/b",branch:"main",infra_id:"i",created_at:"now",latest_deployment_id:null};
+  for(const status of [null,"requested","success","failed"]) {
+    const data={...app,teardown_status:status,teardown_requested_at:"2026-10-02T07:00:00Z",teardown_finished_at:status===null?null:"2026-10-02T07:03:00Z",teardown_reason:status==="failed"?"Destroy failed":null};
+    assert.deepEqual(await createApi("/api",async()=>new Response(JSON.stringify(data))).app("a"),data);
+    assert.deepEqual(await createApi("/api",async()=>new Response(JSON.stringify([data]))).apps(),[data]);
+  }
+  for(const extra of [{teardown_status:"done"},{teardown_status:1},{teardown_status:{}},{teardown_finished_at:42},{teardown_reason:false}]) {
+    const data={...app,...extra};
+    await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify(data))).app("a"),/응답/);
+    await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify([data]))).apps(),/응답/);
+  }
 });

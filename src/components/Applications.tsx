@@ -67,6 +67,7 @@ export default function Applications({
   const request = useRef<AbortController | null>(null);
   const restored = useRef(false);
   const teardownRequest = useRef<string | null>(null);
+  const teardownBaseline = useRef(new Map<string, string | null | undefined>());
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
   useEffect(
     () => () => {
@@ -115,7 +116,40 @@ export default function Applications({
       : null);
   const infra = infras.find((i) => i.id === selected?.infra_id);
   const currentProgress = event?.progress ?? (mode === "demo" && deployment && demoStep(deployment) >= 0 ? Math.round(demoStep(deployment)/5*100) : undefined);
-  const teardownUnconfirmed = mode === "api" && !!selected && (!!selected.teardown_requested_at || teardownPending.includes(selected.id));
+  const pendingTeardown = !!selected && teardownPending.includes(selected.id);
+  const teardownStatus = selected?.teardown_status;
+  const hasNewDeployment = !!deployment && !!selected?.teardown_requested_at && Date.parse(deployment.created_at) > Date.parse(selected.teardown_requested_at);
+  const teardownComplete = mode === "api" && teardownStatus === "success" && !hasNewDeployment;
+  const teardownUnconfirmed = mode === "api" && !!selected && (teardownStatus === "requested" || pendingTeardown || (teardownStatus === undefined && !!selected.teardown_requested_at));
+  const teardownAppId = selected?.id;
+  useEffect(() => {
+    if (mode !== "api" || !teardownAppId || !teardownUnconfirmed || (busy && pendingTeardown)) return;
+    const token = session.current;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const fresh = await api.app(teardownAppId!, controller.signal);
+        if (controller.signal.aborted || token !== session.current) return;
+        // An ambiguous POST may still finish after a GET; an old snapshot cannot unlock it.
+        const confirmed = !pendingTeardown || fresh.teardown_status === "requested" || (!!fresh.teardown_requested_at && fresh.teardown_requested_at !== teardownBaseline.current.get(teardownAppId!));
+        if (confirmed) {
+          setSelected(current => current?.id === teardownAppId ? fresh : current);
+          if (fresh.teardown_status !== undefined) {
+            setTeardownError("");
+            setTeardownPending(current => current.filter(id => id !== teardownAppId));
+          }
+          if (fresh.teardown_status !== undefined && fresh.teardown_status !== "requested") return;
+        }
+      } catch (e) {
+        if (controller.signal.aborted || token !== session.current) return;
+        setTeardownError(`내리기 상태 조회 실패 · 3초 후 다시 확인합니다. ${e instanceof Error ? e.message : "조회 오류"}`);
+      }
+      if (!controller.signal.aborted && token === session.current) timer = setTimeout(poll, 3000);
+    }
+    timer = setTimeout(poll, 3000);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [mode, teardownAppId, teardownUnconfirmed, pendingTeardown, busy]);
   const canDeploy = mode === "demo" || infra?.deployable_computes?.includes(chosen) === true;
   const readinessMessage = infra?.deployable_computes === undefined ? "배포 가능 여부 미확인" : "배포 준비 중";
   const allowed = analysis
@@ -394,6 +428,11 @@ export default function Applications({
     } catch(e) {
       if(token !== session.current || controller.signal.aborted) return;
       setError(e instanceof ApiError && e.code === "compute_not_ready" ? "선택한 실행 환경은 배포 준비 중입니다. 서버 지원 상태를 확인하세요." : e instanceof Error ? e.message : "배포 요청 실패");
+      if (e instanceof ApiError && e.status === 409 && e.code === "teardown_in_progress") {
+        setSelected(current => current?.id === selected.id ? { ...current, teardown_status: "requested" } : current);
+        setError("");
+        setTeardownError("앱을 내리는 중입니다. 완료 후 다시 배포하세요.");
+      }
       if (e instanceof ApiError && e.status === 409 && e.code === "deployment_in_progress") {
         try {
           const fresh = await api.app(selected.id, controller.signal);
@@ -412,10 +451,11 @@ export default function Applications({
     finally { if(token === session.current && !controller.signal.aborted)setBusy(false); }
   }
   async function teardown() {
-    if (mode !== "api" || !selected || selected.teardown_requested_at !== null || !deployment || !["success", "failed"].includes(deployment.status) || busy || streamId || teardownPending.includes(selected.id) || teardownRequest.current === selected.id) return;
+    if (mode !== "api" || !selected || (selected.teardown_status === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || !deployment || !["success", "failed"].includes(deployment.status) || busy || streamId || teardownPending.includes(selected.id) || teardownRequest.current === selected.id) return;
     if (!window.confirm(`${selected.name} 앱을 내릴까요? 앱 전용 클라우드 자원이 삭제될 수 있습니다. 공유 네트워크 등 삭제 범위는 배포 설정을 확인하세요.`)) return;
     const appId = selected.id;
     teardownRequest.current = appId;
+    teardownBaseline.current.set(appId, selected.teardown_requested_at);
     setTeardownPending(current => [...current, appId]);
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
@@ -424,20 +464,30 @@ export default function Applications({
     try {
       const receipt = await api.teardown(appId, controller.signal);
       if (token !== session.current || controller.signal.aborted) return;
-      setSelected(current => current?.id === appId ? { ...current, teardown_requested_at: receipt.requested_at } : current);
+      setSelected(current => current?.id === appId ? { ...current, teardown_requested_at: receipt.requested_at, teardown_status: "requested", teardown_finished_at: null, teardown_reason: null } : current);
+      setTeardownPending(current => current.filter(id => id !== appId));
     } catch (e) {
       if (token !== session.current || controller.signal.aborted) return;
-      if (e instanceof ApiError && ([404, 501].includes(e.status ?? 0) || (e.status === 409 && ["not_deployed", "deployment_in_progress"].includes(e.code ?? "")))) setTeardownPending(current => current.filter(id => id !== appId));
-      setTeardownError(e instanceof ApiError && e.code === "not_deployed" ? "실제 배포 기록이 없어 내릴 수 없습니다. 모의 배포는 내리기 대상이 아닙니다."
+      if (e instanceof ApiError && ([404, 501].includes(e.status ?? 0) || (e.status === 502 && e.code === "teardown_failed") || (e.status === 409 && ["not_deployed", "deployment_in_progress", "teardown_in_progress"].includes(e.code ?? "")))) setTeardownPending(current => current.filter(id => id !== appId));
+      if (e instanceof ApiError && e.code === "teardown_in_progress") {
+        setSelected(current => current?.id === appId ? { ...current, teardown_status: "requested" } : current);
+      }
+      setTeardownError(e instanceof ApiError && e.status === 502 && e.code === "teardown_failed" ? `내리기 실행 요청에 실패했습니다. 다시 시도할 수 있습니다. ${e.message}`
+        : e instanceof ApiError && e.code === "teardown_in_progress" ? "이미 앱을 내리는 중입니다. 완료 상태를 확인하고 있습니다."
+        : e instanceof ApiError && e.code === "not_deployed" ? "실제 배포 기록이 없어 내릴 수 없습니다. 모의 배포는 내리기 대상이 아닙니다."
         : e instanceof ApiError && e.code === "deployment_in_progress" ? "배포가 진행 중입니다. 현재 배포 상태를 확인한 뒤 다시 시도하세요."
         : e instanceof ApiError && (e.status === 404 || e.status === 501) ? "내리기 API 연동 대기입니다. 현재 서버에서 지원하지 않습니다."
         : `내리기 요청의 처리 여부를 확인할 수 없습니다. 중복 요청 전에 담당자에게 확인하세요. ${e instanceof Error ? e.message : "요청 오류"}`);
-      if (e instanceof ApiError && e.code === "deployment_in_progress") {
+      if (e instanceof ApiError && ["deployment_in_progress", "teardown_failed"].includes(e.code ?? "")) {
         try {
           const fresh = await api.app(appId, controller.signal);
           if (token !== session.current || controller.signal.aborted) return;
           setSelected(fresh);
-          if (fresh.latest_deployment_id) {
+          if (e.code === "teardown_failed" && fresh.teardown_status !== undefined) {
+            setTeardownPending(current => current.filter(id => id !== appId));
+            setTeardownError(`내리기 실행 요청에 실패했습니다. 다시 시도할 수 있습니다. ${e.message}`);
+          }
+          if (e.code === "deployment_in_progress" && fresh.latest_deployment_id) {
             const current = await api.deployment(fresh.latest_deployment_id, controller.signal);
             if (token !== session.current || controller.signal.aborted) return;
             setDeployment(current); setEvent(null); setStreamId(current.id);
@@ -861,7 +911,7 @@ export default function Applications({
                       <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
                       <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
                       <p>실행 환경: {deployment.compute}</p>
-                      {deployment.url && (
+                      {deployment.url && !teardownComplete && (
                         <p className="break-word">
                           {mode === "demo" ? "샘플 URL" : "서버 보고 URL"}: <code>{deployment.url}</code>
                         </p>
@@ -879,12 +929,15 @@ export default function Applications({
                 {mode === "api" && deployment && <section className="panel" aria-label="앱 내리기">
                   <div className="section-heading"><h2>앱 내리기</h2></div>
                   <div className="panel-body">
-                  {selected.teardown_requested_at ? <p role="status">내리기 요청 접수: {selected.teardown_requested_at} · 완료 여부 확인 대기입니다. 기존 배포 상태와 주소는 마지막 서버 기록이며 현재 실행을 보장하지 않습니다. 완료·실패 조회 연동 전까지 담당자 확인이 필요합니다. 내리기 완료 여부 확인 전에는 다시 배포할 수 없습니다.</p>
-                    : selected.teardown_requested_at === undefined ? <p>내리기 API 연동 대기 · 현재 서버는 내리기 요청 상태를 제공하지 않습니다.</p>
+                  {teardownStatus === "requested" ? <p role="status">앱을 내리는 중입니다. 3초마다 상태를 확인합니다. {selected.teardown_requested_at && `요청 시각: ${selected.teardown_requested_at}`} 화면을 이동해도 접수된 작업은 계속됩니다.</p>
+                    : teardownComplete ? <p role="status">내림 완료{selected.teardown_finished_at ? `: ${selected.teardown_finished_at}` : ""} · 이전 앱 주소는 더 이상 사용할 수 없습니다. 다시 배포할 수 있습니다.</p>
+                    : teardownStatus === "failed" && !hasNewDeployment ? <p role="alert">내리기 실패: {selected.teardown_reason || "서버에서 실패 이유를 제공하지 않았습니다."} 다시 시도할 수 있습니다.</p>
+                    : teardownStatus === undefined && selected.teardown_requested_at === undefined ? <p>내리기 API 연동 대기 · 현재 서버는 내리기 요청 상태를 제공하지 않습니다.</p>
+                    : teardownStatus === undefined && selected.teardown_requested_at ? <p role="status">내리기 요청 접수: {selected.teardown_requested_at} · 현재 서버는 완료·실패 상태를 제공하지 않습니다. 확인 전에는 다시 요청할 수 없습니다.</p>
                     : <p>앱 전용 자원을 내리는 요청입니다. 요청 접수는 삭제 완료가 아닙니다. 화면을 이동해도 서버에 접수된 작업은 취소되지 않습니다.</p>}
-                  {teardownPending.includes(selected.id) && !selected.teardown_requested_at && <p role="status">내리기 요청 중이거나 처리 여부가 확인되지 않았습니다. 서버 접수 여부를 확인하기 전에는 내리기·재배포를 다시 요청할 수 없습니다.</p>}
+                  {pendingTeardown && teardownStatus !== "requested" && <p role="status">내리기 요청 중이거나 처리 여부가 확인되지 않았습니다. 서버 상태를 다시 확인하는 동안 내리기·재배포를 잠시 막습니다.</p>}
                   {teardownError && <p role="alert">{teardownError}</p>}
-                  <button disabled={selected.teardown_requested_at !== null || teardownUnconfirmed || busy || !!streamId || !["success", "failed"].includes(deployment.status)} onClick={teardown}>앱 내리기</button>
+                  <button disabled={(teardownStatus === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || busy || !!streamId || !["success", "failed"].includes(deployment.status)} onClick={teardown}>앱 내리기</button>
                   </div>
                 </section>}
                 {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={event?.at ?? "initial"} appName={selected.name}/>}
