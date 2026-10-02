@@ -130,6 +130,7 @@ async function checkDashboardTheme(page) {
       sidebar: style(".sidebar").backgroundColor,
       masthead: style(".masthead").backgroundColor,
       backdrop: style(".console").backgroundImage,
+      heroColor: style(".page-heading h1").color,
       primaryRadius: primary.borderTopLeftRadius,
       inactiveColor: style(".sidebar-link:not(.active)").color,
       primaryBackground: primary.backgroundColor,
@@ -149,10 +150,12 @@ async function checkDashboardTheme(page) {
   assert.equal(colors.sidebar, "rgb(255, 255, 255)");
   assert.match(colors.backdrop, /rgb\(255, 193, 7\)/);
   assert.match(colors.backdrop, /rgb\(249, 224, 118\)/);
+  assert.ok(contrastRatio(colors.heroColor, "rgb(255, 193, 7)") >= 4.5);
+  assert.ok(contrastRatio(colors.heroColor, "rgb(249, 224, 118)") >= 4.5);
   assert.equal(colors.masthead, "rgba(0, 0, 0, 0)");
   assert.equal(colors.inactiveColor, "rgb(43, 46, 70)");
   assert.ok(contrastRatio(colors.inactiveColor, colors.sidebar) >= 4.5);
-  assert.equal(colors.primaryBackground, "rgb(137, 81, 41)");
+  assert.equal(colors.primaryBackground, "rgb(47, 92, 200)");
   assert.equal(colors.primaryColor, "rgb(255, 255, 255)");
   for (const border of [colors.primaryBorderWidth, colors.secondaryBorderWidth, colors.panelBorderWidth, colors.bannerBorderWidth]) {
     assert.equal(border, "0px");
@@ -163,10 +166,10 @@ async function checkDashboardTheme(page) {
   assert.ok(contrastRatio(colors.controlBorder, "rgb(255, 193, 7)") >= 3);
   assert.ok(contrastRatio(colors.primaryColor, colors.primaryBackground) >= 4.5);
   assert.ok(contrastRatio(colors.primaryBackground, "rgb(255, 193, 7)") >= 3);
-  assert.equal(colors.activeBackground, "rgb(255, 247, 223)");
-  assert.equal(colors.activeColor, "rgb(113, 67, 34)");
+  assert.equal(colors.activeBackground, "rgb(234, 241, 255)");
+  assert.equal(colors.activeColor, "rgb(36, 73, 159)");
   assert.ok(contrastRatio(colors.activeColor, colors.activeBackground) >= 4.5);
-  assert.equal(colors.linkColor, "rgb(137, 81, 41)");
+  assert.equal(colors.linkColor, "rgb(47, 92, 200)");
   assert.ok(contrastRatio(colors.linkColor, "rgb(255, 255, 255)") >= 4.5);
 
   const primary = page.locator(".primary").first();
@@ -175,7 +178,7 @@ async function checkDashboardTheme(page) {
     const style = window.getComputedStyle(button);
     return { background: style.backgroundColor, color: style.color };
   });
-  assert.deepEqual(hover, { background: "rgb(113, 67, 34)", color: "rgb(255, 255, 255)" });
+  assert.deepEqual(hover, { background: "rgb(36, 73, 159)", color: "rgb(255, 255, 255)" });
   assert.ok(contrastRatio(hover.color, hover.background) >= 4.5);
   await page.mouse.move(0, 0);
 }
@@ -276,7 +279,7 @@ async function checkSidebar(page, mobile) {
     });
     assert.deepEqual(focus, {
       visible: true,
-      outline: "rgb(137, 81, 41)",
+      outline: "rgb(47, 92, 200)",
       style: "solid",
     });
     assert.ok(contrastRatio(focus.outline, "rgb(255, 255, 255)") >= 3);

@@ -6,12 +6,12 @@
   background: #ffffff;
   --ink: #2b2e46;
   --muted: #62677c;
-  --accent: #895129;
-  --accent-hover: #714322;
-  --accent-soft: #fff7df;
+  --accent: #2f5cc8;
+  --accent-hover: #24499f;
+  --accent-soft: #eaf1ff;
   --control-border: #62677c;
-  --honey: #ffc107;
-  --honey-soft: #f9e076;
+  --hero-start: #ffc107;
+  --hero-end: #f9e076;
   --surface: #f7f8fc;
   --paper: #ffffff;
   --line: #e6e8f0;
@@ -91,7 +91,7 @@ a {
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   background-color: #ffffff;
-  background-image: linear-gradient(105deg, var(--honey), var(--honey-soft));
+  background-image: linear-gradient(105deg, var(--hero-start), var(--hero-end));
   background-size: calc(100% - var(--sidebar-width)) var(--hero-height);
   background-position: top right;
   background-repeat: no-repeat;
@@ -228,7 +228,7 @@ a {
   padding: 10px 14px;
   border: 0;
   border-radius: 6px;
-  background: var(--honey-soft);
+  background: var(--hero-end);
   color: var(--ink);
   margin-bottom: 18px;
 }
@@ -299,7 +299,7 @@ main {
   white-space: nowrap;
 }
 .badge.caution {
-  background: var(--honey-soft);
+  background: var(--hero-end);
   color: var(--ink);
 }
 .table-scroll {
@@ -576,7 +576,7 @@ form button {
   color: var(--muted);
 }
 .app-space-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 20px; }
-.app-space-card { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: 20px; border: 0; border-radius: 6px; text-align: start; background: #fff; box-shadow: 0 2px 12px #3522160c; }
+.app-space-card { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: 20px; border: 0; border-radius: 6px; text-align: start; background: #fff; box-shadow: 0 2px 12px #2b2e460c; }
 .app-space-card:hover:not(:disabled) { background: var(--accent-soft); }
 .app-card-field { display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
 .app-card-label { color: var(--muted); font-size: 12px; font-weight: 600; }
