@@ -82,3 +82,32 @@ Ownership APIworker types/api/unit/local-integration script; UIworker Applicatio
 2026-10-02 backend readiness completed locally:35unit/18browser/5liveAPIgroups+reviewPASS. codex/backend-plan-readiness uncommitted/unpushed; no new publication approval. Actual53dfc2d planAPI nowconnected;150secondanalysis deadline provisional;model/cloud unverified.
 
 2026-10-02 publication approval: user explicitly requested commit and push of the verified13-file backend-plan-readiness diff. Existing35unit/18browser/5localAPI results apply; no product changes since final verification. Commit/push only, no PR/merge.
+
+## Current proposal — Space list UI/UX refresh (2026-10-02)
+The latest presentation-only task uses the existing [Day3 spec](2026-09-30-day3-spec.md#space-list-uiux-refresh--2026-10-02-proposed), [plan](2026-09-30-day3-plan.md#space-list-uiux-refresh--2026-10-02-proposed), [sprint contract](sprints/infra-ai-flow-contract.md#space-list-uiux-refresh--2026-10-02-proposed) and [eval/handoff](sprints/infra-ai-flow-eval.md#space-list-uiux-proposal--2026-10-02). Historical completed work above remains intact.
+
+Requested: exact three sidebar labels, reference-like Infra table with linked application counts, and Application cards showing Space/integration/Infra names. Proposed units UI-01/02/03 run sequentially on existing `feat/ui` with required checks, desktop/mobile and independent review before each commit/push. Current types provide no Infra creation time; proposed reference column uses `미제공` and introduces no schema/API change.
+
+Status: design and unit plans proposed; combined Ideation/Inception/Construction approval pending. The user explicitly requested per-unit commit/push, retained as publication authorization for this scope. No application implementation or checks, commit/push, backend work or deployment has occurred for this task. Next action: present the concrete spec/plan/contract for one combined approval, then implement the verified units without repeated routine approval requests.
+
+2026-10-02 current status: user `ㄱ ㄱ` approved the preceding scope/design and all three Construction units together. Implementation started with UI-01 on `feat/ui`; each unit must pass checks and independent review before its authorized commit/push. Latest execution evidence will be recorded in [eval/handoff](sprints/infra-ai-flow-eval.md#space-list-uiux-implementation--2026-10-02).
+
+2026-10-02 UI-01 verified: sidebar implementation, `npm run check` (35 native tests) and `npm run test:e2e` (18 browser groups) PASS; independent source/desktop/open-mobile review PASS (7/6/8/8). Authorized unit commit/push is the next action. UI-02/03 remain approved and unimplemented; actual backend/cloud/deployment not verified by this UI-only work.
+
+2026-10-02 UI-01 published: `bdaa4bb` on `feat/ui`, push and matching remote SHA confirmed. UI-02 Infra list implementation in progress; UI-03 approved and pending.
+
+2026-10-02 UI-02 verified: reference-like Infra table/header and explicit unavailable timestamps, `npm run check` (35 native tests) and `npm run test:e2e` (19 browser groups) PASS; independent Demo/API desktop/mobile source/visual review PASS (8/6/8/8). Authorized unit commit/push next; UI-03 remains approved and pending. Current evidence is in eval/handoff.
+
+2026-10-02 UI-02 published: `b566cb4` on `feat/ui`, push and matching remote SHA confirmed. UI-03 Application cards in progress.
+
+2026-10-02 UI-03 verified: three-field cards, responsive layout, unavailable-name states and screen-reader relation descriptions implemented; `npm run check` (35 native tests), `npm run test:e2e` (20 browser groups) and independent source/visual review PASS (8/6/8/8). API mobile full-page capture artifact was replaced as review evidence by trusted viewport/long-card captures plus DOM checks. Authorized UI-03 commit/push next; local preview is at `http://localhost:5173/`. Actual backend/cloud/deployment remain unverified and outside this UI task.
+
+2026-10-02 current handoff: UI-03 published as `0e489d7`; push and matching remote SHA confirmed. All three approved UI units are implemented, tested, independently reviewed and individually committed/pushed on `feat/ui` (`bdaa4bb`, `b566cb4`, `0e489d7`). Earlier proposed/in-progress entries above are historical. [Completed handoff](sprints/infra-ai-flow-eval.md#space-list-uiux-completed-handoff--2026-10-02) is the applicable record. Local preview remains `http://localhost:5173/`; no PR/merge or deployment.
+
+
+## PR #5 favicon follow-up — 2026-10-02
+User explicitly requested adding the previously described favicon fix to PR #5. Approved scope: index.html references existing /freesia-mascot.jpg; verify and commit/push feat/ui to update that PR. No merge/deployment. Existing stash remains preserved. Verification pending in infra-ai-flow-eval.md.
+
+2026-10-02 verification complete: check35/browser20/favicon200/built asset PASS. Automatic approval review rejected commit for lack of explicit current-diff commit wording. Commit/push remain pending fresh user approval; previous scope interpretation above does not constitute publication evidence.
+
+2026-10-02 publication approval: user explicitly answered "ㅇㅇ 반영해줘" to the request to commit and push the verified three-file favicon diff on feat/ui into PR #5. Prior approval-review block resolved by this explicit approval. Product diff unchanged since check35/browser20/favicon200 verification; git diff --check PASS. No merge or deployment authorized.

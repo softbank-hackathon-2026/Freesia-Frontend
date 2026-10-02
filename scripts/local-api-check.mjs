@@ -67,7 +67,7 @@ try {
   await page.screenshot({ path: "artifacts/local-api-integration-desktop.png", fullPage: true });
   results.push("repository register201, duplicate409 UI, validation422, reload/list persistence");
 
-  await navigate("애플리케이션");
+  await navigate("애플리케이션 스페이스");
   await page.getByRole("button", { name: "앱 연결", exact: true }).click();
   await page.getByLabel("앱 이름").fill(appName);
   await page.getByLabel("등록한 Repository", { exact: true }).selectOption(repo.id);
@@ -127,7 +127,7 @@ try {
   await page.waitForFunction(()=>Number(document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value"))>0);
   await page.reload();
   await page.getByLabel("데이터 소스").selectOption("api");
-  await navigate("애플리케이션");
+  await navigate("애플리케이션 스페이스");
   if (await page.getByRole("button",{name:new RegExp(appName)}).count()) await page.getByRole("button",{name:new RegExp(appName)}).click();
   await page.waitForFunction(()=>document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value")==="100",{},{timeout:45000});
   assert.equal((await (await get(`/deployments/${dep.id}`)).json()).status,"success");

@@ -68,3 +68,13 @@ This update supersedes the preceding8d99b37 / missing-plans / always-sample find
 - API UI displays server-provided analysis/evidence and generic server-data labels. Static explanatory sample tree stays in demo only; the frontend cannot infer server model/simulation configuration from missing metadata.
 - Local runtime updated to53dfc2d/SQLite0004 after backup, preserving1repository/9apps/7deployments/25events/3resources. AI_MODEL_ID empty and DEPLOY_SIMULATE=true explicitly. Source developer backend checkout is untouched.
 - Notion fetched last_edited2026-10-01T17:53:34.361Z still says60seconds/plansplanned/countundecided and omits deployable_computes; current backend code and supplied maintainer message are newer evidence. No Notion edits.
+
+## Space list presentation — 2026-10-02 (proposed, not implemented)
+This proposal changes presentation only; current API payloads, storage and actions stay unchanged.
+- Sidebar uses `인프라 스페이스`, `애플리케이션 스페이스`, `통합` in visible and accessible text.
+- Infra linked-app counts retain existing sources: demo app relations and API `app_count`. API counts reflect the server snapshot and are not silently replaced by local recomputation. Infra creation timestamps are not in the current contract; display `미제공` without fabricating dates or adding a backend field.
+- Application card integration name means the registered Repository's existing `name`, resolved from the app's `repo_url` and `branch`. It is not an OAuth account or a new integration entity. Infra display name comes from the app's `infra_id` relation.
+- Lookup loading/error/unavailable states are explicit. A missing registered Repository or Infra display record does not erase the app's stored URL, branch or Infra ID, mark it disconnected without evidence, or substitute demo data in API mode. Repository unregistration continues to preserve existing apps.
+- Card and table actions reuse current detail/create/refresh handlers. Selection, sorting, bulk deletion and new API calls are not part of the reference-inspired UI change.
+
+2026-10-02 current status: the presentation contract above was approved with all three unit plans and implemented without payload, storage or action changes. UI-01/02/03 passed required checks and independent review, then were committed and pushed to `feat/ui`. The proposal label preserves the original record; this completion status supersedes it. Final verification/publication evidence is in [eval/handoff](plans/sprints/infra-ai-flow-eval.md#space-list-uiux-completed-handoff--2026-10-02).

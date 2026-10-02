@@ -45,3 +45,26 @@ Success: old demo storage stays readable, API data never falls back; delayed/sta
 ## Backend plans compatibility — 2026-10-02 (active)
 User supplied latest backend message and asked to continue. Bounded existing-flow adaptation: readiness deployable_computes separate from recommendation computes; one plan goes directly to template/values review with explicit deploy and plan_id; analysis polling150seconds proposed team value (not final agreement); server-derived analysis explanation;400notready/409ongoing handling; latest isolated backend53dfc2d/migrations0003/0004 with data preservation. No backend source/cloud/Notion changes, no monitoring. New branch codex/backend-plan-readiness. Prior publication approval covered91745a6 only; no publication this follow-up without explicit approval.
 Ownership APIworker types/api/unit/local-integration script; UIworker Applications/browser checks; parent Appbanner/runtime/docs/review. Checks type/lint/unit/build + browser + latest real-local plan→deploy SSE roundtrip. Singleplan requires review, not an extra choice. Missing readiness is unknown, no fabricated support. No dependency/buildconfig changes.
+
+## Space list UI/UX refresh — 2026-10-02 (proposed)
+Status: design/implementation plan proposed; combined stage approval pending. User-requested per-unit commit/push is recorded separately from implementation approval. The [spec](../2026-09-30-day3-spec.md#space-list-uiux-refresh--2026-10-02-proposed) and [plan](../2026-09-30-day3-plan.md#space-list-uiux-refresh--2026-10-02-proposed) define the exact scope; prior completed contracts do not authorize this new design.
+
+| Unit | Owned files | Design and verification |
+|---|---|---|
+| UI-01 | `src/App.tsx`, scoped sidebar rules in `src/styles.css`, affected navigation selectors in `scripts/browser-check.mjs` and `scripts/local-api-check.mjs`; related docs | Exact three labels in visible/accessibility text, existing `nav()` and menu state retained. Targeted browser assertions for active destination, keyboard and mobile close behavior. |
+| UI-02 | Infra list rendering in `src/App.tsx`, scoped list/table rules in `src/styles.css`, `scripts/browser-check.mjs`; related docs | Move existing refresh/create controls into the reference-like list header; preserve handlers, network summary and current app counts. Add creation-time placeholder without type/state/API changes. Verify demo relations and server count independently, name detail entry, refresh/create, empty/error/loading and mobile table scroll. Keep draft rows and cancel behavior. |
+| UI-03 | Application list rendering in `src/components/Applications.tsx`, scoped card rules in `src/styles.css`, `scripts/browser-check.mjs`; related docs | Card fields use existing app name, URL+branch Repository lookup and Infra-ID lookup. Existing `open(app)` retained. No nested interactive controls. Verify three labels/values, loading/error/unregistered/missing relations, same URL with different branches, long names, keyboard entry, reload and demo/API isolation. |
+
+Owner: parent coordinates docs, per-unit implementation, verification and publication; independent reviewer inspects source/contract/captures without editing. Shared files are handled sequentially to keep unit diffs isolated. Existing checks are extended rather than introducing a test framework.
+
+Gate per unit: meaningful browser assertion RED before implementation; `npm run check` and `npm run test:e2e` PASS; 1440px/390px screenshots inspected; read-only source/visual review with Design Quality, Originality, Craft and Functionality each at least 6/10; `git diff --check` PASS. After approval, implementation, tests and review, record commit SHA/push/remote SHA as distinct evidence. Failure or a material scope change stops publication of that unit until resolved.
+
+Approval record pending: capture date and the user's exact combined approval covering Ideation scope, Inception requirements/architecture and all three Construction unit plans. Do not implement before this is recorded. Real backend/cloud execution and deployment are unverified and outside this contract.
+
+Approval recorded 2026-10-02: user `ㄱ ㄱ` to the preceding combined scope/design/three-unit proposal. Ideation, Inception and UI-01/02/03 Construction plans approved together. Status now approved; UI-01 in progress. Original per-unit commit/push instruction authorizes publication after each unit's tests/review. Backend/cloud/deployment remain outside the scope.
+
+2026-10-02 unit status: UI-01 implemented/tested/reviewed/committed/pushed (`bdaa4bb`, matching remote SHA verified). UI-02 in progress; UI-03 approved and pending. Exact execution evidence is in eval/handoff.
+
+2026-10-02 unit status: UI-02 implemented/tested/reviewed/committed/pushed (`b566cb4`, matching remote SHA verified). UI-03 in progress under the approved card design and plan.
+
+2026-10-02 final unit status: UI-03 implemented/tested/reviewed/committed/pushed (`0e489d7`, matching remote SHA verified). All three approved units are complete; no remaining implementation or publication gate for this scope. The original proposed/in-progress entries are historical. Final handoff and unverified backend/cloud/deployment limits are recorded in [eval/handoff](infra-ai-flow-eval.md#space-list-uiux-completed-handoff--2026-10-02).

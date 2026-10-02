@@ -412,7 +412,7 @@ export default function Applications({
         <div>
           <div className="eyebrow">APPLICATION SPACE</div>
           <h1>
-            {selected ? selected.name : creating ? "앱 연결" : "애플리케이션"}
+            {selected ? selected.name : creating ? "앱 연결" : "애플리케이션 스페이스"}
           </h1>
           <p>
             {selected
@@ -883,21 +883,38 @@ export default function Applications({
       ) : (
         <section className="panel">
           <div className="section-heading">
-            <h2>앱 목록</h2>
+            <h2>애플리케이션 스페이스</h2>
             <span className="badge">{apps.length}개</span>
           </div>
           {apps.length ? (
-            <div className="app-list">
-              {apps.map((app) => (
-                <button key={app.id} onClick={() => open(app)}>
-                  <strong>{app.name}</strong>
-                  <span>
-                    {app.branch} ·{" "}
-                    {infras.find((i) => i.id === app.infra_id)?.name ??
-                      app.infra_id}
-                  </span>
-                </button>
-              ))}
+            <div className="app-space-cards">
+              {apps.map((app) => {
+                const cardId = `app-card-${encodeURIComponent(app.id)}`;
+                const repository = registered.find((repo) => repo.repo_url === app.repo_url && repo.branch === app.branch);
+                const linkedInfra = infras.find((item) => item.id === app.infra_id);
+                const integrationName = mode === "api" && repositoryLoading ? "통합 정보 불러오는 중…"
+                  : mode === "api" && repositoryError ? "통합 정보 조회 실패"
+                  : repository ? repository.name.trim() || "통합 이름 미제공" : "통합 등록 정보 없음";
+                return (
+                  <button className="app-space-card" key={app.id} aria-label={`${app.name} 상세 보기`} aria-describedby={`${cardId}-integration ${cardId}-infra ${cardId}-branch`} onClick={() => open(app)}>
+                    <span className="app-card-field">
+                      <span className="app-card-label">스페이스 이름</span>
+                      <strong className="app-card-name">{app.name}</strong>
+                    </span>
+                    <span className="app-card-field" id={`${cardId}-integration`}>
+                      <span className="app-card-label">연결된 통합</span>
+                      <strong>{integrationName}</strong>
+                      <span className="app-card-reference">{app.repo_url}</span>
+                    </span>
+                    <span className="app-card-field" id={`${cardId}-infra`}>
+                      <span className="app-card-label">연결된 인프라 스페이스</span>
+                      <strong>{linkedInfra ? linkedInfra.name.trim() || "인프라 이름 미제공" : "인프라 이름 미확인"}</strong>
+                      {!linkedInfra?.name.trim() && <span className="app-card-reference">{app.infra_id}</span>}
+                    </span>
+                    <span className="app-card-footer"><span id={`${cardId}-branch`}>브랜치 {app.branch}</span><span>상세 보기 →</span></span>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <div className="empty">
