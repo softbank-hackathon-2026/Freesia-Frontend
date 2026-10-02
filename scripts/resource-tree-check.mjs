@@ -1,0 +1,69 @@
+import { chromium } from 'playwright';
+import assert from 'node:assert/strict';
+import { mkdir, writeFile } from 'node:fs/promises';
+// Browser-only fixtures: no backend data or cloud resources are created.
+const base=process.env.TREE_CHECK_URL||'http://localhost:5173';
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+const app={id:'tree-review',name:'todo-app · 트리 시안',repo_url:'https://github.com/example/todo',branch:'main',infra_id:'infra-review',created_at:'2026-10-02',latest_deployment_id:'tree-deploy'};
+const deployment={id:'tree-deploy',app_space_id:app.id,compute:'ecs-fargate',status:'deploying',url:null,reason:null,created_at:'2026-10-02'};
+const resource=(type,state,name='app')=>({address:`${type}.${name}`,type,state,action:'create',reason:null,updated_at:'2026-10-02T05:00:00Z'});
+const sample=[resource('aws_ecs_service','done'),resource('aws_db_instance','done'),resource('aws_s3_bucket','in_progress'),resource('aws_lb','done'),resource('aws_route53_record','pending')];
+let resources=sample,responseError=false,reads=0;
+const mutations=[];
+try {
+ await mkdir('artifacts',{recursive:true});
+ const page=await browser.newPage({viewport:{width:1440,height:1050}}), errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.addInitScript(()=>{window.treeStreams=[];window.EventSource=class extends window.EventTarget{constructor(){super();window.treeStreams.push(this);this.closed=false;}close(){this.closed=true;}};});
+ await page.route('**/api/**',async route=>{
+  const req=route.request(),path=new URL(req.url()).pathname;
+  if(req.method()!=='GET')mutations.push(`${req.method()} ${path}`);
+  const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
+  if(path.endsWith('/resources')){reads++;return json(responseError?{message:'트리 조회 실패'}:resources,responseError?500:200);}
+  if(path.endsWith('/repositories'))return json([]);
+  if(path.endsWith('/infra-spaces'))return json([{id:app.infra_id,name:'검증용 기반',description:'브라우저 테스트',network:'public',computes:['ecs-fargate'],deployable_computes:['ecs-fargate'],app_count:1}]);
+  if(path.endsWith('/app-spaces'))return json([app]);
+  if(path.endsWith('/'+app.id))return json(app);
+  if(path.endsWith('/'+deployment.id))return json(deployment);
+  return json({message:'검증 대상이 아닌 API'},404);
+ });
+ await page.goto(`${base}/?source=api&app=${app.id}`);
+ const panel=page.getByRole('region',{name:'배포 자원 상태'});
+ await panel.getByRole('heading',{name:'전체 구성',exact:true}).waitFor({timeout:5000});
+ const progress=panel.getByRole('progressbar',{name:'자원 완료율'});
+ assert.equal(await progress.getAttribute('value'),'3');assert.equal(await progress.getAttribute('max'),'5');
+ await panel.getByText(app.name,{exact:true}).first().waitFor();
+ for(const name of ['서버','저장소','연결'])assert.ok(await panel.getByText(name,{exact:true}).count()>0);
+ assert.ok(await panel.getByText('지금 여기',{exact:true}).count()>0);
+ const firstSummary=panel.locator('summary').first();await firstSummary.focus();await firstSummary.press('Enter');
+ assert.ok(await panel.locator('details').first().evaluate(el=>el.open));await firstSummary.press('Enter');
+ await panel.screenshot({path:'artifacts/resource-tree-desktop.png'});
+ const preview=await panel.evaluate(el=>{
+  const copy=el.cloneNode(true);copy.querySelectorAll('button').forEach(b=>b.remove());
+  const css=[...document.styleSheets].map(sheet=>{try{return [...sheet.cssRules].map(rule=>rule.cssText).join('\n');}catch{return '';}}).join('\n');
+  return '<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Freesia 배포 트리 검토</title><style>'+css+' body{padding:24px;background:#faf8f3}main{max-width:820px;margin:auto}.preview-note{margin:0 0 20px;padding:16px;background:#fff1f0;color:#9b1c1c;border-radius:12px}</style><main><p class="preview-note">화면 검토용 샘플 · 실제 AWS 현황이 아닙니다.<br>현재 개발된 React 화면을 저장한 미리보기입니다. 자원을 누르면 상세 정보가 펼쳐집니다.</p>'+copy.outerHTML+'</main></html>';
+ });
+ await writeFile('artifacts/resource-tree-preview.html',preview);
+
+ const before=reads;
+ resources=[...sample.map(r=>({...r})),resource('aws_custom_resource','in_progress','unknown')];resources[3].state='in_progress';resources[4].state='failed';resources[4].reason='도메인 확인 실패';
+ await page.evaluate(()=>window.treeStreams.filter(s=>!s.closed).forEach(s=>s.dispatchEvent(new window.MessageEvent('progress',{data:JSON.stringify({status:'deploying',step:'deploy',message:'자원 상태 갱신',progress:60,url:null,at:'2026-10-02T05:01:00Z'})}))));
+ await panel.getByText('기타',{exact:true}).first().waitFor();assert.ok(reads>before);
+ assert.equal(await progress.getAttribute('value'),'2');assert.equal(await progress.getAttribute('max'),'6');
+ assert.ok(await panel.getByText('지금 여기',{exact:true}).count()>=2);
+ assert.ok((await panel.textContent()).includes('도메인 확인 실패'));
+ for(const d of await panel.locator('details').all())await d.evaluate(el=>el.open=true);
+ assert.ok((await panel.textContent()).includes('aws_custom_resource.unknown'));
+ for(const d of await panel.locator('details').all())await d.evaluate(el=>el.open=false);
+ await page.setViewportSize({width:390,height:844});
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+ await panel.screenshot({path:'artifacts/resource-tree-mobile.png'});
+ const refresh=panel.getByRole('button',{name:'자원 상태 다시 조회',exact:true});
+ responseError=true;await refresh.click();await panel.getByRole('alert').waitFor();
+ responseError=false;resources=[];await refresh.click();await panel.getByText(/아직 보고된 자원이 없습니다/).waitFor();
+ assert.equal(await panel.getByRole('progressbar').count(),0);
+ resources=sample.map(r=>({...r,state:'done'}));await refresh.click();await progress.waitFor();
+ assert.equal(await progress.getAttribute('value'),'5');assert.equal(await panel.getByText('지금 여기',{exact:true}).count(),0);
+ assert.deepEqual(mutations,[]);assert.deepEqual(errors,[]);
+ console.log('PASS tree: groups, counts, concurrent progress, unknown type, failure, SSE refresh, mobile, empty/error/retry, no mutations');
+} finally {await browser.close();}

@@ -1072,3 +1072,58 @@ progress {
 .infra-flow-panel h2 { margin-top: 0; }
 @media (max-width: 800px) { .infra-flow-panel { padding: 16px; } }
 .infra-flow-panel input[type="checkbox"] { width: auto; flex: 0 0 auto; }
+
+/* Resource connections describe UI categories, not infrastructure dependencies. */
+.resource-tree { background: #fff; border-color: #ded5c9; }
+.resource-tree .section-heading { background: #fff; border-bottom: 0; flex-wrap: wrap; }
+.resource-tree .panel-body { padding-top: 0; }
+.resource-tree-count { color: #62574b; overflow-wrap: anywhere; }
+.resource-tree progress { height: 10px; accent-color: #bd5b3f; border: 0; border-radius: 12px; overflow: hidden; background: #eee7dc; }
+.resource-tree progress::-webkit-progress-bar { background: #eee7dc; }
+.resource-tree progress::-webkit-progress-value { background: #bd5b3f; }
+.resource-tree progress::-moz-progress-bar { background: #bd5b3f; }
+.resource-tree-scroll { overflow-x: auto; margin: 20px 0; padding: 8px 2px 16px; }
+.resource-tree-scroll:focus-visible, .resource-tree summary:focus-visible { outline: 3px solid var(--green); outline-offset: -3px; }
+.resource-tree .resource-tree-root, .resource-tree .resource-tree-groups, .resource-tree .resource-tree-nodes, .resource-tree .resource-tree-totals { list-style: none; padding: 0; margin: 0; color: var(--ink); }
+.resource-tree-root { text-align: center; min-width: max-content; }
+.resource-tree-app { display: inline-block; max-width: 320px; overflow-wrap: anywhere; padding: 8px 24px; border: 1px solid #988675; border-radius: 10px; background: var(--paper); }
+.resource-tree .resource-tree-groups { display: flex; padding-top: 34px; position: relative; }
+.resource-tree-groups::before { content: ''; position: absolute; top: 0; left: 50%; height: 18px; border-left: 2px solid #ddd0be; }
+.resource-tree-group { flex: 1 0 160px; width: 160px; position: relative; padding: 16px 10px 10px; border-radius: 16px; border: 2px solid transparent; }
+.resource-tree-group::before { content: ''; position: absolute; top: -18px; left: -2px; right: -2px; border-top: 2px solid #ddd0be; }
+.resource-tree-group:first-child::before { left: 50%; }
+.resource-tree-group:last-child::before { right: 50%; }
+.resource-tree-group::after { content: ''; position: absolute; top: -18px; height: 32px; left: 50%; border-left: 2px solid #ddd0be; }
+.resource-tree-group.is-active { border-color: #bd5b3f; background: #fcf7f2; }
+.resource-tree-group-title { position: relative; display: grid; gap: 4px; min-height: 56px; align-content: start; justify-items: center; }
+.resource-tree-group-title > strong { padding: 5px 14px; border-radius: 10px; background: #f5f1ea; }
+.resource-tree-current { font-size: 11px; line-height: 1.4; color: #fff; background: #a84a32; padding: 2px 8px; border-radius: 8px; }
+.resource-tree-group-title::after { content: ""; position: absolute; left: 50%; top: 100%; height: 18px; border-left: 2px solid #ddd0be; }
+.resource-tree .resource-tree-nodes { display: grid; position: relative; gap: 14px; padding: 18px 0 0 12px; border-left: 2px solid #ddd0be; }
+.resource-tree-nodes::before { content: ""; position: absolute; top: 0; left: -2px; right: 50%; border-top: 2px solid #ddd0be; }
+.resource-tree-nodes > li { position: relative; min-width: 0; }
+.resource-tree-nodes > li::before { content: ''; position: absolute; width: 12px; left: -12px; top: 24px; border-top: 2px solid #ddd0be; }
+.resource-tree-node { border: 1px solid #cbd7c7; border-radius: 11px; background: #fff; text-align: left; overflow-wrap: anywhere; }
+.resource-tree-node summary { cursor: pointer; padding: 10px; min-height: 80px; font-size: 13px; }
+.resource-tree-node summary strong { font-size: 13px; }
+.resource-tree-node summary small { display: block; color: var(--muted); margin: 3px 0; }
+.resource-tree-state { display: block; color: var(--green); font-size: 12px; }
+.resource-tree-node.state-pending { border-style: dashed; }
+.resource-tree-node.state-pending .resource-tree-state { color: #685f53; }
+.resource-tree-node.state-in_progress { border: 2px solid #bd5b3f; background: #fcebe3; }
+.resource-tree-node.state-in_progress .resource-tree-state { color: #973e28; font-weight: 700; }
+.resource-tree-node.state-failed { border: 2px solid var(--danger); background: var(--danger-paper); }
+.resource-tree-node.state-failed .resource-tree-state, .resource-tree-failed { color: var(--danger-ink); font-weight: 700; }
+.resource-tree-node dl { padding: 10px; margin: 0; border-top: 1px solid #ded5c9; font-size: 12px; }
+.resource-tree-node dt { font-weight: 700; }
+.resource-tree-node dd { margin: 0 0 8px; }
+.resource-tree-legend { font-size: 12px; color: #62574b; line-height: 2; }
+.resource-tree .resource-tree-totals { border-top: 1px solid #e8dfd2; margin-top: 16px; padding-top: 12px; }
+.resource-tree-totals li { display: flex; justify-content: space-between; gap: 12px; margin: 8px 0; font-size: 14px; }
+.resource-tree-totals em { font-style: normal; color: #973e28; font-weight: 700; }
+.resource-tree-totals .resource-tree-failed { color: var(--danger-ink); }
+.resource-tree-note { margin-top: 16px; font-size: 12px; }
+.resource-tree-scroll-hint { display: none; }
+@media (max-width: 800px) {
+  .resource-tree-scroll-hint { display: block; font-size: 12px; margin-bottom: 12px; }
+}

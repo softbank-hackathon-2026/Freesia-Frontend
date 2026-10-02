@@ -66,6 +66,7 @@ export default function Applications({
   const session = useRef(0);
   const request = useRef<AbortController | null>(null);
   const restored = useRef(false);
+  const teardownRequest = useRef<string | null>(null);
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
   useEffect(
     () => () => {
@@ -92,6 +93,8 @@ export default function Applications({
   const [tab, setTab] = useState<"overview" | "logs" | "metrics">("overview");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [teardownError, setTeardownError] = useState("");
+  const [teardownPending, setTeardownPending] = useState<string[]>([]);
   const [chosen, setChosen] = useState("");
   const [plan, setPlan] = useState<AppPlan | null>(null);
   const [plans, setPlans] = useState<PlanSet | null>(null);
@@ -112,6 +115,7 @@ export default function Applications({
       : null);
   const infra = infras.find((i) => i.id === selected?.infra_id);
   const currentProgress = event?.progress ?? (mode === "demo" && deployment && demoStep(deployment) >= 0 ? Math.round(demoStep(deployment)/5*100) : undefined);
+  const teardownUnconfirmed = mode === "api" && !!selected && (!!selected.teardown_requested_at || teardownPending.includes(selected.id));
   const canDeploy = mode === "demo" || infra?.deployable_computes?.includes(chosen) === true;
   const readinessMessage = infra?.deployable_computes === undefined ? "배포 가능 여부 미확인" : "배포 준비 중";
   const allowed = analysis
@@ -277,6 +281,7 @@ export default function Applications({
     const token = ++session.current;
     setBusy(false);
     setSelected(app);
+    setTeardownError("");
     setCreating(false);
     setAnalysis(null);
     setChosen("");
@@ -373,7 +378,7 @@ export default function Applications({
     } finally { if (token === session.current && !controller.signal.aborted) setBusy(false); }
   }
   async function deploy() {
-    if (!selected || !reviewed || !canDeploy || !allowed.some(c => c.compute === chosen)) return;
+    if (!selected || !reviewed || !canDeploy || teardownUnconfirmed || !allowed.some(c => c.compute === chosen)) return;
     const realPlan = plans?.compute === chosen && plans.status === "done" ? plans.plans.find(p => p.id === planId) : null;
     if ((mode === "api" && !realPlan) || (mode === "demo" && (!preview || preview.compute !== chosen || preview.status !== "template_ready"))) {
       setError("현재 선택한 환경의 구성안을 조회하고 설정값을 확인하세요."); return;
@@ -405,6 +410,44 @@ export default function Applications({
       }
     }
     finally { if(token === session.current && !controller.signal.aborted)setBusy(false); }
+  }
+  async function teardown() {
+    if (mode !== "api" || !selected || selected.teardown_requested_at !== null || !deployment || !["success", "failed"].includes(deployment.status) || busy || streamId || teardownPending.includes(selected.id) || teardownRequest.current === selected.id) return;
+    if (!window.confirm(`${selected.name} 앱을 내릴까요? 앱 전용 클라우드 자원이 삭제될 수 있습니다. 공유 네트워크 등 삭제 범위는 배포 설정을 확인하세요.`)) return;
+    const appId = selected.id;
+    teardownRequest.current = appId;
+    setTeardownPending(current => [...current, appId]);
+    request.current?.abort();
+    const controller = new AbortController(); request.current = controller;
+    const token = session.current;
+    setBusy(true); setTeardownError("");
+    try {
+      const receipt = await api.teardown(appId, controller.signal);
+      if (token !== session.current || controller.signal.aborted) return;
+      setSelected(current => current?.id === appId ? { ...current, teardown_requested_at: receipt.requested_at } : current);
+    } catch (e) {
+      if (token !== session.current || controller.signal.aborted) return;
+      if (e instanceof ApiError && ([404, 501].includes(e.status ?? 0) || (e.status === 409 && ["not_deployed", "deployment_in_progress"].includes(e.code ?? "")))) setTeardownPending(current => current.filter(id => id !== appId));
+      setTeardownError(e instanceof ApiError && e.code === "not_deployed" ? "실제 배포 기록이 없어 내릴 수 없습니다. 모의 배포는 내리기 대상이 아닙니다."
+        : e instanceof ApiError && e.code === "deployment_in_progress" ? "배포가 진행 중입니다. 현재 배포 상태를 확인한 뒤 다시 시도하세요."
+        : e instanceof ApiError && (e.status === 404 || e.status === 501) ? "내리기 API 연동 대기입니다. 현재 서버에서 지원하지 않습니다."
+        : `내리기 요청의 처리 여부를 확인할 수 없습니다. 중복 요청 전에 담당자에게 확인하세요. ${e instanceof Error ? e.message : "요청 오류"}`);
+      if (e instanceof ApiError && e.code === "deployment_in_progress") {
+        try {
+          const fresh = await api.app(appId, controller.signal);
+          if (token !== session.current || controller.signal.aborted) return;
+          setSelected(fresh);
+          if (fresh.latest_deployment_id) {
+            const current = await api.deployment(fresh.latest_deployment_id, controller.signal);
+            if (token !== session.current || controller.signal.aborted) return;
+            setDeployment(current); setEvent(null); setStreamId(current.id);
+          }
+        } catch { /* Preserve the original conflict if refreshing fails. */ }
+      }
+    } finally {
+      if (teardownRequest.current === appId) teardownRequest.current = null;
+      if (token === session.current && !controller.signal.aborted) setBusy(false);
+    }
   }
   return (
     <>
@@ -786,13 +829,15 @@ export default function Applications({
                     {mode === "api" && plans && (plans.plans.length ? <div className={plans.plans.length > 1 ? "candidate-grid" : undefined}>{plans.plans.map(p => <div className={"candidate " + (planId === p.id ? "chosen" : "")} key={p.id}>
                       <h3>{p.name}</h3><p>{p.summary}</p><p>템플릿: {p.template}</p>
                       <ul>{p.pros.map((v,i)=><li key={i}>장점: {v}</li>)}{p.cons.map((v,i)=><li key={i}>고려사항: {v}</li>)}</ul>
+                      {(chosen === "ecs-fargate" || "container_port" in p.values) && <><p>컨테이너 포트: {typeof p.values.container_port === "number" && Number.isInteger(p.values.container_port) && p.values.container_port >= 1 && p.values.container_port <= 65535 ? p.values.container_port : "서버 값 확인 필요"}</p>
+                      {!(typeof p.values.container_port === "number" && Number.isInteger(p.values.container_port) && p.values.container_port >= 1 && p.values.container_port <= 65535) && <p className="notice">container_port가 없거나 유효한 포트가 아닙니다. 앱의 실제 수신 포트와 서버 구성안을 확인하세요. 프론트에서는 값을 보정하지 않습니다.</p>}</>}
                       <pre tabIndex={0} aria-label={p.name + " 설정값"}>{JSON.stringify(p.values,null,2)}</pre>
                       {plans.plans.length > 1 && <button disabled={busy || !!streamId} onClick={()=>{setPlanId(p.id);setReviewed(false);}}>{planId===p.id?"구성안 선택됨":"이 구성안 선택"}</button>}
                     </div>)}</div> : <p>제공된 구성안이 없습니다. 다시 조회하거나 분석 결과를 확인하세요.</p>)}
                     {mode === "demo" && preview && (preview.status === "template_ready" ? <><p>템플릿: {preview.template}</p><pre tabIndex={0} aria-label="샘플 템플릿 설정값">{JSON.stringify(preview.values,null,2)}</pre><p className="notice">고정 샘플 템플릿과 설정값입니다. 저장소 commit/push와 실제 클라우드 작업은 실행하지 않습니다.</p></> : <><p>이전 버전의 코드 기록입니다. 새 구성안을 조회해야 배포할 수 있습니다.</p><pre tabIndex={0}>{preview.code}</pre></>)}
                     <label className="failure-option"><input type="checkbox" checked={reviewed} disabled={busy || !!streamId || (mode === "api" ? !planId : preview?.status !== "template_ready")} onChange={e=>setReviewed(e.target.checked)}/> 설정값을 확인했습니다</label>
                     {mode === "demo" && <label className="failure-option"><input type="checkbox" checked={failCI} onChange={e=>setFailCI(e.target.checked)} disabled={!!streamId}/> CI 실패 시뮬레이션 · DEMO</label>}
-                    <button className="primary" disabled={!reviewed || !canDeploy || !!streamId || busy || (mode === "api" ? !planId : preview?.status !== "template_ready")} onClick={deploy}>{mode === "demo" && deployment?.status === "failed" ? "실패한 데모 파이프라인 재시도" : `선택한 구성안으로 배포${mode === "demo" ? " · 데모" : ""}`}</button>
+                    <button className="primary" disabled={!reviewed || !canDeploy || teardownUnconfirmed || !!streamId || busy || (mode === "api" ? !planId : preview?.status !== "template_ready")} onClick={deploy}>{mode === "demo" && deployment?.status === "failed" ? "실패한 데모 파이프라인 재시도" : `선택한 구성안으로 배포${mode === "demo" ? " · 데모" : ""}`}</button>
                   </section>
                 )}
                 {deployment && (
@@ -831,7 +876,18 @@ export default function Applications({
                     </div>
                   </section>
                 )}
-                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={event?.at ?? "initial"}/>}
+                {mode === "api" && deployment && <section className="panel" aria-label="앱 내리기">
+                  <div className="section-heading"><h2>앱 내리기</h2></div>
+                  <div className="panel-body">
+                  {selected.teardown_requested_at ? <p role="status">내리기 요청 접수: {selected.teardown_requested_at} · 완료 여부 확인 대기입니다. 기존 배포 상태와 주소는 마지막 서버 기록이며 현재 실행을 보장하지 않습니다. 완료·실패 조회 연동 전까지 담당자 확인이 필요합니다. 내리기 완료 여부 확인 전에는 다시 배포할 수 없습니다.</p>
+                    : selected.teardown_requested_at === undefined ? <p>내리기 API 연동 대기 · 현재 서버는 내리기 요청 상태를 제공하지 않습니다.</p>
+                    : <p>앱 전용 자원을 내리는 요청입니다. 요청 접수는 삭제 완료가 아닙니다. 화면을 이동해도 서버에 접수된 작업은 취소되지 않습니다.</p>}
+                  {teardownPending.includes(selected.id) && !selected.teardown_requested_at && <p role="status">내리기 요청 중이거나 처리 여부가 확인되지 않았습니다. 서버 접수 여부를 확인하기 전에는 내리기·재배포를 다시 요청할 수 없습니다.</p>}
+                  {teardownError && <p role="alert">{teardownError}</p>}
+                  <button disabled={selected.teardown_requested_at !== null || teardownUnconfirmed || busy || !!streamId || !["success", "failed"].includes(deployment.status)} onClick={teardown}>앱 내리기</button>
+                  </div>
+                </section>}
+                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={event?.at ?? "initial"} appName={selected.name}/>}
               </>
             ) : tab === "logs" ? (
               <section className="panel">
