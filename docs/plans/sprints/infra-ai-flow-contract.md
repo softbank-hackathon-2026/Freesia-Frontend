@@ -224,3 +224,10 @@ User approved new branch codex/frontend-ux-fixes, ordered units1–5, separate c
 4. Action copy: code analysis start/reanalysis labels match POST behavior; actual deployment wording remains separate.
 5. Keyboard: mobile menu focus on open/return on close; proper tab roving focus, arrows/Home/End and tab-panel association.
 Verification per unit: focused behavior regression, npm run check, npm run test:e2e, source review; UI units also desktop/mobile inspection. Existing docs/plans and sprint evaluation record each result. Product unit ownership is sequential to avoid conflicts in App.tsx/Applications.tsx. Follow-up work (polling layout, repository confirmation, demo infra reset) excluded.
+
+## Monitoring title and time-copy clarity — approved 2026-10-03
+User approved the preceding two-item in-chat design with "네 1,2번 작업을 진행해주세요", including parentheses for the title: test-ec2 (Lambda), Jets (ECS Fargate).
+Bounded follow-up: preserve the app's registered name; append the known compute label from this app's successful deployment. Keep names alone before a successful deployment, when data is unavailable, or after confirmed teardown. Never infer compute from the name, chosen recommendation or another app's deployment.
+Replace the ambiguous recent-one-minute copy with 60-second aggregates/latest readings and approximate 15-second refresh; clarify differing per-metric measurement times while retaining measured_at, null and waiting handling.
+Ownership: parent Applications.tsx and existing monitoring-check.mjs/docs; worker ApplicationMetrics.tsx copy only. No new API/dependencies/backend/AWS/Terraform/Notion changes. Git commit/push/PR/merge not approved.
+Acceptance: successful Lambda/Fargate/EC2 title labels, no wrong suffix for undeployed/failed/teardown/other-app states; existing measured_at/null/zero/polling behavior retained; desktop/mobile readable with no horizontal overflow. Verification: targeted behavioral RED/GREEN in the existing monitoring harness, npm run check, npm run test:e2e, focused monitoring checks and independent read-only code/visual review.

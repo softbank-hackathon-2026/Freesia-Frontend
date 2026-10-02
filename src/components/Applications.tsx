@@ -39,6 +39,7 @@ const appTabs = [
 ] as const;
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const api = createApi(apiBase);
+const computeLabels: Record<string, string> = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2" };
 export default function Applications({
   mode, appId, tab, onNavigate,
   apps,
@@ -147,6 +148,7 @@ export default function Applications({
   const teardownStatus = selected?.teardown_status;
   const hasNewDeployment = !!deployment && !!selected?.teardown_requested_at && Date.parse(deployment.created_at) > Date.parse(selected.teardown_requested_at);
   const teardownComplete = mode === "api" && teardownStatus === "success" && !hasNewDeployment;
+  const deployedCompute = selected && deployment?.app_space_id === selected.id && deployment.status === "success" && !teardownComplete && Object.hasOwn(computeLabels, deployment.compute) ? computeLabels[deployment.compute] : undefined;
   const teardownUnconfirmed = mode === "api" && !!selected && (teardownStatus === "requested" || pendingTeardown || (teardownStatus === undefined && !!selected.teardown_requested_at));
   const appHistory = mode === "demo" ? deployments.filter(entry => entry.app_space_id === selected?.id) : [];
   const hasDeploymentHistory = !!deployment || !!selected?.latest_deployment_id || appHistory.length > 0;
@@ -618,6 +620,7 @@ export default function Applications({
           <div className="eyebrow">APPLICATION</div>
           <h1>
             {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
+            {deployedCompute && ` (${deployedCompute})`}
           </h1>
           <p>
             {selected

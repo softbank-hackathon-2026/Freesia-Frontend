@@ -41,6 +41,7 @@ try {
   let status = 200, count = 0, held = false, release, started;
   const metricFixture = { status: 'ok', message: null, compute: 'ecs-fargate', cpu_percent: 0, memory_percent: null, response_time_ms: 120.67890123, request_count: 15, error_count: 0, measured_at: at };
   let metricPayload = { ...metricFixture }, metricStatus = 200, metricCount = 0, metricHeld = false, metricRelease, metricStarted;
+  let titleDeployment = null;
   const unexpected = [];
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
@@ -62,6 +63,9 @@ try {
       await json(response, code).catch(() => {});
       return;
     }
+    if (path.endsWith('/deployments/title-deployment/events')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `event: progress\ndata: ${JSON.stringify({ status: titleDeployment.status, progress: titleDeployment.status === 'success' ? 100 : 0, message: 'title fixture', step: 'complete', at, url: null })}\n\n` });
+    if (path.endsWith('/deployments/title-deployment/resources')) return json([]);
+    if (path.endsWith('/deployments/title-deployment')) return json(titleDeployment);
     if (path.endsWith('/repositories')) return json([]);
     if (path.endsWith('/infra-spaces')) return json([{ id: 'infra', name: 'Fixture', description: '', network: 'public', computes: ['ecs-fargate'], app_count: 2 }]);
     if (path.endsWith('/app-spaces')) return json([app, second]);
@@ -71,7 +75,7 @@ try {
   });
   const open = async (tab = '로그') => {
     await page.goto(base + '/?source=api&app=' + app.id);
-    await page.getByRole('heading', { name: app.name, exact: true }).waitFor();
+    await page.locator('.page-heading h1').filter({ hasText: app.name }).waitFor();
     await page.getByRole('tab', { name: tab, exact: true }).click();
   };
   const logs = page.getByRole('region', { name: '애플리케이션 로그', exact: true });
@@ -167,6 +171,8 @@ try {
   await card('평균 응답 시간').getByText('120.68 ms', { exact: true }).waitFor();
   assert.equal(await metrics.locator('time').getAttribute('datetime'), at);
   const measuredText = await metrics.locator('time').innerText();
+  await metrics.getByText('60초 단위 집계 · 최신 측정값 · 약 15초마다 새로고침', { exact: true }).waitFor();
+  assert.match(await metrics.innerText(), /지표별 측정 시각은 다를 수 있습니다/);
   await page.screenshot({ path: 'artifacts/monitoring-metrics-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'artifacts/monitoring-metrics-mobile.png', fullPage: true });
@@ -249,6 +255,38 @@ try {
   metricRelease(); await page.clock.runFor(15000);
   assert.equal(await metrics.locator('.metrics > div').count(), 0);
   results.push('teardown lifecycle remount aborts old snapshot and rejects late pre-teardown readings');
+  delete app.teardown_status; delete app.teardown_requested_at; delete app.teardown_finished_at;
+  app.name = 'test-ec2'; app.latest_deployment_id = 'title-deployment';
+  titleDeployment = { id: 'title-deployment', app_space_id: app.id, compute: 'lambda', status: 'success', url: null, reason: null, created_at: at };
+  for (const [compute, label] of [['lambda', 'Lambda'], ['ecs-fargate', 'ECS Fargate'], ['ec2', 'EC2']]) {
+    titleDeployment.compute = compute; metricPayload = { ...metricFixture, compute };
+    await open('모니터링'); await ready();
+    assert.equal(await page.locator('.page-heading h1').innerText(), app.name + ' (' + label + ')');
+    if (compute === 'lambda') {
+      await page.screenshot({ path: 'artifacts/monitoring-title-desktop.png', fullPage: true });
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await page.screenshot({ path: 'artifacts/monitoring-title-mobile.png', fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+    }
+  }
+  const openDeployedTitle = async () => {
+    await open('개요');
+    await page.getByText('실행 환경: ' + titleDeployment.compute, { exact: true }).waitFor();
+  };
+  titleDeployment.compute = 'constructor'; await openDeployedTitle();
+  assert.equal(await page.locator('.page-heading h1').innerText(), app.name);
+  titleDeployment.compute = 'lambda';
+  titleDeployment.status = 'failed'; await openDeployedTitle();
+  assert.equal(await page.locator('.page-heading h1').innerText(), app.name);
+  titleDeployment.status = 'success'; titleDeployment.app_space_id = second.id; await openDeployedTitle();
+  assert.equal(await page.locator('.page-heading h1').innerText(), app.name);
+  titleDeployment.app_space_id = app.id; app.teardown_status = 'success'; app.teardown_requested_at = at;
+  await openDeployedTitle(); assert.equal(await page.locator('.page-heading h1').innerText(), app.name);
+  delete app.teardown_status; delete app.teardown_requested_at;
+  app.latest_deployment_id = null; await open();
+  assert.equal(await page.locator('.page-heading h1').innerText(), app.name);
+  results.push('titles use this app successful deployment compute, omit failed/mismatched/teardown/undeployed labels; time copy and mobile clarity');
   assert.deepEqual(unexpected, []);
   assert.deepEqual(errors, []);
   await writeFile('artifacts/monitoring-results.json', JSON.stringify({ results }, null, 2));

@@ -77,7 +77,7 @@ export default function ApplicationMetrics({ id, mode }: { id: string; mode: Dat
         </div>
         <p className="notice">고정 시연 화면입니다. 실제 정상 상태를 의미하지 않습니다.</p>
       </> : <>
-        <p className="muted">최근 1분 집계 · 15초마다 새로고침</p>
+        <p className="muted">60초 단위 집계 · 최신 측정값 · 약 15초마다 새로고침</p>
         <button disabled={loading} onClick={() => refresh.current?.()}>지표 새로고침</button>
         {loading && <p role="status">{metrics ? "지표 갱신 중…" : "지표 조회 중…"}</p>}
         {error && <p role="alert">{error}</p>}
@@ -86,7 +86,7 @@ export default function ApplicationMetrics({ id, mode }: { id: string; mode: Dat
         {!error && metrics?.status === "ok" && <>
           {metrics.message && <p>{metrics.message}</p>}
           <p>{metrics.measured_at ? <>측정 시각 · <time dateTime={metrics.measured_at}>{new Date(metrics.measured_at).toLocaleString("ko-KR", { hour12: false })}</time> (브라우저 현지 시간)</> : "측정 시각 없음"}</p>
-          <p className="muted">마지막 측정값이며 화면 새로고침 시각과 다를 수 있습니다. 측정값이 없는 지표는 정상이나 0을 의미하지 않습니다.</p>
+          <p className="muted">마지막 측정값이며 화면 새로고침 시각과 다를 수 있습니다. 지표별 측정 시각은 다를 수 있습니다. 측정값이 없는 지표는 정상이나 0을 의미하지 않습니다.</p>
           {metrics.compute ? <p>{computeLabels[metrics.compute]}</p> : <p className="notice">실행 환경을 확인할 수 없어 지원 지표를 표시할 수 없습니다.</p>}
           {cards.length > 0 && <div className="metrics">{cards.map(([label, value, unit, description]) =>
             <div key={label}><span>{label}</span><strong>{value === null ? "—" : `${value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit}`}</strong><small>{value === null ? "측정값 없음" : description}</small></div>

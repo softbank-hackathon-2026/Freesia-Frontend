@@ -1902,7 +1902,7 @@ try {
   await legacyProgress.goto(url);
   await legacyProgress.evaluate(({oldApp,oldDeployment,state})=>{state.apps=[oldApp];state.deployments=[oldDeployment];localStorage.setItem("freesia.demo.v1",JSON.stringify(state));},{oldApp,oldDeployment,state:initialDemo()});
   await legacyProgress.goto(url+"/?source=demo&app=demo-old-app");
-  await legacyProgress.getByRole("heading",{name:"이전 배포",exact:true}).waitFor();
+  await legacyProgress.getByRole("heading",{name:"이전 배포 (Lambda)",exact:true}).waitFor();
   await legacyProgress.getByText("현재 진행률 확인 중…",{exact:true}).waitFor();
   assert.equal(await legacyProgress.getByLabel("배포 진행률",{exact:true}).getAttribute("value"),null);
   await legacyProgress.close();
