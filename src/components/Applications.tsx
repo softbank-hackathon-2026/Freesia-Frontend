@@ -44,13 +44,18 @@ export default function Applications({
   onStartDeployment,
   initialForm,
   onDraftChange,
-  apiRepositories, repositoryLoading, repositoryError, onRefreshRepositories,
+  apiRepositories, repositoryLoading, repositoryError, onRefresh,
+  loading, discardableApps, onDiscard, storageBlocked,
 }: {
   mode: DataMode;
   apiRepositories: Repository[];
   repositoryLoading: boolean;
   repositoryError: string;
-  onRefreshRepositories: () => void;
+  onRefresh: () => void;
+  loading: boolean;
+  discardableApps: AppSpace[];
+  onDiscard: (id: string) => void;
+  storageBlocked: boolean;
   apps: AppSpace[];
   infras: InfraSpace[];
   designs: InfraDesign[];
@@ -67,6 +72,9 @@ export default function Applications({
   const request = useRef<AbortController | null>(null);
   const restored = useRef(false);
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
+  const discardDialog = useRef<HTMLDialogElement>(null);
+  const [discardId, setDiscardId] = useState("");
+  const [discardError, setDiscardError] = useState("");
   useEffect(
     () => () => {
       request.current?.abort();
@@ -410,9 +418,9 @@ export default function Applications({
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">APPLICATION SPACE</div>
+          <div className="eyebrow">APPLICATION</div>
           <h1>
-            {selected ? selected.name : creating ? "앱 연결" : "애플리케이션 스페이스"}
+            {selected ? selected.name : creating ? "애플리케이션 생성" : "애플리케이션"}
           </h1>
           <p>
             {selected
@@ -420,7 +428,7 @@ export default function Applications({
               : "통합에 등록한 Repository와 준비된 Infra Space를 선택하세요."}
           </p>
         </div>
-        {selected || creating ? (
+        {(selected || creating) && (
           <button
             onClick={() => {
               request.current?.abort();
@@ -435,21 +443,6 @@ export default function Applications({
           >
             앱 목록으로
           </button>
-        ) : (
-          <button
-            className="primary"
-            disabled={mode === "api" && repositoryLoading}
-            onClick={() => {
-              request.current?.abort();
-              session.current++;
-              setBusy(false);
-              setCreating(true);
-              setAnalysis(null); setChosen(""); setPlan(null); setEvent(null); setDeployment(null); setTab("overview");
-              setError("");
-            }}
-          >
-            앱 연결
-          </button>
         )}
       </div>
       {error && (
@@ -462,7 +455,7 @@ export default function Applications({
           서버에 등록된 Repository와 Infra Space로 앱을 생성합니다. 분석·배포 결과는 서버가 제공하며 실제 실행 여부는 서버 설정과 상태를 확인하세요.
         </p>
       )}
-      {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefreshRepositories}>Repository 다시 조회</button></div>}
+      {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefresh}>Repository 다시 조회</button></div>}
       {creating && mode === "api" && repositoryLoading ? <p role="status">Repository 불러오는 중…</p> : creating && !registered.length ? (
         <section className="panel detail">
           <h2>등록한 Repository가 없습니다</h2>
@@ -533,7 +526,7 @@ export default function Applications({
           </p>
           <div className="form-actions">
             <button className="primary" disabled={busy}>
-              {busy ? "연결 중…" : "앱 만들기"}
+              {busy ? "생성 중…" : "애플리케이션 생성"}
             </button>
             <button
               type="button"
@@ -881,12 +874,41 @@ export default function Applications({
           </div>
         </>
       ) : (
-        <section className="panel">
+        <>
+        <section className="panel app-space-list">
           <div className="section-heading">
-            <h2>애플리케이션 스페이스</h2>
-            <span className="badge">{apps.length}개</span>
+            <h2>애플리케이션</h2>
+            <div className="heading-actions">
+              <span className="badge">{apps.length}개</span>
+              <button className="secondary icon-button" aria-label="새로고침" title="새로고침" disabled={loading || repositoryLoading} onClick={onRefresh}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M20 7v5h-5M4 17v-5h5" />
+                  <path d="M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9" />
+                </svg>
+              </button>
+              <button
+                className="primary"
+                disabled={loading || (mode === "api" && repositoryLoading)}
+                onClick={() => {
+                  request.current?.abort();
+                  session.current++;
+                  setBusy(false);
+                  setCreating(true);
+                  setAnalysis(null); setChosen(""); setPlan(null); setEvent(null); setDeployment(null); setTab("overview");
+                  setError("");
+                }}
+              >
+                애플리케이션 생성
+              </button>
+              <button className="secondary" disabled={mode === "api" || storageBlocked || !discardableApps.length}
+                title={mode === "api" ? "애플리케이션 삭제 API가 아직 없습니다." : "배포 이력 없는 DEMO 애플리케이션 삭제"}
+                onClick={() => { setDiscardId(discardableApps[0].id); setDiscardError(""); discardDialog.current?.showModal(); }}>
+                애플리케이션 삭제
+              </button>
+            </div>
           </div>
-          {apps.length ? (
+          {mode === "api" && <p className="muted">애플리케이션 삭제 API가 아직 없습니다.</p>}
+          {loading ? <div className="empty" role="status">애플리케이션 불러오는 중…</div> : apps.length ? (
             <div className="app-space-cards">
               {apps.map((app) => {
                 const cardId = `app-card-${encodeURIComponent(app.id)}`;
@@ -898,7 +920,7 @@ export default function Applications({
                 return (
                   <button className="app-space-card" key={app.id} aria-label={`${app.name} 상세 보기`} aria-describedby={`${cardId}-integration ${cardId}-infra ${cardId}-branch`} onClick={() => open(app)}>
                     <span className="app-card-field">
-                      <span className="app-card-label">스페이스 이름</span>
+                      <span className="app-card-label">애플리케이션 이름</span>
                       <strong className="app-card-name">{app.name}</strong>
                     </span>
                     <span className="app-card-field" id={`${cardId}-integration`}>
@@ -924,6 +946,24 @@ export default function Applications({
             </div>
           )}
         </section>
+        {mode === "demo" && !discardableApps.length && <p className="muted">삭제할 수 있는 배포 이력 없는 DEMO 애플리케이션이 없습니다.</p>}
+        <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="app-discard-heading" aria-describedby="app-discard-description">
+          <h2 id="app-discard-heading">애플리케이션 삭제</h2>
+          <p id="app-discard-description">선택한 DEMO 애플리케이션이 브라우저에서 삭제돼요. 배포 이력이 있는 애플리케이션은 삭제할 수 없어요. 연결된 인프라와 Repository는 유지돼요.</p>
+          <label htmlFor="app-discard-target">삭제할 애플리케이션</label>
+          <select id="app-discard-target" value={discardId} onChange={(event) => { setDiscardId(event.target.value); setDiscardError(""); }}>
+            {discardableApps.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+          </select>
+          {discardError && <p className="error" role="alert">{discardError}</p>}
+          <div className="form-actions">
+            <button className="secondary" onClick={() => discardDialog.current?.close()}>취소</button>
+            <button className="primary" disabled={mode === "api" || storageBlocked || !discardableApps.some((entry) => entry.id === discardId)} onClick={() => {
+              try { onDiscard(discardId); discardDialog.current?.close(); }
+              catch (e) { setDiscardError(e instanceof Error ? e.message : "애플리케이션을 삭제하지 못했습니다."); }
+            }}>선택한 애플리케이션 삭제</button>
+          </div>
+        </dialog>
+        </>
       )}
     </>
   );

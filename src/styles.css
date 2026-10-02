@@ -277,7 +277,7 @@ main {
   border: 0;
   border-radius: 6px;
   background: var(--paper);
-  box-shadow: 0 3px 20px #2b2e460c;
+  box-shadow: 0 3px 20px #2b2e4618;
   overflow: hidden;
   margin-bottom: 24px;
 }
@@ -346,9 +346,10 @@ td small {
 .infra-page-heading { margin-bottom: 24px; }
 .infra-page-heading h1 { font-size: 28px; }
 .infra-list { background: #fff; }
-.infra-list .section-heading { background: #fff; border-bottom: 0; padding-bottom: 16px; }
-.infra-list .heading-actions { gap: 8px; }
-.infra-list .heading-actions button { min-height: 38px; padding: 8px 14px; border-radius: 6px; }
+.infra-list .section-heading, .app-space-list .section-heading, .repository-space-list .section-heading { background: #fff; border-bottom: 0; padding-bottom: 16px; }
+.infra-list .heading-actions, .app-space-list .heading-actions, .repository-space-list .heading-actions { gap: 8px; align-items: center; }
+.infra-list .heading-actions button, .app-space-list .heading-actions button, .repository-space-list .heading-actions button { min-height: 38px; padding: 8px 14px; border-radius: 6px; }
+.infra-list .heading-actions .icon-button, .app-space-list .heading-actions .icon-button { width: 38px; padding: 0; display: grid; place-items: center; }
 .infra-list .table-scroll { margin: 0 20px 20px; }
 .infra-list .table-scroll:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .infra-list table { min-width: 720px; }
@@ -539,7 +540,8 @@ form button {
 .app-form label {
   margin: 12px 0 0;
 }
-.app-form select {
+.app-form select,
+.discard-dialog select {
   padding: 11px;
   border: 1px solid var(--control-border);
   border-radius: 8px;
@@ -756,13 +758,16 @@ progress {
 .discard-dialog {
   position: fixed;
   z-index: 20;
-  inset: 35% max(16px, calc((100vw - 460px) / 2)) auto;
+  inset: 0;
   background: var(--paper);
   padding: 24px;
   border: 1px solid var(--line);
   border-radius: 12px;
   width: min(460px, calc(100vw - 32px));
-  margin: 0 auto;
+  margin: auto;
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
   color: var(--ink);
 }
 .discard-dialog p {
@@ -770,6 +775,7 @@ progress {
 }
 .discard-dialog .form-actions {
   flex-wrap: wrap;
+  margin-top: 16px;
 }
 .discard-dialog::backdrop {
   background: #2b2e4666;
@@ -855,7 +861,7 @@ progress {
   .scroll-hint {
     display: block;
   }
-  .infra-list .section-heading { align-items: flex-start; flex-wrap: wrap; }
+  .infra-list .section-heading, .app-space-list .section-heading, .repository-space-list .section-heading { align-items: flex-start; flex-wrap: wrap; }
   .infra-list .table-scroll { margin: 0 16px 16px; }
   table {
     min-width: 570px;
