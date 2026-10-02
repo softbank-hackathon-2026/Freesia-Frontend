@@ -144,3 +144,7 @@ Supersedes the historical API-app-delete-unsupported statements above; Infra del
 - Confirmation/select/cancel are locked during the request, with synchronous duplicate guard and abort on unmount. Demo mode retains no-deployment-history/browser-persistence restrictions; API operations do not mutate demo storage.
 - GET /deployments/{id}/resources accepts deleted alongside pending/in_progress/done/failed. Gray nodes retain addresses/details; deleted counts are separate and excluded from the deployment-completion denominator. An all-deleted tree has no completion progress bar.
 - Teardown status/finished_at changes invalidate the resource snapshot, including requested -> success without a deployment SSE event. AWS status is not inferred by the frontend.
+
+
+### Detail deletion UI — 2026-10-02
+The same confirmation is available from the app list and detail header. In detail the current app name is read-only and cannot switch deletion targets. Primary delete precedes cancel, matching creation. A successful detail deletion closes the dialog, clears the app URL parameter and returns to the list; cancel/error retains the detail. Known active deployment/teardown and pending user work disable detail deletion; server409 guards still apply. Demo apps with deployment history remain protected. This follow-up is implemented locally; Git publication is not authorized for the new diff.

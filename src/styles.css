@@ -541,6 +541,7 @@ form button {
   margin: 12px 0 0;
 }
 .app-form select,
+.discard-dialog input,
 .discard-dialog select {
   padding: 11px;
   border: 1px solid var(--control-border);

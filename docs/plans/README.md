@@ -209,3 +209,9 @@ User approved the preceding recommendation: integrate latest main into codex/tea
 Approved on codex/app-delete-resource-deleted: connect existing Application deletion dialog to server soft-delete API and accept/display deleted tree nodes. See current appended sections in day3 spec/plan and infra-ai-flow-contract. Implementation/checks pending; commit/push authorized for this diff, PR/merge/deployment excluded.
 
 Current app-delete/resource-deleted status: implemented/tested/reviewed PASS (check41/full E2E/three focused browser checks). See latest infra-ai-flow-eval handoff. User-authorized branch commit/push next; no PR/merge/deployment.
+
+Current follow-up: detail app deletion and delete-before-cancel action order approved; reuse current dialog, verification pending. Prior da042ec is published; this new diff is not approved for publication.
+
+Detail-deletion/action-order follow-up verified: check41/E2E24/focused desktop-mobile+demo/review PASS. Local uncommitted diff; no new commit/push/merge/deployment.
+
+2026-10-02T22:24:32.665610+09:00 Detail-deletion follow-up commit/push authorized by user; verified source/test diff unchanged. Publishing current branch only; main merge/deployment not included.

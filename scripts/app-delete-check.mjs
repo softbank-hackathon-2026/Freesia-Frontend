@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { initialDemo } from "../src/lib/demo.ts";
 const base = process.env.DELETE_CHECK_URL || "http://localhost:5173";
 const browser = await chromium.launch({headless:true, executablePath:process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe"});
 const stamp = "2026-10-02T10:00:00Z";
@@ -21,12 +22,13 @@ try {
       if(outcome === "network") return route.abort();
       if(outcome === "server") return json({message:"삭제 처리 실패"},500);
       if(!["success","hold"].includes(outcome)) return json({error:outcome,message:outcome === "app_still_deployed" ? "먼저 내려 주세요." : outcome === "deployment_in_progress" ? "배포가 끝난 뒤에 삭제할 수 있습니다." : "이미 내리는 중입니다."},409);
-      apps=[];
+      apps=apps.filter(item => !path.endsWith("/"+item.id));
       return route.fulfill({status:204});
     }
     if(path.endsWith("/infra-spaces")) return json([]);
     if(path.endsWith("/repositories")) return json([]);
     if(path.endsWith("/app-spaces")) return json(apps);
+    if(path.includes("/app-spaces/")) return json(apps.find(item => path.endsWith("/"+item.id)));
     throw new Error("Unexpected API request: "+path);
   });
   const open = async () => {
@@ -42,6 +44,7 @@ try {
   const storage = await page.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
   await opener.click();
   assert.match(await dialog.innerText(),/기록.*유지/);
+  assert.deepEqual(await dialog.locator(".form-actions button").allTextContents(),["선택한 애플리케이션 삭제","취소"]);
   await dialog.getByRole("button",{name:"취소",exact:true}).click();
   assert.equal(deletes,0);
   for(const code of ["app_still_deployed","deployment_in_progress","teardown_in_progress","server","network"]) {
@@ -74,6 +77,50 @@ try {
   await page.getByRole("button",{name:"애플리케이션 삭제",exact:true}).waitFor();
   assert.equal(await page.getByRole("dialog",{name:"애플리케이션 삭제",exact:true}).isVisible(),false);
   assert.equal(await page.evaluate(()=>localStorage.getItem("freesia.demo.v1")),storage);
+  for (const width of [1280,390]) {
+    await page.setViewportSize({width,height:900});
+    const other={...app,id:"other-api",name:"보존할 앱"};apps=[app,other];outcome="app_still_deployed";
+    await page.goto(base+"/?source=api&app="+app.id);
+    await page.getByRole("heading",{name:app.name,exact:true}).waitFor();
+    const detailDelete=page.locator(".page-heading").getByRole("button",{name:"애플리케이션 삭제",exact:true});
+    assert.equal(await detailDelete.count(),1,"detail must expose app deletion");
+    await detailDelete.click();
+    assert.equal(await dialog.getByLabel("삭제할 애플리케이션",{exact:true}).inputValue(),app.name);
+    assert.equal(await dialog.getByRole("combobox").count(),0,"detail target cannot switch to another app");
+    assert.deepEqual(await dialog.locator(".form-actions button").allTextContents(),["선택한 애플리케이션 삭제","취소"]);
+    const primaryBox=await confirm.boundingBox(),cancelBox=await dialog.getByRole("button",{name:"취소",exact:true}).boundingBox();
+    assert.ok(primaryBox.x<cancelBox.x,"primary action stays to the left of cancel");
+    await dialog.screenshot({path:`artifacts/app-delete-detail-${width}.png`});
+    await dialog.getByRole("button",{name:"취소",exact:true}).click();
+    assert.equal(await page.getByRole("heading",{name:app.name,exact:true}).count(),1);
+    await detailDelete.click();await confirm.click();await dialog.getByRole("alert").waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("app"),app.id);
+    assert.equal(await page.getByRole("heading",{name:app.name,exact:true}).count(),1);
+    outcome="success";await confirm.click();await dialog.waitFor({state:"hidden"});
+    await page.getByRole("button",{name:other.name+" 상세 보기",exact:true}).waitFor();
+    assert.equal(new URL(page.url()).searchParams.has("app"),false);
+    assert.equal(await page.getByRole("button",{name:app.name+" 상세 보기",exact:true}).count(),0);
+    assert.equal(apps[0].id,other.id);
+    assert.equal(await page.evaluate(()=>localStorage.getItem("freesia.demo.v1")),storage);
+  }
+  const demo=initialDemo();
+  const draft={...app,id:"detail-demo",name:"삭제할 데모 앱",infra_id:"demo-public"};
+  const protectedApp={...draft,id:"protected-demo",name:"배포 이력 있는 앱",latest_deployment_id:"protected-deployment"};
+  demo.apps=[draft,protectedApp];
+  await page.evaluate(value => localStorage.setItem("freesia.demo.v1",JSON.stringify(value)),demo);
+  const deletesBeforeDemo=deletes;
+  await page.goto(base+"/?source=demo&app="+draft.id);
+  await page.getByRole("heading",{name:draft.name,exact:true}).waitFor();
+  await page.locator(".page-heading").getByRole("button",{name:"애플리케이션 삭제",exact:true}).click();
+  assert.equal(await dialog.getByLabel("삭제할 애플리케이션",{exact:true}).inputValue(),draft.name);
+  await confirm.click();await dialog.waitFor({state:"hidden"});
+  await page.getByRole("button",{name:protectedApp.name+" 상세 보기",exact:true}).waitFor();
+  assert.equal(new URL(page.url()).searchParams.has("app"),false);
+  assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps),[protectedApp]);
+  await page.goto(base+"/?source=demo&app="+protectedApp.id);
+  await page.getByRole("heading",{name:protectedApp.name,exact:true}).waitFor();
+  assert.equal(await page.locator(".page-heading").getByRole("button",{name:"애플리케이션 삭제",exact:true}).isDisabled(),true);
+  assert.equal(deletes,deletesBeforeDemo);
   assert.deepEqual(errors,[]);
-  console.log("PASS app deletion: confirm/cancel, 204/reload, 3x409, 500/network preserve app, pending duplicate guard, source-change cancellation, demo storage isolation; mocked API only");
+  console.log("PASS app deletion: confirm/cancel, 204/reload, 3x409, 500/network preserve app, pending duplicate guard, source-change cancellation, fixed detail target/failure/retry/list return and action order at desktop/mobile, demo storage isolation; mocked API only");
 } finally { await browser.close(); }
