@@ -219,7 +219,7 @@ async function checkSourceBanner(page) {
 }
 async function checkSidebar(page, mobile) {
   const sidebar = page.locator("#primary-navigation");
-  const toggle = page.getByRole("button", { name: "주요 메뉴 열기", exact: true });
+  const toggle = page.locator(".sidebar-toggle");
   assert.equal(await page.locator(".space-map").count(), 0);
   assert.equal(await page.getByLabel("데모 역할", { exact: true }).count(), 0);
   assert.equal(await page.locator(".role-note").count(), 0);

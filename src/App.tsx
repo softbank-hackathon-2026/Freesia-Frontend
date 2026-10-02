@@ -52,6 +52,26 @@ export default function App() {
   const [route, setRoute] = useState(readRoute);
   const { source: mode, page } = route;
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuToggle = useRef<HTMLButtonElement>(null);
+  const firstNav = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const toggle = menuToggle.current;
+    const menu = firstNav.current?.closest("aside");
+    firstNav.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && event.target instanceof Node
+        && (menu?.contains(event.target) || toggle?.contains(event.target))) {
+        event.preventDefault();
+        setMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (toggle?.getClientRects().length) toggle.focus();
+    };
+  }, [menuOpen]);
   const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
   const [apiAppDraft, setApiAppDraft] = useState<AppSpaceCreate | null>(null);
   const [newInfra, setNewInfra] = useState(false);
@@ -290,6 +310,7 @@ export default function App() {
         </a>
         <nav className="sidebar-nav" aria-label="주요 메뉴">
           <button
+            ref={firstNav}
             className={"sidebar-link" + (page === "infra" ? " active" : "")}
             aria-label="인프라 스페이스"
             aria-current={page === "infra" ? "page" : undefined}
@@ -326,8 +347,9 @@ export default function App() {
       </aside>
       <header className="masthead">
         <button
+          ref={menuToggle}
           className="sidebar-toggle"
-          aria-label="주요 메뉴 열기"
+          aria-label={menuOpen ? "주요 메뉴 닫기" : "주요 메뉴 열기"}
           aria-controls="primary-navigation"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((open) => !open)}

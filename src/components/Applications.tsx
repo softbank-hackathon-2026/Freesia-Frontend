@@ -32,6 +32,11 @@ import {
 } from "../lib/pipeline.ts";
 import type { AppPlan } from "../lib/pipeline.ts";
 export type ApplicationTab = "overview" | "logs" | "metrics";
+const appTabs = [
+  { id: "overview", label: "개요" },
+  { id: "logs", label: "로그" },
+  { id: "metrics", label: "모니터링" },
+] as const;
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const api = createApi(apiBase);
 export default function Applications({
@@ -78,6 +83,7 @@ export default function Applications({
   const session = useRef(0);
   const request = useRef<AbortController | null>(null);
   const restoredApp = useRef<string | null>(null);
+  const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const teardownRequest = useRef<string | null>(null);
   const teardownBaseline = useRef(new Map<string, string | null | undefined>());
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
@@ -732,29 +738,31 @@ export default function Applications({
       ) : selected ? (
         <>
           <div className="tabs" role="tablist" aria-label="앱 상세">
-            <button
-              role="tab"
-              aria-selected={tab === "overview"}
-              onClick={() => onNavigate(appId, "overview")}
-            >
-              개요
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "logs"}
-              onClick={() => onNavigate(appId, "logs")}
-            >
-              로그
-            </button>
-            <button
-              role="tab"
-              aria-selected={tab === "metrics"}
-              onClick={() => onNavigate(appId, "metrics")}
-            >
-              모니터링
-            </button>
+            {appTabs.map((item, index) => (
+              <button
+                key={item.id}
+                ref={node => { tabButtons.current[index] = node; }}
+                id={`application-tab-${item.id}`}
+                role="tab"
+                aria-selected={tab === item.id}
+                aria-controls="application-panel"
+                tabIndex={tab === item.id ? 0 : -1}
+                onClick={() => onNavigate(appId, item.id)}
+                onKeyDown={event => {
+                  const next = event.key === "ArrowRight" ? (index + 1) % appTabs.length
+                    : event.key === "ArrowLeft" ? (index + appTabs.length - 1) % appTabs.length
+                    : event.key === "Home" ? 0 : event.key === "End" ? appTabs.length - 1 : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  tabButtons.current[next]?.focus();
+                  onNavigate(appId, appTabs[next].id);
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
-          <div role="tabpanel">
+          <div id="application-panel" role="tabpanel" aria-labelledby={`application-tab-${tab}`} tabIndex={0}>
             {tab === "overview" ? (
               <>
                 <section className="panel detail">

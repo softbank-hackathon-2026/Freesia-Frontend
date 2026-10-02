@@ -259,3 +259,7 @@ Native page/source/app/tab URL state restores reload and Back/Forward without re
 
 ## UX unit4 verified — 2026-10-03T01:56:07.865869+09:00
 Analysis button says 코드 분석 시작 / 다시 분석; existing deployment history action remains 설정 변경 · 재분석 and actual deploy actions unchanged. Matching existing test selectors updated. Focused label/API regression RED then GREEN (two analysis POSTs); check43/E2E24 and independent source review PASS. User-approved individual commit/push before unit5 keyboard focus.
+
+
+## UX unit5 verified — 2026-10-03T02:06:34.121726+09:00
+Mobile disclosure focuses first navigation item on open and restores the visible toggle after close/navigation. Escape is scoped to menu/toggle targets so native dialogs keep their own cancellation. App tabs use one Tab stop, arrows/wrap/Home/End via existing navigation, associated focusable panel and visible focus styles. Focused RED tabIndex then GREEN; extra RED native dialog Escape conflict fixed and regression GREEN. Final check43/E2E24 and independent re-review PASS;1440/390 focus screenshots inspected. No new dependencies. All five approved units complete; unit5 separate commit/push on codex/frontend-ux-fixes. Main merge, PR and deployment are outside this authorization.
