@@ -233,3 +233,17 @@ Logs unit verified 2026-10-03T00:05:57.966227+09:00: check42/E2E/focused/source+
 Logs unit published0b386ce; remote exact/clean verified. Metrics unit now active under the same user approval; separate commit/push after checks.
 
 Monitoring implementation complete 2026-10-03T00:21:02.655594+09:00: logs0b386ce already published; metrics validated check43/E2E24/focused8/source+visual. Feature-separated publication approved on codex/app-monitoring-api. No live monitoring verification, PR/main merge or deployment in this task.
+
+
+## Five frontend UX fixes — approved 2026-10-03T01:17:33.173690+09:00
+User approved new branch codex/frontend-ux-fixes, ordered units1–5, separate commit and push after each verified unit. Approval covers requirements/design/implementation and publication of each described unit; no PR/merge/deployment/backend/Notion work. Existing architecture, React/native browser APIs and installed dependencies are reused.
+1. Creation safety: block cancel while creating, retain successful server result across view changes, reconcile uncertain outcomes by listing apps; prevent accidental duplicate submit.
+2. List accuracy: independent infra/apps loading/errors so one failure cannot erase the other; refresh infra counts after successful app creation.
+3. Navigation: persist page/app/tab in query parameters, reload restoration and Back/Forward via browser history; preserve existing app/source deep links and cancel stale async view work.
+4. Action copy: code analysis start/reanalysis labels match POST behavior; actual deployment wording remains separate.
+5. Keyboard: mobile menu focus on open/return on close; proper tab roving focus, arrows/Home/End and tab-panel association.
+Verification per unit: focused behavior regression, npm run check, npm run test:e2e, source review; UI units also desktop/mobile inspection. Existing docs/plans and sprint evaluation record each result. Product unit ownership is sequential to avoid conflicts in App.tsx/Applications.tsx. Follow-up work (polling layout, repository confirmation, demo infra reset) excluded.
+
+
+## UX unit1 verified — 2026-10-03T01:25:19.234760+09:00
+Creation cancel disabled in flight; late success refreshes canonical list instead of overwriting current view/draft; uncertain network/5xx/invalid-success results reconcile via GET without retrying POST. Focused RED(cancel enabled) then GREEN(cancel guard, GET-before-POST race, unknown503/no retry); check43 PASS; full browser see artifact groups PASS; independent source review PASS after stale-response fix. No actual backend/AWS mutations. User-approved unit1 commit/push on codex/frontend-ux-fixes.

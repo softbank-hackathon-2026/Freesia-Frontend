@@ -277,6 +277,7 @@ export default function Applications({
   }, [deployment, mode, onDeployment]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     const token = session.current;
     if (mode === "api" && (repositoryLoading || repositoryError)) {
       setError("Repository 목록을 먼저 불러오세요.");
@@ -317,7 +318,7 @@ export default function Applications({
               latest_deployment_id: null,
             }
           : await api.createApp(clean);
-      if (token !== session.current) return;
+      if (token !== session.current) { onRefresh(); return; }
       onCreate(app);
       setCreating(false);
       restored.current = true;
@@ -326,8 +327,15 @@ export default function Applications({
       setAnalysis(null);
       setDeployment(null);
     } catch (e) {
-      if (token === session.current)
-        setError(e instanceof Error ? e.message : "앱 생성 실패");
+      const uncertain = mode === "api" && e instanceof ApiError &&
+        (!e.status || e.status >= 500 || e.status < 300);
+      if (uncertain) onRefresh();
+      if (token === session.current) {
+        if (uncertain) setCreating(false);
+        setError(uncertain
+          ? "생성 결과를 확인하지 못했습니다. 목록을 다시 조회합니다. 같은 앱이 있는지 확인한 뒤 다시 시도하세요."
+          : e instanceof Error ? e.message : "앱 생성 실패");
+      }
     } finally {
       if (token === session.current) setBusy(false);
     }
@@ -693,15 +701,17 @@ export default function Applications({
             Terraform 설계는 적용·리소스 동기화 후 사용할 수 있습니다. 현재 이
             과정은 연결되지 않았습니다.
           </p>
+          {busy && <p role="status">앱을 생성하고 있습니다. 화면을 이동해도 서버의 생성 작업은 계속됩니다.</p>}
           <div className="form-actions">
             <button className="primary" disabled={busy}>
               {busy ? "생성 중…" : "애플리케이션 생성"}
             </button>
             <button
               type="button"
+              disabled={busy}
               onClick={() => {
                 request.current?.abort();
-              session.current++;
+                session.current++;
                 setBusy(false);
                 setCreating(false);
               }}
