@@ -103,3 +103,11 @@ Status: design and unit plans proposed; combined Ideation/Inception/Construction
 2026-10-02 UI-03 verified: three-field cards, responsive layout, unavailable-name states and screen-reader relation descriptions implemented; `npm run check` (35 native tests), `npm run test:e2e` (20 browser groups) and independent source/visual review PASS (8/6/8/8). API mobile full-page capture artifact was replaced as review evidence by trusted viewport/long-card captures plus DOM checks. Authorized UI-03 commit/push next; local preview is at `http://localhost:5173/`. Actual backend/cloud/deployment remain unverified and outside this UI task.
 
 2026-10-02 current handoff: UI-03 published as `0e489d7`; push and matching remote SHA confirmed. All three approved UI units are implemented, tested, independently reviewed and individually committed/pushed on `feat/ui` (`bdaa4bb`, `b566cb4`, `0e489d7`). Earlier proposed/in-progress entries above are historical. [Completed handoff](sprints/infra-ai-flow-eval.md#space-list-uiux-completed-handoff--2026-10-02) is the applicable record. Local preview remains `http://localhost:5173/`; no PR/merge or deployment.
+
+
+## PR #5 favicon follow-up — 2026-10-02
+User explicitly requested adding the previously described favicon fix to PR #5. Approved scope: index.html references existing /freesia-mascot.jpg; verify and commit/push feat/ui to update that PR. No merge/deployment. Existing stash remains preserved. Verification pending in infra-ai-flow-eval.md.
+
+2026-10-02 verification complete: check35/browser20/favicon200/built asset PASS. Automatic approval review rejected commit for lack of explicit current-diff commit wording. Commit/push remain pending fresh user approval; previous scope interpretation above does not constitute publication evidence.
+
+2026-10-02 publication approval: user explicitly answered "ㅇㅇ 반영해줘" to the request to commit and push the verified three-file favicon diff on feat/ui into PR #5. Prior approval-review block resolved by this explicit approval. Product diff unchanged since check35/browser20/favicon200 verification; git diff --check PASS. No merge or deployment authorized.

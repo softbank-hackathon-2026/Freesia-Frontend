@@ -132,3 +132,9 @@ Final product verification: `npm run check` PASS (TypeScript/ESLint/35 native te
 Handoff: local Vite preview `http://localhost:5173/`. No backend roundtrip, actual AI/GitHub workflow/AWS execution, PR/merge or deployment was performed by this UI-only task. Final publication records are documentation-only and require diff/link/instruction-consistency checks, not rerunning unchanged application checks.
 
 Final documentation verification, 2026-10-02: `git diff --check` PASS; read-only `python3` added-link/heading-anchor/prohibited-character check PASS (6 documents, 5 local links); independent read-only instruction/scope/evidence consistency review PASS. `curl` local preview returned HTTP 200. Unchanged application checks were not rerun for this documentation-only diff; the final product results above remain applicable.
+
+
+## PR #5 favicon verification — 2026-10-02
+User requested adding the described HTML favicon fix to PR #5 (feat/ui). Product diff: one icon link to existing /freesia-mascot.jpg. node scripts/check.mjs PASS (TypeScript, ESLint, 35 tests, build). Browser harness PASS (20 groups); temporary copy changed only port 5173 to 15173 to preserve the user preview and was removed. Browser icon href and JPEG HTTP 200 verified on localhost:5173; dist/index.html references the icon and dist contains it. No API/cloud changes. Publication blocked by automatic approval review requiring explicit commit approval; no commit/push performed. Prior favicon stash preserved.
+
+2026-10-02 publication approval: user explicitly answered "ㅇㅇ 반영해줘" to the request to commit and push the verified three-file favicon diff on feat/ui into PR #5. Prior approval-review block resolved by this explicit approval. Product diff unchanged since check35/browser20/favicon200 verification; git diff --check PASS. No merge or deployment authorized.
