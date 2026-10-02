@@ -9,6 +9,7 @@ const flowerBackup = await readFile(
   new URL("../public/freesia-flower.svg", import.meta.url),
   "utf8",
 );
+const port = process.env.BROWSER_CHECK_PORT || "5173";
 const server = spawn(
   process.execPath,
   [
@@ -16,7 +17,7 @@ const server = spawn(
     "--host",
     "localhost",
     "--port",
-    "5173",
+    port,
     "--strictPort",
   ],
   { stdio: "pipe" },
@@ -28,7 +29,7 @@ server.stderr.on("data", (c) => {
 server.stdout.on("data", (c) => {
   serverLog += c;
 });
-const url = "http://localhost:5173";
+const url = `http://localhost:${port}`;
 const results = [];
 let browser;
 function luminance(color) {
@@ -1007,8 +1008,7 @@ try {
   assert.equal(await cardPage.locator(".app-space-list .section-heading .heading-actions").getByRole("button", { name: "애플리케이션 생성", exact: true }).isDisabled(), true);
   assert.equal(await cardPage.getByRole("button", { name: "새로고침", exact: true }).isDisabled(), true);
   assert.equal(await cardPage.getByRole("button", { name: "애플리케이션 삭제", exact: true }).isDisabled(), true);
-  assert.equal(await cardPage.getByText("애플리케이션 삭제 API가 아직 없습니다.", { exact: true }).count(), 1);
-  assert.ok((await cardPage.locator(".app-space-list > p.muted").boundingBox()).y < (await mainCard.boundingBox()).y, "API deletion reason appears before long card lists");
+  assert.equal(await cardPage.getByText("애플리케이션 삭제 API가 아직 없습니다.", { exact: true }).count(), 0);
   await cardPage.screenshot({ path: "artifacts/ui-03-app-cards-api-loading.png", fullPage: true });
   cardRepositoryState = "error";
   releaseCardRepositories();

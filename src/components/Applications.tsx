@@ -54,7 +54,7 @@ export default function Applications({
   onRefresh: () => void;
   loading: boolean;
   discardableApps: AppSpace[];
-  onDiscard: (id: string) => void;
+  onDiscard: (id: string, signal?: AbortSignal) => void | Promise<void>;
   storageBlocked: boolean;
   apps: AppSpace[];
   infras: InfraSpace[];
@@ -75,11 +75,14 @@ export default function Applications({
   const teardownBaseline = useRef(new Map<string, string | null | undefined>());
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
   const discardDialog = useRef<HTMLDialogElement>(null);
+  const discardRequest = useRef<AbortController | null>(null);
   const [discardId, setDiscardId] = useState("");
   const [discardError, setDiscardError] = useState("");
+  const [discarding, setDiscarding] = useState(false);
   useEffect(
     () => () => {
       request.current?.abort();
+      discardRequest.current?.abort();
       session.current++;
     },
     [],
@@ -311,6 +314,24 @@ export default function Applications({
         setError(e instanceof Error ? e.message : "앱 생성 실패");
     } finally {
       if (token === session.current) setBusy(false);
+    }
+  }
+  async function discard() {
+    if (discardRequest.current || !discardableApps.some(app => app.id === discardId)) return;
+    const controller = new AbortController();
+    discardRequest.current = controller;
+    const token = ++session.current;
+    setDiscarding(true);
+    setDiscardError("");
+    try {
+      await onDiscard(discardId, controller.signal);
+      if (token === session.current && !controller.signal.aborted) discardDialog.current?.close();
+    } catch (e) {
+      if (token === session.current && !controller.signal.aborted)
+        setDiscardError(e instanceof Error ? e.message : "애플리케이션을 삭제하지 못했습니다.");
+    } finally {
+      if (discardRequest.current === controller) discardRequest.current = null;
+      if (token === session.current) setDiscarding(false);
     }
   }
   async function open(app: AppSpace) {
@@ -933,7 +954,7 @@ export default function Applications({
                   <button disabled={(teardownStatus === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || busy || !!streamId || !["success", "failed"].includes(deployment.status)} onClick={teardown}>앱 내리기</button>
                   </div>
                 </section>}
-                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={event?.at ?? "initial"} appName={selected.name}/>}
+                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
               </>
             ) : tab === "logs" ? (
               <section className="panel">
@@ -1009,14 +1030,13 @@ export default function Applications({
               >
                 애플리케이션 생성
               </button>
-              <button className="secondary" disabled={mode === "api" || storageBlocked || !discardableApps.length}
-                title={mode === "api" ? "애플리케이션 삭제 API가 아직 없습니다." : "배포 이력 없는 DEMO 애플리케이션 삭제"}
+              <button className="secondary" disabled={loading || repositoryLoading || discarding || (mode === "demo" && storageBlocked) || !discardableApps.length}
+                title={mode === "api" ? "애플리케이션을 목록에서 삭제" : "배포 이력 없는 DEMO 애플리케이션 삭제"}
                 onClick={() => { setDiscardId(discardableApps[0].id); setDiscardError(""); discardDialog.current?.showModal(); }}>
                 애플리케이션 삭제
               </button>
             </div>
           </div>
-          {mode === "api" && <p className="muted">애플리케이션 삭제 API가 아직 없습니다.</p>}
           {loading ? <div className="empty" role="status">애플리케이션 불러오는 중…</div> : apps.length ? (
             <div className="app-space-cards">
               {apps.map((app) => {
@@ -1056,20 +1076,20 @@ export default function Applications({
           )}
         </section>
         {mode === "demo" && !discardableApps.length && <p className="muted">삭제할 수 있는 배포 이력 없는 DEMO 애플리케이션이 없습니다.</p>}
-        <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="app-discard-heading" aria-describedby="app-discard-description">
+        <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="app-discard-heading" aria-describedby="app-discard-description" aria-busy={discarding} onCancel={event => { if (discarding) event.preventDefault(); }}>
           <h2 id="app-discard-heading">애플리케이션 삭제</h2>
-          <p id="app-discard-description">선택한 DEMO 애플리케이션이 브라우저에서 삭제돼요. 배포 이력이 있는 애플리케이션은 삭제할 수 없어요. 연결된 인프라와 Repository는 유지돼요.</p>
+          <p id="app-discard-description">{mode === "api"
+            ? "선택한 애플리케이션을 목록에서 숨깁니다. 배포·분석 기록과 연결된 인프라·Repository는 유지됩니다. AWS에 배포된 앱은 먼저 내리기를 완료해 주세요. 배포·내리기 중에는 삭제할 수 없습니다."
+            : "선택한 DEMO 애플리케이션이 브라우저에서 삭제돼요. 배포 이력이 있는 애플리케이션은 삭제할 수 없어요. 연결된 인프라와 Repository는 유지돼요."}</p>
           <label htmlFor="app-discard-target">삭제할 애플리케이션</label>
-          <select id="app-discard-target" value={discardId} onChange={(event) => { setDiscardId(event.target.value); setDiscardError(""); }}>
+          <select id="app-discard-target" disabled={discarding} value={discardId} onChange={(event) => { setDiscardId(event.target.value); setDiscardError(""); }}>
             {discardableApps.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
           </select>
           {discardError && <p className="error" role="alert">{discardError}</p>}
           <div className="form-actions">
-            <button className="secondary" onClick={() => discardDialog.current?.close()}>취소</button>
-            <button className="primary" disabled={mode === "api" || storageBlocked || !discardableApps.some((entry) => entry.id === discardId)} onClick={() => {
-              try { onDiscard(discardId); discardDialog.current?.close(); }
-              catch (e) { setDiscardError(e instanceof Error ? e.message : "애플리케이션을 삭제하지 못했습니다."); }
-            }}>선택한 애플리케이션 삭제</button>
+            <button className="secondary" disabled={discarding} onClick={() => discardDialog.current?.close()}>취소</button>
+            <button className="primary" disabled={discarding || (mode === "demo" && storageBlocked) || !discardableApps.some((entry) => entry.id === discardId)} onClick={() => void discard()}>선택한 애플리케이션 삭제</button>
+            {discarding && <span role="status">삭제 요청 중…</span>}
           </div>
         </dialog>
         </>

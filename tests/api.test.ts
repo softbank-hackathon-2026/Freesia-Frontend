@@ -453,3 +453,29 @@ test("app teardown lifecycle validates status and nullable metadata on detail an
     await assert.rejects(createApi("/api",async()=>new Response(JSON.stringify([data]))).apps(),/응답/);
   }
 });
+
+
+test("app deletion requires empty 204, encodes IDs and preserves conflict codes", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const api = createApi("/api", async (url, init) => {
+    calls.push({url: String(url), init});
+    return new Response(null, {status:204});
+  });
+  const controller = new AbortController();
+  assert.equal(await api.deleteApp("app/one", controller.signal), undefined);
+  assert.equal(calls[0].url, "/api/app-spaces/app%2Fone");
+  assert.equal(calls[0].init?.method, "DELETE");
+  assert.equal(calls[0].init?.body, undefined);
+  assert.equal(calls[0].init?.signal, controller.signal);
+  for (const code of ["app_still_deployed", "deployment_in_progress", "teardown_in_progress"]) {
+    await assert.rejects(createApi("/api", async () => new Response(JSON.stringify({error:code,message:code}), {status:409})).deleteApp("app"), {status:409,code});
+  }
+  await assert.rejects(createApi("/api", async () => new Response("{}", {status:200})).deleteApp("app"), {code:"invalid_response"});
+});
+
+test("resource API accepts deleted but rejects unknown states", async () => {
+  const resource = {address:"aws_ecs_service.web",type:"aws_ecs_service",action:"create",state:"deleted",reason:null,updated_at:"now"};
+  const response = (state: string) => createApi("/api", async () => new Response(JSON.stringify([{...resource,state}]))).resources("dep");
+  assert.deepEqual(await response("deleted"), [resource]);
+  await assert.rejects(response("unexpected"), {code:"invalid_response"});
+});

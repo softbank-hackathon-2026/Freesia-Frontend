@@ -28,7 +28,7 @@ try {
   if(path.endsWith('/analysis'))return json(analysis);
   if(path.endsWith('/plans'))return json({status:'done',compute:'ecs-fargate',plans:[{id:'port-plan',name:'포트 검증',summary:'fixture',pros:[],cons:[],template:'ecs-fargate/basic',values:port===undefined?{}:{container_port:port}}]});
   if(path.endsWith('/deployments')){bodies.push(req.postDataJSON());if(deployConflict){teardownStatus='requested';receipt=stamp;return json({error:'teardown_in_progress',message:'fixture conflict'},409);}return json(deployment,201);}
-  if(path.endsWith('/resources'))return json([]);
+  if(path.endsWith('/resources'))return json([{address:'aws_ecs_service.web',type:'aws_ecs_service',action:'create',state:teardownStatus==='success'?'deleted':'done',reason:null,updated_at:stamp}]);
   if(path.endsWith('/dep-a'))return json(deployment);
   return json({message:'unexpected fixture request'},404);
  });
@@ -44,7 +44,7 @@ try {
  confirm();await teardown().click();await page.getByText(/앱을 내리는 중/).waitFor();assert.equal(posts,1);assert.ok(await teardown().isDisabled());
  // Reload resumes polling. No new POST is sent; deployment controls remain blocked.
  await open();await page.getByText(/앱을 내리는 중/).waitFor();assert.equal(posts,1);await prepare();assert.ok(await deployButton().isDisabled());
- teardownStatus='success';finished=stamp;await page.getByText(/내림 완료/).waitFor({timeout:7000});assert.equal(await page.getByText(deployment.url,{exact:true}).count(),0);assert.ok(await teardown().isDisabled());assert.ok(await deployButton().isEnabled());
+ teardownStatus='success';finished=stamp;await page.getByText(/내림 완료/).waitFor({timeout:7000});assert.equal(await page.getByText(deployment.url,{exact:true}).count(),0);assert.ok(await teardown().isDisabled());assert.ok(await deployButton().isEnabled());await page.locator('.resource-tree-node.state-deleted').waitFor();assert.equal(await page.getByRole('progressbar',{name:'자원 완료율'}).count(),0);
  await page.getByRole('region',{name:'앱 내리기',exact:true}).screenshot({path:'artifacts/teardown-receipt.png'});
  const terminalGets=appGets;await page.waitForTimeout(3300);assert.equal(appGets,terminalGets);
  await open();await page.getByText(/내림 완료/).waitFor();assert.equal(await page.getByText(deployment.url,{exact:true}).count(),0);
@@ -71,7 +71,7 @@ try {
  const list=page.locator('.app-space-list');
  await list.getByRole('button',{name:'새로고침',exact:true}).waitFor();
  assert.ok(await list.getByRole('button',{name:'애플리케이션 생성',exact:true}).isEnabled());
- assert.ok(await list.getByRole('button',{name:'애플리케이션 삭제',exact:true}).isDisabled());
+ assert.ok(await list.getByRole('button',{name:'애플리케이션 삭제',exact:true}).isEnabled());
  await list.screenshot({path:'artifacts/teardown-merged-app-list.png'});
  await page.getByRole('button',{name:second.name+' 상세 보기',exact:true}).click();release();hold=false;await page.getByRole('heading',{name:second.name,exact:true}).waitFor();assert.equal(await page.getByText(/앱을 내리는 중/).count(),0);
  reset();teardownStatus='requested';receipt=stamp;await open();await page.getByText(/앱을 내리는 중/).waitFor();holdGet=true;await new Promise(resolve=>holdGetReady=resolve);const inFlightGets=appGets;await page.waitForTimeout(3300);assert.equal(appGets,inFlightGets);await page.getByRole('button',{name:'앱 목록으로',exact:true}).click();await page.getByRole('button',{name:second.name+' 상세 보기',exact:true}).click();holdGet=false;releaseGet();await page.getByRole('heading',{name:second.name,exact:true}).waitFor();assert.equal(await page.getByText(/앱을 내리는 중/).count(),0);const afterNavigation=appGets;await page.waitForTimeout(3300);assert.equal(appGets,afterNavigation);

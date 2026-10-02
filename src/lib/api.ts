@@ -36,7 +36,7 @@ function analysisShape(value: unknown): boolean {
 }
 function resourceShape(value: unknown): boolean {
   const v = record(value);
-  return !!v && fields(v,["address","type","action","updated_at"]) && ["pending","in_progress","done","failed"].includes(String(v.state)) && nullableString(v.reason);
+  return !!v && fields(v,["address","type","action","updated_at"]) && ["pending","in_progress","done","failed","deleted"].includes(String(v.state)) && nullableString(v.reason);
 }
 function jsonValue(value: unknown): boolean {
   return value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)) || (Array.isArray(value) ? value.every(jsonValue) : !!record(value) && Object.values(value as object).every(jsonValue));
@@ -85,7 +85,10 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
       throw new ApiError("백엔드에 연결할 수 없습니다. 주소와 서버 상태를 확인하세요.");
     }
     signal?.throwIfAborted();
-    if (method === "DELETE" && response.status === 204) return undefined as T;
+    if (method === "DELETE") {
+      if (response.status === 204) return undefined as T;
+      if (response.ok) throw new ApiError("백엔드 삭제 응답 형식이 올바르지 않습니다.", response.status, "invalid_response");
+    }
     let data: unknown;
     try { data = await response.json(); }
     catch {
@@ -138,6 +141,7 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
     infra: (id:string, signal?:AbortSignal) => request<InfraSpace>(`/infra-spaces/${encodeURIComponent(id)}`,undefined,"GET",signal),
     apps: (signal?:AbortSignal) => request<AppSpace[]>("/app-spaces",undefined,"GET",signal),
     app: (id:string, signal?:AbortSignal) => request<AppSpace>(appPath(id),undefined,"GET",signal),
+    deleteApp: (id:string, signal?:AbortSignal) => request<void>(appPath(id),undefined,"DELETE",signal),
     createApp: (body:AppSpaceCreate, signal?:AbortSignal) => request<AppSpace>("/app-spaces",body,"POST",signal),
     analyze,
     analysis,

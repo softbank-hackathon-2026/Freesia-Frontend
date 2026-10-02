@@ -1123,6 +1123,8 @@ progress {
 .resource-tree-node summary strong { font-size: 13px; }
 .resource-tree-node summary small { display: block; color: var(--muted); margin: 3px 0; }
 .resource-tree-state { display: block; color: var(--accent); font-size: 12px; }
+.resource-tree-node.state-deleted { border-color: #b8b8b8; background: #f3f3f3; }
+.resource-tree-node.state-deleted .resource-tree-state, .resource-tree-deleted { color: #555; }
 .resource-tree-node.state-pending { border-style: dashed; }
 .resource-tree-node.state-pending .resource-tree-state { color: #685f53; }
 .resource-tree-node.state-in_progress { border: 2px solid #bd5b3f; background: #fcebe3; }

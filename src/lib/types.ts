@@ -72,7 +72,7 @@ export type DeploymentResource = {
   address: string;
   type: string;
   action: string;
-  state: "pending" | "in_progress" | "done" | "failed";
+  state: "pending" | "in_progress" | "done" | "failed" | "deleted";
   reason: string | null;
   updated_at: string;
 };

@@ -203,3 +203,9 @@ User approved the preceding recommendation: integrate latest main into codex/tea
 2026-10-02T18:13:54.768651+09:00 PR7 localUIintegration verified: check39/browser24/focusedteardown/tree/reviewPASS, all3conflictsresolved. Pendingmergecommit+pushapproval; remotePR7unchanged. See latesteval.
 
 2026-10-02T18:21:52.224174+09:00 Publication approved: user explicitly requested commit & push of the verified local main UI + teardown integration on codex/teardown-status. Merge parent22b7b33, featureparent6f86d8d; check39/browser24/focused/tree/reviewPASS unchanged. Fresh diffchecksPASS/no unmergedpaths. Finish mergecommit and pushbranch, verifyPR7mergeability; do notmergePR ordeploy.
+
+
+## Current work — App deletion and deleted resources (2026-10-02)
+Approved on codex/app-delete-resource-deleted: connect existing Application deletion dialog to server soft-delete API and accept/display deleted tree nodes. See current appended sections in day3 spec/plan and infra-ai-flow-contract. Implementation/checks pending; commit/push authorized for this diff, PR/merge/deployment excluded.
+
+Current app-delete/resource-deleted status: implemented/tested/reviewed PASS (check41/full E2E/three focused browser checks). See latest infra-ai-flow-eval handoff. User-authorized branch commit/push next; no PR/merge/deployment.

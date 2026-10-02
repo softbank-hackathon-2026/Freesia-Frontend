@@ -3,8 +3,8 @@ import { ApiError, createApi } from '../lib/api.ts';
 import type { DeploymentResource } from '../lib/types.ts';
 
 const api = createApi(import.meta.env.VITE_API_BASE_URL || '/api');
-const labels = { pending: '대기', in_progress: '진행 중', done: '완료', failed: '실패' };
-const icons = { pending: '＋', in_progress: '…', done: '✓', failed: '!' };
+const labels = { pending: '대기', in_progress: '진행 중', done: '완료', failed: '실패', deleted: '삭제됨' };
+const icons = { pending: '＋', in_progress: '…', done: '✓', failed: '!', deleted: '−' };
 const categories = [
   { name: '서버', types: /^aws_(ecs_|instance$|launch_template$|autoscaling_|lambda_)/ },
   { name: '저장소', types: /^aws_(s3_|db_|rds_|dynamodb_|efs_|ebs_|elasticache_)/ },
@@ -44,6 +44,8 @@ export default function DeploymentResources({ id, refresh, appName }: { id: stri
     items: (resources ?? []).filter(resource => categories.find(candidate => candidate.types.test(resource.type)) === category),
   })).filter(group => group.items.length > 0);
   const completed = resources?.filter(resource => resource.state === 'done').length ?? 0;
+  const deleted = resources?.filter(resource => resource.state === 'deleted').length ?? 0;
+  const remaining = (resources?.length ?? 0) - deleted;
 
   return <section className="panel resource-tree" aria-label="배포 자원 상태">
     <div className="section-heading"><h2>전체 구성</h2><button disabled={loading} onClick={() => setRetry(n => n + 1)}>자원 상태 다시 조회</button></div>
@@ -52,8 +54,8 @@ export default function DeploymentResources({ id, refresh, appName }: { id: stri
       {error && <p role="alert">{error}</p>}
       {!loading && !error && resources?.length === 0 && <p>아직 보고된 자원이 없습니다. 실제 배포 자원 유무는 확인되지 않았습니다.</p>}
       {!error && !!resources?.length && <>
-        <p className="resource-tree-count">{appName} / {resources.length}개 중 {completed}개 완료 <span className="muted">(보고된 자원 기준)</span></p>
-        <progress max={resources.length} value={completed} aria-label="자원 완료율" />
+        <p className="resource-tree-count">{appName} / {remaining > 0 && <>{deleted > 0 && '남은 '}{remaining}개 중 {completed}개 완료</>}{deleted > 0 && <>{remaining > 0 && ' / '}{deleted}개 삭제됨</>} <span className="muted">(보고된 자원 기준)</span></p>
+        {remaining > 0 && <progress max={remaining} value={completed} aria-label="자원 완료율" />}
         <div className="resource-tree-scroll" tabIndex={0} role="region" aria-label="배포 자원 구성도">
           <ul className="resource-tree-root"><li>
             <strong className="resource-tree-app">{appName}</strong>
@@ -87,12 +89,16 @@ export default function DeploymentResources({ id, refresh, appName }: { id: stri
           </li></ul>
         </div>
         <p className="resource-tree-scroll-hint muted">좌우로 이동해 전체 구성을 확인하세요.</p>
-        <p className="resource-tree-legend">✓ 완료 / … 진행 중 / ＋ 대기 / ! 실패 <span className="muted">/ 자원을 누르면 상세 정보</span></p>
-        <ul className="resource-tree-totals" aria-label="그룹별 완료 현황">
-          {groups.map(group => <li key={group.name}>
-            <span>{group.name}{group.items.some(resource => resource.state === 'in_progress') && <em> ← 진행 중</em>}</span>
-            <span>{group.items.filter(resource => resource.state === 'done').length}/{group.items.length} 완료{group.items.some(resource => resource.state === 'failed') && <em className="resource-tree-failed"> / 실패 있음</em>}</span>
-          </li>)}
+        <p className="resource-tree-legend">✓ 완료 / … 진행 중 / ＋ 대기 / ! 실패 / <span className="resource-tree-deleted">− 삭제됨</span> <span className="muted">/ 자원을 누르면 상세 정보</span></p>
+        <ul className="resource-tree-totals" aria-label="그룹별 자원 현황">
+          {groups.map(group => {
+            const deleted = group.items.filter(resource => resource.state === 'deleted').length;
+            const remaining = group.items.length - deleted;
+            return <li key={group.name}>
+              <span>{group.name}{group.items.some(resource => resource.state === 'in_progress') && <em> ← 진행 중</em>}</span>
+              <span>{remaining > 0 && <>{group.items.filter(resource => resource.state === 'done').length}/{remaining} 완료</>}{deleted > 0 && <>{remaining > 0 && ' / '}{deleted}개 삭제됨</>}{group.items.some(resource => resource.state === 'failed') && <em className="resource-tree-failed"> / 실패 있음</em>}</span>
+            </li>;
+          })}
         </ul>
       </>}
       <p className="muted resource-tree-note">연결선은 자원 분류를 나타냅니다. 실제 네트워크 연결/의존관계는 제공되지 않습니다.</p>

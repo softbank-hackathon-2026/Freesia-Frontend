@@ -136,3 +136,11 @@ Verified against backend origin/main6da543a, merged PR13. User reports deployed 
 - Backend retains terminal fields after redeployment and old Deployment.url after teardown; compare new deployment.created_at against teardown_requested_at so historical success does not hide a newer deployment URL. No fabricated server reset.
 - Backend _tearing_down expires its request guard after30minutes without changing GET teardown_status. Frontend follows requested conservatively; stale requested recovery/timeout remains a server concern and is not reported as completion.
 - Actual GitHub/AWS destruction is not executed by frontend tests. UI assertions use controlled API responses; real deployment remains a separate smoke test.
+
+
+## Current app deletion and deleted resources — 2026-10-02
+Supersedes the historical API-app-delete-unsupported statements above; Infra deletion is unchanged.
+- API app deletion uses DELETE /api/app-spaces/{id}, accepting only 204. This hides the app; backend records remain. The existing list confirmation removes the app only after success and refreshes lists. The server blocks live resources with app_still_deployed and active operations with deployment_in_progress/teardown_in_progress (409); display its reason, retain the app, never auto-call teardown.
+- Confirmation/select/cancel are locked during the request, with synchronous duplicate guard and abort on unmount. Demo mode retains no-deployment-history/browser-persistence restrictions; API operations do not mutate demo storage.
+- GET /deployments/{id}/resources accepts deleted alongside pending/in_progress/done/failed. Gray nodes retain addresses/details; deleted counts are separate and excluded from the deployment-completion denominator. An all-deleted tree has no completion progress bar.
+- Teardown status/finished_at changes invalidate the resource snapshot, including requested -> success without a deployment SSE event. AWS status is not inferred by the frontend.

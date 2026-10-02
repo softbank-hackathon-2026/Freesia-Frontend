@@ -204,7 +204,7 @@ export default function App() {
   const deployedAppIds = new Set(demo.deployments.map((entry) => entry.app_space_id));
   const discardableApps = mode === "demo"
     ? demo.apps.filter((entry) => entry.latest_deployment_id === null && !deployedAppIds.has(entry.id))
-    : [];
+    : apps;
   const meeting = demo.meeting ?? newMeetingState();
   const discardableSpaces = meeting.spaces.filter((space) => canDiscardInfra(space, demo.apps));
   const availableInfras =
@@ -245,8 +245,15 @@ export default function App() {
     persist({ ...demo, meeting: { ...meeting, spaces: meeting.spaces.filter((entry) => entry.id !== id) } });
     if (activeSpaceId === id) setActiveSpaceId("");
   }
-  function discardApp(id: string) {
-    if (mode !== "demo" || !discardableApps.some((entry) => entry.id === id))
+  async function discardApp(id: string, signal?: AbortSignal) {
+    if (mode === "api") {
+      await api.deleteApp(id, signal);
+      signal?.throwIfAborted();
+      setApps(current => current.filter(entry => entry.id !== id));
+      setReload(current => current + 1);
+      return;
+    }
+    if (!discardableApps.some((entry) => entry.id === id))
       throw new Error("이 애플리케이션은 삭제할 수 없습니다. 배포 이력과 목록을 확인하세요.");
     persist({ ...demo, apps: demo.apps.filter((entry) => entry.id !== id) });
   }
