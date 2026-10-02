@@ -64,3 +64,5 @@ Approval record pending: capture date and the user's exact combined approval cov
 Approval recorded 2026-10-02: user `ㄱ ㄱ` to the preceding combined scope/design/three-unit proposal. Ideation, Inception and UI-01/02/03 Construction plans approved together. Status now approved; UI-01 in progress. Original per-unit commit/push instruction authorizes publication after each unit's tests/review. Backend/cloud/deployment remain outside the scope.
 
 2026-10-02 unit status: UI-01 implemented/tested/reviewed/committed/pushed (`bdaa4bb`, matching remote SHA verified). UI-02 in progress; UI-03 approved and pending. Exact execution evidence is in eval/handoff.
+
+2026-10-02 unit status: UI-02 implemented/tested/reviewed/committed/pushed (`b566cb4`, matching remote SHA verified). UI-03 in progress under the approved card design and plan.

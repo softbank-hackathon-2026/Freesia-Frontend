@@ -514,7 +514,22 @@ try {
     await page.getByRole("button", { name: "앱 목록으로" }).click();
     await page.reload();
     await navigate(page, "애플리케이션 스페이스");
-    await page.getByRole("button", { name: /demo-web/ }).click();
+    const appCard = page.locator(".app-space-card").filter({ hasText: "demo-web" });
+    assert.equal(await appCard.count(), 1, "application list renders a linked Space card");
+    for (const label of ["스페이스 이름", "연결된 통합", "연결된 인프라 스페이스"])
+      assert.equal(await appCard.getByText(label, { exact: true }).count(), 1);
+    for (const value of ["demo-web", "Freesia-Frontend", "쇼핑몰 서비스"])
+      assert.match(await appCard.innerText(), new RegExp(value));
+    assert.equal(await page.locator("h1").innerText(), "애플리케이션 스페이스");
+    assert.equal(await appCard.getAttribute("aria-label"), "demo-web 상세 보기");
+    const cardDescription = await appCard.evaluate(button => (button.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean).map(id => document.getElementById(id)?.textContent ?? "").join(" "));
+    for (const value of ["Freesia-Frontend", "쇼핑몰 서비스", "브랜치 main"])
+      assert.match(cardDescription, new RegExp(value), "focused card exposes its linked names and branch as an accessible description");
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    await page.screenshot({ path: `artifacts/ui-03-app-cards-${name}.png`, fullPage: true });
+    await appCard.focus();
+    await appCard.press("Enter");
+    await page.getByRole("heading", { name: "demo-web", exact: true }).waitFor();
     await page.getByText("success", { exact: true }).waitFor();
     await page.screenshot({path:`artifacts/day3-pipeline-result-${name}.png`,fullPage:true});
     await page.getByRole("tab", { name: "로그", exact: true }).click();
@@ -794,6 +809,88 @@ try {
       "API repositories list/register/409/delete204 and create from registered repo+serverinfra; explicit recommendation choice; unavailable Terraform/CI controls; existing deployment SSE; desktop/mobile parity; demo isolation passed",
   });
   await apiPage.close();
+
+  const cardPage = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const longRepository = { ...repository, id: "repo-long", name: "긴이름의연결된통합".repeat(12), repo_url: "https://github.com/team/" + "long-repository-name-".repeat(8) };
+  const cardRepositories = [
+    { ...repository, name: "운영 통합" },
+    { ...repository, id: "repo-develop", name: "개발 통합", branch: "develop" },
+    { ...repository, id: "repo-blank", name: " \t ", repo_url: "https://github.com/team/blank" },
+    longRepository,
+  ];
+  const cardInfras = [infra, { ...infra, id: "infra-blank", name: " \t " }, { ...infra, id: "infra-long", name: "길게작성한운영인프라스페이스".repeat(6) }];
+  const longAppName = "길게작성한애플리케이션스페이스".repeat(5);
+  const cardApps = [
+    { ...app, id: "card-main", name: "운영 웹" },
+    { ...app, id: "card-develop", name: "개발 웹", branch: "develop" },
+    { ...app, id: "card-blank", name: "이름 없는 연결", repo_url: "https://github.com/team/blank", infra_id: "infra-blank" },
+    { ...app, id: "card-missing", name: "저장된 연결 확인", repo_url: "https://github.com/team/unregistered", infra_id: "infra-missing" },
+    { ...app, id: "card-long", name: longAppName, repo_url: longRepository.repo_url, infra_id: "infra-long" },
+  ];
+  let cardRepositoryState = "loading", releaseCardRepositories;
+  const cardRepositoryPending = new Promise(resolve => { releaseCardRepositories = resolve; });
+  const cardRequests = [];
+  await cardPage.route("**/api/**", async route => {
+    const req = route.request(), path = new URL(req.url()).pathname;
+    cardRequests.push({ path, method: req.method() });
+    const json = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+    if (path.endsWith("/repositories")) {
+      if (cardRepositoryState === "loading") await cardRepositoryPending;
+      return cardRepositoryState === "error" ? json({ message: "통합 조회 테스트 실패" }, 503) : json(cardRepositories);
+    }
+    if (path.endsWith("/infra-spaces")) return json(cardInfras);
+    if (path.endsWith("/app-spaces")) return json(cardApps);
+    return json(cardApps.find(item => path.endsWith("/" + item.id)));
+  });
+  await cardPage.goto(url + "/?source=api");
+  const cardDemoBefore = await cardPage.evaluate(() => localStorage.getItem("freesia.demo.v1"));
+  await navigate(cardPage, "애플리케이션 스페이스");
+  const mainCard = cardPage.getByRole("button", { name: "운영 웹 상세 보기", exact: true });
+  await mainCard.getByText("통합 정보 불러오는 중…", { exact: true }).waitFor();
+  assert.match(await mainCard.innerText(), /https:\/\/github\.com\/team\/web/);
+  assert.match(await mainCard.innerText(), /브랜치 main/);
+  assert.equal(await cardPage.getByRole("button", { name: "앱 연결", exact: true }).isDisabled(), true);
+  await cardPage.screenshot({ path: "artifacts/ui-03-app-cards-api-loading.png", fullPage: true });
+  cardRepositoryState = "error";
+  releaseCardRepositories();
+  await mainCard.getByText("통합 정보 조회 실패", { exact: true }).waitFor();
+  assert.match(await cardPage.getByRole("alert").innerText(), /통합 조회 테스트 실패/);
+  assert.match(await mainCard.innerText(), /https:\/\/github\.com\/team\/web/);
+  await cardPage.screenshot({ path: "artifacts/ui-03-app-cards-api-error.png", fullPage: true });
+  cardRepositoryState = "ready";
+  await cardPage.getByRole("button", { name: "Repository 다시 조회", exact: true }).click();
+  await mainCard.getByText("운영 통합", { exact: true }).waitFor();
+  assert.equal(await cardPage.locator(".app-space-card").count(), cardApps.length);
+  assert.equal(await cardPage.getByRole("alert").count(), 0);
+  const developCard = cardPage.getByRole("button", { name: "개발 웹 상세 보기", exact: true });
+  assert.equal(await developCard.getByText("개발 통합", { exact: true }).count(), 1);
+  assert.equal(await developCard.getByText("운영 통합", { exact: true }).count(), 0);
+  assert.match(await developCard.innerText(), /브랜치 develop/);
+  const blankCard = cardPage.getByRole("button", { name: "이름 없는 연결 상세 보기", exact: true });
+  for (const value of ["통합 이름 미제공", "인프라 이름 미제공", "infra-blank", "https://github.com/team/blank"])
+    assert.equal(await blankCard.getByText(value, { exact: true }).count(), 1);
+  const missingCard = cardPage.getByRole("button", { name: "저장된 연결 확인 상세 보기", exact: true });
+  for (const value of ["통합 등록 정보 없음", "인프라 이름 미확인", "infra-missing", "https://github.com/team/unregistered"])
+    assert.equal(await missingCard.getByText(value, { exact: true }).count(), 1);
+  for (const [size, width, height, columns] of [["desktop", 1440, 1000, 3], ["tablet", 1000, 900, 2], ["mobile", 390, 844, 1]]) {
+    await cardPage.setViewportSize({ width, height });
+    assert.equal(await cardPage.locator(".app-space-cards").evaluate(element => window.getComputedStyle(element).gridTemplateColumns.split(" ").length), columns);
+    assert.equal(await cardPage.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, "long card names and URLs wrap within the viewport");
+    assert.equal(await cardPage.getByRole("button", { name: longAppName + " 상세 보기", exact: true }).getByText(longRepository.name, { exact: true }).count(), 1);
+    assert.doesNotMatch(await cardPage.locator("main").innerText(), /쇼핑몰 서비스|사내 업무 서비스|결제 서비스/);
+    if (size !== "tablet") await cardPage.screenshot({ path: `artifacts/ui-03-app-cards-api-${size}.png`, fullPage: true });
+  }
+  await mainCard.focus();
+  await mainCard.press("Enter");
+  await cardPage.getByRole("heading", { name: "운영 웹", exact: true }).waitFor();
+  assert.equal(new URL(cardPage.url()).searchParams.get("app"), "card-main");
+  await cardPage.reload();
+  await cardPage.getByRole("heading", { name: "운영 웹", exact: true }).waitFor();
+  assert.equal(await cardPage.evaluate(() => localStorage.getItem("freesia.demo.v1")), cardDemoBefore);
+  assert.equal(cardRequests.every(item => item.method === "GET"), true, "card rendering and opening never mutate API data");
+  await cardPage.close();
+  results.push({ name: "application-space-cards", checks: "API loading/error/retry, URL+branch integration names, blank/unregistered/missing names and stored references; 3/2/1 responsive columns with long text; keyboard detail entry/reload and demo isolation passed" });
+
   const racePage = await browser.newPage();
   let phase = "analysis";
   let eventRequests = 0;
@@ -1103,6 +1200,14 @@ try {
     );
     const previousApps = await page.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps);
     await page.getByRole("button",{name:"등록 해제: softbank-hackathon-2026/Freesia-Frontend (main)",exact:true}).click();
+    assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps),previousApps);
+    await navigate(page, "애플리케이션 스페이스");
+    const unregisteredApp = page.getByRole("button", { name: "sample-foundation-web 상세 보기", exact: true });
+    assert.match(await unregisteredApp.innerText(), /통합 등록 정보 없음/);
+    assert.match(await unregisteredApp.innerText(), /https:\/\/github\.com\/softbank-hackathon-2026\/Freesia-Frontend/);
+    assert.match(await unregisteredApp.innerText(), /sample-0/);
+    await unregisteredApp.click();
+    await page.getByRole("heading", { name: "sample-foundation-web", exact: true }).waitFor();
     assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps),previousApps);
     await page.reload();
     await navigate(page,"통합");

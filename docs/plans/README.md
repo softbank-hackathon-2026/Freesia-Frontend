@@ -97,3 +97,7 @@ Status: design and unit plans proposed; combined Ideation/Inception/Construction
 2026-10-02 UI-01 published: `bdaa4bb` on `feat/ui`, push and matching remote SHA confirmed. UI-02 Infra list implementation in progress; UI-03 approved and pending.
 
 2026-10-02 UI-02 verified: reference-like Infra table/header and explicit unavailable timestamps, `npm run check` (35 native tests) and `npm run test:e2e` (19 browser groups) PASS; independent Demo/API desktop/mobile source/visual review PASS (8/6/8/8). Authorized unit commit/push next; UI-03 remains approved and pending. Current evidence is in eval/handoff.
+
+2026-10-02 UI-02 published: `b566cb4` on `feat/ui`, push and matching remote SHA confirmed. UI-03 Application cards in progress.
+
+2026-10-02 UI-03 verified: three-field cards, responsive layout, unavailable-name states and screen-reader relation descriptions implemented; `npm run check` (35 native tests), `npm run test:e2e` (20 browser groups) and independent source/visual review PASS (8/6/8/8). API mobile full-page capture artifact was replaced as review evidence by trusted viewport/long-card captures plus DOM checks. Authorized UI-03 commit/push next; local preview is at `http://localhost:5173/`. Actual backend/cloud/deployment remain unverified and outside this UI task.
