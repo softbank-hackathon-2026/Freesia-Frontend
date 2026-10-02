@@ -16,7 +16,9 @@ function repositoryShape(value: unknown): boolean {
 }
 function appShape(value: unknown): boolean {
   const v = record(value);
-  return !!v && fields(v,["id","name","repo_url","branch","infra_id","created_at"]) && nullableString(v.latest_deployment_id) && (v.teardown_requested_at === undefined || nullableString(v.teardown_requested_at));
+  return !!v && fields(v,["id","name","repo_url","branch","infra_id","created_at"]) && nullableString(v.latest_deployment_id)
+    && (v.teardown_status === undefined || v.teardown_status === null || (typeof v.teardown_status === "string" && ["requested","success","failed"].includes(v.teardown_status)))
+    && ["teardown_requested_at","teardown_finished_at","teardown_reason"].every(key => v[key] === undefined || nullableString(v[key]));
 }
 function deploymentShape(value: unknown): boolean {
   const v = record(value);

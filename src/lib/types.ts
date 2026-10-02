@@ -27,6 +27,9 @@ export type AppSpace = AppSpaceCreate & {
   created_at: string;
   latest_deployment_id: string | null;
   teardown_requested_at?: string | null;
+  teardown_status?: "requested" | "success" | "failed" | null;
+  teardown_finished_at?: string | null;
+  teardown_reason?: string | null;
 };
 export type TeardownReceipt = {
   app_space_id: string;
