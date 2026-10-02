@@ -1,3 +1,4 @@
+import { sampleAnalysis } from "../src/lib/demo.ts";
 import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { setTimeout, clearTimeout } from "node:timers";
@@ -22,11 +23,12 @@ try {
   const infra = { id: "infra-ux", name: "UX Infra", description: "", network: "public", computes: ["ecs-fargate"], app_count: 0 };
   const repo = { id: "repo-ux", name: "example/shop", repo_url: "https://github.com/example/shop", branch: "main", created_at: "2026-10-03T00:00:00Z" };
   let apps = [], postCount = 0, createMode = "held", postStarted;
-  let deploymentReadFail = false;
+  let deploymentReadFail = false, analysisPosts = 0;
   let appsFail = false, infraFail = false, appReads = 0, holdApp = false, appReadStarted;
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     const json = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
+    if (path.endsWith("/analysis")) { analysisPosts++; return json(sampleAnalysis); }
     if (path.endsWith("/repositories")) return json([repo]);
     if (path.endsWith("/infra-spaces")) return infraFail ? json({ message: "Infra list unavailable" }, 500) : json([{ ...infra, app_count: apps.length }]);
     if (path.endsWith("/app-spaces")) {
@@ -65,6 +67,10 @@ try {
   release();
   await page.getByRole("heading", { name: "First app", exact: true }).waitFor();
   assert.equal(postCount, 1);
+  await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click();
+  await page.getByRole("button", { name: "다시 분석", exact: true }).click();
+  assert.equal(analysisPosts, 2, "Both analysis actions must request analysis");
+  console.log("PASS copy: start/reanalysis labels invoke the analysis API");
   await create("Background app");
   await page.getByRole("button", { name: "통합", exact: true }).click();
   const listed = page.waitForResponse(response => response.request().method() === "GET" && response.url().endsWith("/app-spaces"));

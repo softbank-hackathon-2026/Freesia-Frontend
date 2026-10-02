@@ -389,13 +389,13 @@ try {
     return json({...deployment,compute:"ecs-fargate",status:"success"});
   });
   await readinessPage.goto(url+"/?source=api&app=app-api");
-  await readinessPage.getByRole("button",{name:"배포",exact:true}).click();
+  await readinessPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
   await readinessPage.locator(".candidate").filter({hasText:"ecs-fargate"}).getByRole("button",{name:"이 후보 선택",exact:true}).click();
   assert.equal(await readinessPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).isDisabled(),true,"missing readiness must block plan request");
   assert.match(await readinessPage.locator(".deploy-actions").innerText(),/배포 가능 여부 미확인/);
   assert.equal(await readinessPage.getByRole("img",{name:"읽기 전용 분석 분기 트리"}).count(),0,"API never fabricates a demo decision tree");
   readinessKnown=true;await readinessPage.reload();
-  await readinessPage.getByRole("button",{name:"배포",exact:true}).click();
+  await readinessPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
   const lambdaCard=readinessPage.locator(".candidate").filter({hasText:"lambda"});
   await lambdaCard.getByRole("button",{name:"이 후보 선택",exact:true}).click();
   assert.match(await lambdaCard.innerText(),/배포 준비 중/);
@@ -603,7 +603,7 @@ try {
         { label: "softbank-hackathon-2026/Freesia-Frontend · main" },
       );
     await page.getByRole("button", { name: "애플리케이션 생성" }).click();
-    await page.getByRole("button", { name: "배포", exact: true }).click();
+    await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click();
     await page
       .getByRole("heading", { name: "실행 환경 후보", exact: true })
       .waitFor();
@@ -893,7 +893,7 @@ try {
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button", { name: /api-web/ }).click();
   await apiPage
-    .getByRole("button", { name: "배포", exact: true })
+    .getByRole("button", { name: "코드 분석 시작", exact: true })
     .click();
   await apiPage.getByRole("heading",{name:"실행 환경 후보",exact:true}).waitFor();
   assert.equal(await apiPage.locator(".candidate.chosen").count(),0,"server recommendation is not a user selection");
@@ -1127,7 +1127,7 @@ try {
   await racePage.getByRole("button", { name: /app-A/ }).click();
   const analysisStarted = racePage.waitForRequest("**/app-a/analysis");
   await racePage
-    .getByRole("button", { name: "배포", exact: true })
+    .getByRole("button", { name: "코드 분석 시작", exact: true })
     .click();
   await analysisStarted;
   await racePage.getByRole("button", { name: "앱 목록으로" }).click();
@@ -1221,7 +1221,7 @@ try {
   await listOnly.getByRole("button", { name: /app-A/ }).click();
   const listAnalyzeReq = listOnly.waitForRequest("**/app-a/analysis");
   await listOnly
-    .getByRole("button", { name: "배포", exact: true })
+    .getByRole("button", { name: "코드 분석 시작", exact: true })
     .click();
   await listAnalyzeReq;
   await listOnly.getByRole("button", { name: "앱 목록으로" }).click();
@@ -1836,7 +1836,7 @@ try {
     .getByRole("button", { name: "애플리케이션 생성", exact: true })
     .click();
   await pipelineQuota
-    .getByRole("button", { name: "배포", exact: true })
+    .getByRole("button", { name: "코드 분석 시작", exact: true })
     .click();
   await pipelineQuota
     .locator(".candidate")
@@ -1933,10 +1933,10 @@ try {
   await plansPage.goto(url+"/?source=api&app=app-api");
   await plansPage.getByRole("heading",{name:"api-web",exact:true}).waitFor();
   const plansDemoBefore=await plansPage.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
-  await plansPage.getByRole("button",{name:"배포",exact:true}).click();
+  await plansPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
   await plansPage.getByText(/분석에 실패했습니다/).waitFor();
   failAnalysis=false;
-  await plansPage.getByRole("button",{name:"배포",exact:true}).click();
+  await plansPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
   await plansPage.getByText(/코드를 분석하고 있습니다/).waitFor();
   await plansPage.getByRole("heading",{name:"실행 환경 후보",exact:true}).waitFor();
   assert.equal(analysisReads,1);

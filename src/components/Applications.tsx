@@ -487,7 +487,7 @@ export default function Applications({
     try {
       const result = mode === "demo" ? sampleAnalysis : await api.analyzeUntilDone(selected.id, {signal: controller.signal});
       if (token !== session.current || controller.signal.aborted) return;
-      if(result.status === "failed") throw new Error("분석에 실패했습니다. 배포 버튼으로 다시 분석하세요.");
+      if(result.status === "failed") throw new Error("분석에 실패했습니다. 코드 분석을 다시 시작하세요.");
       setAnalysis(result);
     } catch (e) {
       if (token === session.current && !controller.signal.aborted)
@@ -794,7 +794,7 @@ export default function Applications({
                         ? analysisPending ? "분석 중…" : "요청 중…"
                         : hasDeploymentHistory
                           ? "설정 변경 · 재분석"
-                          : analysis ? "분석 다시 보기" : "배포"}
+                          : analysis ? "다시 분석" : "코드 분석 시작"}
                     </button>
                   </div>
                   <div className="panel-body">

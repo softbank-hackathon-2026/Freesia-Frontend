@@ -540,3 +540,7 @@ Independent infra/app loading and error states; success creation refreshes linke
 
 ## UX unit3 verified — 2026-10-03T01:51:48.085139+09:00
 Native page/source/app/tab URL state restores reload and Back/Forward without restarting same-app work. Direct app reads support legacy deep links even when list fails; app GET success plus deployment GET failure preserves app and tabs. Focused RED/GREEN including delayed reads, source switch, unknown app and partial read failure; check43/E2E24 PASS. Independent source review PASS; desktop1440/mobile390 screenshots inspected, no horizontal overflow. No dependency, backend or cloud changes. User-approved unit3 commit/push, then unit4 analysis action copy.
+
+
+## UX unit4 verified — 2026-10-03T01:56:07.865869+09:00
+Analysis button says 코드 분석 시작 / 다시 분석; existing deployment history action remains 설정 변경 · 재분석 and actual deploy actions unchanged. Matching existing test selectors updated. Focused label/API regression RED then GREEN (two analysis POSTs); check43/E2E24 and independent source review PASS. User-approved individual commit/push before unit5 keyboard focus.

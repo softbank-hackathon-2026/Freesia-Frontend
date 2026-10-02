@@ -87,7 +87,7 @@ try {
   assert.ok(!app.infra_id.startsWith("demo-"));
   const appButton = page.getByRole("button", { name: new RegExp(appName) });
   if (await appButton.count()) await appButton.click();
-  await page.getByRole("button",{name:"배포",exact:true}).click();
+  await page.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
   await page.getByRole("heading",{name:"실행 환경 후보",exact:true}).waitFor();
   assert.equal(await page.locator(".candidate.chosen").count(),0);
   assert.match(await page.locator(".deploy-actions").innerText(),/사용자 선택: 없음/);
