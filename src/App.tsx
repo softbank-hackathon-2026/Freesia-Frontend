@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createApi } from "./lib/api.ts";
+import { getInfraProvider } from "./lib/providers.ts";
 import { foundations, preparedInfraSpaces, initialDemo, parseDemo, STORE_KEY } from "./lib/demo.ts";
 import type { DemoState } from "./lib/demo.ts";
 import type {
@@ -616,42 +617,55 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {availableInfras.map((infra) => (
-                            <tr key={infra.id}>
-                              <td>
-                                <button
-                                  className="text-button"
-                                  onClick={() => {
-                                    if (
-                                      mode === "demo" && (meeting.spaces.some(
-                                        (s) => s.id === infra.id,
-                                      ) || preparedInfraSpaces.some((s) => s.id === infra.id))
-                                    ) {
-                                      setActiveSpaceId(infra.id);
-                                      setSelected(null);
-                                    } else {
-                                      setSelected(infra);
-                                      setActiveSpaceId("");
-                                    }
-                                  }}
-                                >
-                                  {infra.name}
-                                </button>
-                                <small>{infra.id}</small>
-                              </td>
-                              <td>
-                                <span>{networkSummary(infra)}</span>
-                              </td>
-                              <td>
-                                {mode === "demo"
-                                  ? demo.apps.filter(
-                                      (a) => a.infra_id === infra.id,
-                                    ).length
-                                  : infra.app_count}
-                              </td>
-                              <td className="muted">미제공</td>
-                            </tr>
-                          ))}
+                          {availableInfras.map((infra) => {
+                            const provider = getInfraProvider(infra.provider);
+                            return (
+                              <tr key={infra.id} data-provider={provider.key}>
+                                <td>
+                                  <div className="infra-identity">
+                                    <span className="infra-provider-icon" aria-hidden="true">
+                                      {provider.icon
+                                        ? <img src={provider.icon} alt="" width="48" height="48" />
+                                        : <span>?</span>}
+                                    </span>
+                                    <div className="infra-name">
+                                      <button
+                                        className="text-button"
+                                        onClick={() => {
+                                          if (
+                                            mode === "demo" && (meeting.spaces.some(
+                                              (s) => s.id === infra.id,
+                                            ) || preparedInfraSpaces.some((s) => s.id === infra.id))
+                                          ) {
+                                            setActiveSpaceId(infra.id);
+                                            setSelected(null);
+                                          } else {
+                                            setSelected(infra);
+                                            setActiveSpaceId("");
+                                          }
+                                        }}
+                                      >
+                                        {infra.name}
+                                      </button>
+                                      <span className="infra-provider-label">{provider.label}</span>
+                                      <small>{infra.id}</small>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td>
+                                  <span>{networkSummary(infra)}</span>
+                                </td>
+                                <td>
+                                  {mode === "demo"
+                                    ? demo.apps.filter(
+                                        (a) => a.infra_id === infra.id,
+                                      ).length
+                                    : infra.app_count}
+                                </td>
+                                <td className="muted">미제공</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

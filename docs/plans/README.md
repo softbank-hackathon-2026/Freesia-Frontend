@@ -347,3 +347,11 @@ Current 2026-10-03T14:32:30.0726816+09:00: resource tree only on progress/result
 
 
 2026-10-03T19:48:06.3244625 Publication approved: user requested push of current verified post-deployment observation/TXT diff, then PR creation. Current codex/post-deploy-observation scope includes product3files+helper, tests3files and existingcontracts/plans6files. Commit/push/EnglishreviewPR next; no mainmerge or cloud deployment requested. Prior verification remains check55/E2E25/focused19/liveEC2GET+TXT/independentreviewPASS. Previous no-publication wording is a historical pre-approval state.
+
+## Provider icon preparation — 2026-10-03
+Provider icons asset preparation (2026-10-03): user requested the supplied AWS, on-premise, Azure and GCP images. Added unmodified PNGs under public/providers on codex/infra-provider-icons. SHA256 matches each source; PNG signatures verified. Asset filenames are not an API enum. Provider field name is planned; values and Infra response shape remain pending. No API parser, UI mapping, dependencies, backend or deployment changes. No commit/push authorization. Product check/E2E not run for this asset-only preparation.
+
+## Infra provider display — 2026-10-03 active
+Asset preparation above now continues with the user-supplied provider contract in backend PR38 and API section4. Latest Day3 spec/plan and infra-ai-flow-contract define this bounded implementation; worker verification/desktop-mobile review pending. No publication authorized.
+
+2026-10-03 Infra provider display complete locally: check57/E2E26/source+desktop-mobile review PASS (7/6/7/8). Current contract PR38 aws/onprem/gcp/azure, rollout not verified. See infra-ai-flow-eval latest entry; branch codex/infra-provider-icons, uncommitted/unpushed. App Space remains separate.
