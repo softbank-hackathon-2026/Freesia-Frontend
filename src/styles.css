@@ -1186,3 +1186,13 @@ progress {
 @media (prefers-reduced-motion: reduce) {
   .deployment-stepper *, .deployment-stage * { scroll-behavior: auto; }
 }
+
+/* Keep reported deployment resources visible beside the current workflow. */
+.deployment-workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; margin-bottom: 24px; }
+.deployment-workspace > .panel { min-width: 0; margin-bottom: 0; }
+
+.deployment-workspace .resource-tree-scroll-hint { display: block; }
+@media (min-width: 1200px) {
+  .deployment-workspace.has-resources { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .deployment-workspace.has-resources .candidate-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+}
