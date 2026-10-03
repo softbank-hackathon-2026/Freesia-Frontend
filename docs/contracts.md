@@ -186,3 +186,9 @@ This supersedes the earlier API-unavailable redeploy proposal. The backend chang
 ## Post-deployment observation and TXT - approved 2026-10-03
 The matching successful deployment result shows logs and metrics inline before the resource tree. Running/failed or pending/completed teardown contexts do not mount the inline observation. Both existing GETs start immediately and independently, with no promise of immediate CloudWatch publication or app health. Individual tabs remain available.
 The inline log preview shows latest15 received entries; the log tab shows all. TXT exports the current fetched maximum100 entries without a new API read, only for nonempty valid API ok data while not refreshing. UTF-8 BOM/CRLF preserve Windows Notepad Korean content; per-entry times use UTC ISO(Z), and filenames use a Windows-safe app name and local save time. This is the received snapshot, not a full retention-period archive. Demo samples are not exported as actual app logs. No API payload, backend or provisioning changes.
+
+## Sandbox default foundation — backend main ff7d8ab, PR36 merged
+POST /api/app-spaces accepts omitted/null infra_id and picks its sole ready DefaultInfra-tagged foundation; empty string is invalid. Response infra_id is concrete required string. No separate sandbox field. GET /infra-spaces hides default; GET /infra-spaces/{id} permits its detail. No default produces400 no_default_infra. Frontend sends omitted key for sandbox/no-selection; preserves other validation. Operating API/CD/default AWS tags not verified by code review.
+
+
+Sandbox API follow-up (2026-10-03): no_default_infra displays the server message verbatim. UI layout/labels unchanged; default requests omit infra_id, creation retains the returned concrete ID and resolves hidden infrastructure with GET detail. Verified against latest backend main f24109c and merged PR36; operating AWS tag setup is a separate runtime prerequisite.

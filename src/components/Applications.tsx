@@ -13,6 +13,7 @@ import type {
   Analysis,
   AppSpace,
   AppSpaceCreate,
+  AppSpaceDraft,
   DataMode,
   Deployment,
   DeploymentEvent,
@@ -79,8 +80,8 @@ export default function Applications({
   onCreate: (app: AppSpace) => void;
   onDeployment: (deployment: Deployment) => void;
   onStartDeployment: (deployment: Deployment) => void;
-  initialForm: AppSpaceCreate | null;
-  onDraftChange: (form: AppSpaceCreate) => void;
+  initialForm: AppSpaceDraft | null;
+  onDraftChange: (form: AppSpaceDraft) => void;
   meeting: MeetingState;
   onIntegration: () => void;
 }) {
@@ -133,7 +134,7 @@ export default function Applications({
   );
   const [creating, setCreating] = useState(false);
   const [selected, setSelected] = useState<AppSpace | null>(null);
-  const [form, setForm] = useState<AppSpaceCreate>(
+  const [form, setForm] = useState<AppSpaceDraft>(
     initialForm ?? {
       name: "",
       repo_url: "",
@@ -169,7 +170,24 @@ export default function Applications({
     (deployment?.demo_pipeline?.plan.compute === chosen
       ? deployment.demo_pipeline.plan
       : null);
-  const infra = infras.find((i) => i.id === selected?.infra_id);
+  const [linkedInfra, setLinkedInfra] = useState<{ id: string; appId: string; list: InfraSpace[]; data?: InfraSpace; error?: string } | null>(null);
+  const missingInfraId = mode === "api" && selected && !infras.some(item => item.id === selected.infra_id)
+    ? selected.infra_id : null;
+  const linkedAppId = selected?.id;
+  useEffect(() => {
+    if (!missingInfraId || !linkedAppId) return;
+    const controller = new AbortController();
+    api.infra(missingInfraId, controller.signal).then(data => {
+      if (data.id !== missingInfraId) throw new Error("배포 기반 응답이 요청한 인프라와 다릅니다.");
+      if (!controller.signal.aborted) setLinkedInfra({ id: missingInfraId, appId: linkedAppId, list: infras, data });
+    }).catch(error => {
+      if (!controller.signal.aborted) setLinkedInfra({ id: missingInfraId, appId: linkedAppId, list: infras, error: error instanceof Error ? error.message : "배포 기반을 불러오지 못했습니다." });
+    });
+    return () => controller.abort();
+  }, [missingInfraId, linkedAppId, infras]);
+  const currentLinkedInfra = linkedInfra?.id === missingInfraId && linkedInfra?.appId === linkedAppId && linkedInfra?.list === infras ? linkedInfra : null;
+  const infra = infras.find((i) => i.id === selected?.infra_id) ?? currentLinkedInfra?.data;
+  const linkedInfraError = currentLinkedInfra?.error;
   const currentProgress = event?.progress ?? (mode === "demo" && deployment && demoStep(deployment) >= 0 ? Math.round(demoStep(deployment)/5*100) : undefined);
   const pendingTeardown = !!selected && teardownPending.includes(selected.id);
   const teardownStatus = selected?.teardown_status;
@@ -359,15 +377,17 @@ export default function Applications({
       setError("통합에 등록된 Repository를 선택하세요.");
       return;
     }
-    const clean = {
-      ...form,
+    const sandbox = mode === "api" && (form.sandbox === true || !form.infra_id);
+    const clean: AppSpaceCreate = {
       name: form.name.trim(),
       repo_url: form.repo_url.trim(),
       branch: form.branch?.trim(),
+      infra_id: sandbox ? "" : form.infra_id,
     };
     const problem = validateApp(
       clean,
       infras.map((i) => i.id),
+      sandbox,
     );
     if (problem) {
       setError(problem);
@@ -385,7 +405,10 @@ export default function Applications({
               created_at: new Date().toISOString(),
               latest_deployment_id: null,
             }
-          : await api.createApp(clean);
+          : await api.createApp({
+              name: clean.name, repo_url: clean.repo_url, branch: clean.branch,
+              ...(sandbox ? {} : { infra_id: clean.infra_id }),
+            });
       if (token !== session.current) { onRefresh(); return; }
       onCreate(app);
       setCreating(false);
@@ -529,6 +552,7 @@ export default function Applications({
     setBusy(false);
     setDiscarding(false);
     setSelected(null);
+    setLinkedInfra(null);
     setCreating(false);
     setStreamId("");
     setError("");
@@ -830,7 +854,7 @@ export default function Applications({
           <p>
             {selected
               ? "기반·분석 근거·배포 상태를 확인하세요."
-              : "통합에 등록한 Repository와 준비된 Infra Space를 선택하세요."}
+              : mode === "api" ? "등록한 Repository와 Infra Space 또는 샌드박스를 선택하세요." : "통합에 등록한 Repository와 준비된 Infra Space를 선택하세요."}
           </p>
         </div>
         {(appId || selected || creating) && (
@@ -874,6 +898,7 @@ export default function Applications({
           {error}
         </div>
       )}
+      {selected && linkedInfraError && <p className="error" role="alert">배포 기반 조회 실패: {linkedInfraError}</p>}
       {selected && failedAnalysisMessage && <div className="error" role="alert" style={{ whiteSpace: "pre-wrap" }}>{failedAnalysisMessage}</div>}
       {selected && analysisReadError && <div className="error" role="alert">
         {analysisReadError}
@@ -882,7 +907,7 @@ export default function Applications({
       {selected && analysisPending && viewStep !== 0 && <p className="notice" role="status">코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
       {mode === "api" && !selected && (
         <p className="notice">
-          서버에 등록된 Repository와 Infra Space로 앱을 생성합니다. 분석·배포 결과는 서버가 제공하며 실제 실행 여부는 서버 설정과 상태를 확인하세요.
+          등록한 Repository와 선택한 Infra Space 또는 서버의 기본 샌드박스로 앱을 생성합니다. 분석·배포 결과는 서버가 제공하며 실제 실행 여부는 서버 설정과 상태를 확인하세요.
         </p>
       )}
       {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefresh}>Repository 다시 조회</button></div>}
@@ -930,8 +955,11 @@ export default function Applications({
             등록된 브랜치: {form.branch} · 실제 GitHub 접근 미확인
           </p>
           <label htmlFor="infra-select">Infra Space</label>
+          <div className="infra-choice-row">
           <select
             id="infra-select"
+            disabled={busy || (mode === "api" && form.sandbox === true)}
+            aria-describedby={mode === "api" ? "sandbox-description" : undefined}
             value={form.infra_id}
             onChange={(e) =>
               setForm((f) => ({ ...f, infra_id: e.target.value }))
@@ -950,10 +978,17 @@ export default function Applications({
                 </option>
               ))}
           </select>
-          <p className="muted">
-            Terraform 설계는 적용·리소스 동기화 후 사용할 수 있습니다. 현재 이
-            과정은 연결되지 않았습니다.
-          </p>
+          {mode === "api" && <label className="sandbox-option" htmlFor="sandbox-deploy">
+            <input id="sandbox-deploy" type="checkbox" checked={form.sandbox === true} disabled={busy}
+              onChange={event => setForm(current => ({ ...current, sandbox: event.target.checked }))} />
+            샌드박스 배포
+          </label>}
+          </div>
+          {mode === "api" ? <p id="sandbox-description" className="muted">
+            샌드박스를 선택하거나 Infra Space를 선택하지 않으면 서버의 기본 인프라를 사용합니다.
+          </p> : <p className="muted">
+            Terraform 설계는 적용·리소스 동기화 후 사용할 수 있습니다. 현재 이 과정은 연결되지 않았습니다.
+          </p>}
           {busy && <p role="status">앱을 생성하고 있습니다. 화면을 이동해도 서버의 생성 작업은 계속됩니다.</p>}
           <div className="form-actions">
             <button className="primary" disabled={busy}>
