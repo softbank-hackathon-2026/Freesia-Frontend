@@ -268,3 +268,10 @@ Owner root: src/App.tsx and existing docs. Verification worker: scripts/browser-
 
 ## Resource tree below deployment unit — 2026-10-03T14:32:30.0726816+09:00
 RootownsApplications.tsx/styles.css/records; verificationworkerownsdeployment-flow-check.mjs. Success: progress/result display currentappresource tree beneathstatus atallwidths; earlierstages show none; matchingappguard/requests/empty/errors/refresh/deletedstates retained; nohorizontalpageoverflow. Existinghorizontal6stagecardsandAPIInfrareadonly unchanged. Userexplicitlayoutinstruction authorizes boundedimplementation; noGitpublication.
+
+## Result-message deduplication — 2026-10-03T14:44:32.0337938+09:00
+OwnerrootApplications.tsx and records. Result displays completiononce; customservermessage retained; missing/blankmessage uses correctresultfallback; progress/failure-reason/treeunchanged. Requiredcheck+E2E, localreadonlyverification. No permanenttestabstraction/newAPI; no commit/push/PR/merge authorization.
+
+## Deployment management header shortcut — approved 2026-10-03T15:43:39.5912887+09:00
+User approved the previously proposed header shortcut: switch logs/metrics to overview and focus/scroll the existing deployment management area, preserving the bottom controls. Also requested red application-delete buttons and current work commit/push. Scope includes the existing uncommitted duplicate result message fix. Branch codex/deployment-result-message; no PR, main merge or deployment requested.
+Implementation: Applications.tsx heading ref and one-shot cross-tab navigation intent, header shortcut when deployment history exists; existing danger colors for app delete controls in detail/list/confirmation via styles.css. Existing teardown/delete/reanalysis guards and request contracts retained. Verify all three tabs and desktop/mobile, focus, no mutation on navigation, existing check/E2E. No dependencies/backend/Notion/cloud changes.

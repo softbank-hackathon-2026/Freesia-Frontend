@@ -270,6 +270,14 @@ main {
 .primary:hover:not(:disabled) {
   background: var(--accent-hover);
 }
+button.danger {
+  background: var(--danger);
+  color: #ffffff;
+  font-weight: 600;
+}
+button.danger:hover:not(:disabled) {
+  background: var(--danger-ink);
+}
 .secondary {
   background: var(--accent-soft);
   color: var(--accent);

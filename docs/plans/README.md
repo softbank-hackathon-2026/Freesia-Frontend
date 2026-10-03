@@ -321,3 +321,11 @@ Current 2026-10-03T14:32:30.0726816+09:00: resource tree only on progress/result
 2026-10-03T14:35:28.3436042+09:00 userapproved currenttree-placement commit/push andmainmerge afterverification. No manualDeploy.
 
 2026-10-03T14:37:37.6646201+09:00 treebelowstatus locallyverified: check47/E2E25/flow15PASS,desktop/mobile1-3hidden/4-5stacked. Userauthorizedcommit/push/mainmerge; noDeploy. Seeevalevidence.
+
+2026-10-03T14:44:32.0337938+09:00 duplicate completion message bugfixactive, branchcodex/deployment-result-message. Display-onlyserver-firstsingleparagraph; no publication.
+
+- 2026-10-03T14:49:20.2243407+09:00: Duplicate result message fixed locally on codex/deployment-result-message. check/E2E and five browser message cases passed; server details/failure reason retained. See latest infra-ai-flow-eval.md. Uncommitted and unpublished; no new publication approval.
+
+2026-10-03T15:43:39.5912887+09:00: Approved header deployment-management shortcut and red app-delete buttons, together with existing message fix; current branch commit/push requested after verification.
+
+2026-10-03T15:51:58.2230410+09:00: Header shortcut/red delete controls and previous duplicate-message fix verified (check47/E2E25/browser6navigation/14layout/8colors); user-approved codex/deployment-result-message commit/push next. Backend offline, browser checks used controlled GET-only fixtures. No PR/merge/deploy.
