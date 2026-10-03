@@ -393,3 +393,8 @@ Independent read-only typography review PASS: source/scope/computed4/screenshots
 User approved supplied AWS icons before existing recommendation titles at text height, plus commit/push. Branch codex/aws-compute-icons includes df47947 typography fix. Root JSX/CSS, worker original PNG assets; check/E2E/rendered desktop-mobile review pending. No dependencies/backend/Notion/cloud changes or PR/main merge.
 
 2026-10-04 AWS compute candidate icons complete locally: original3PNGs preserved, 1em title icons for Lambda/Fargate/EC2. check59/E2E27/focusedbrowser5/source+asset+visual review PASS (7/6/7/7), no regression or overflow. User-authorized commit/push next on codex/aws-compute-icons; no PR/mainmerge/deploy. See infra-ai-flow-eval latest evidence.
+
+## Monitoring values first — 2026-10-04 active
+User approved cards-first monitoring and moving verbose explanations beneath with commit/push. Root changes only ApplicationMetrics.tsx rendering/scoped styles; worker focused GET-only QA. Header refresh/status, compact footer, accessible details; state/fetch/15s cadence unchanged. Branch codex/metrics-values-first preserves icons+typography. Required checks/review pending; no backend/Notion/cloud/PR/mainmerge.
+
+2026-10-04 Monitoring values first complete locally: compact header/status/refresh, firstbody metriccards, footer timestamp/cadence/caveats and native explanation disclosure. Freshcheck59/fullE2E27/existingmonitoring19/focused17/independentreview7/6/7/8 PASS. Current codex/metrics-values-first diff includes render/scopedCSS, maintainedchecker and existingrecords. User-authorized commit/push next; no PR/mainmerge/deploy. See infra-ai-flow-eval for fixture boundaries.

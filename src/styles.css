@@ -813,6 +813,39 @@ progress {
   gap: 16px;
   margin: 24px 0;
 }
+.monitoring-panel .section-heading {
+  flex-wrap: wrap;
+}
+.metrics-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.monitoring-panel .metrics {
+  margin: 0;
+}
+.monitoring-panel .panel-body > p {
+  margin-block-start: 12px;
+}
+.metrics-meta {
+  display: grid;
+  gap: 8px;
+  margin-block-start: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.metrics-meta summary {
+  cursor: pointer;
+}
+.metrics-meta summary:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+.metrics-meta details p {
+  margin-block-start: 8px;
+}
 .metrics > div {
   border: 1px solid var(--line);
   border-radius: 8px;
