@@ -176,7 +176,7 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
     metrics: (id:string, signal?:AbortSignal) => request<AppMetrics>(`${appPath(id)}/metrics`,undefined,"GET",signal),
     logs: (id:string, signal?:AbortSignal) => request<AppLogs>(`${appPath(id)}/logs?limit=100`,undefined,"GET",signal),
     deleteApp: (id:string, signal?:AbortSignal) => request<void>(appPath(id),undefined,"DELETE",signal),
-    createApp: (body:AppSpaceCreate, signal?:AbortSignal) => request<AppSpace>("/app-spaces",body,"POST",signal),
+    createApp: (body:Omit<AppSpaceCreate, "infra_id"> & {infra_id?: string}, signal?:AbortSignal) => request<AppSpace>("/app-spaces",body,"POST",signal),
     analyze,
     analysis,
     analyzeUntilDone: (id:string, options?:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>analyze(id,signal),signal=>analysis(id,signal),"분석",{...options, timeoutMs:options?.timeoutMs ?? 190_000}),

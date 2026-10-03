@@ -5,7 +5,7 @@ import { foundations, preparedInfraSpaces, initialDemo, parseDemo, STORE_KEY } f
 import type { DemoState } from "./lib/demo.ts";
 import type {
   AppSpace,
-  AppSpaceCreate,
+  AppSpaceDraft,
   DataMode,
   Deployment,
   InfraSpace,
@@ -73,8 +73,8 @@ export default function App() {
       if (toggle?.getClientRects().length) toggle.focus();
     };
   }, [menuOpen]);
-  const [appDraft, setAppDraft] = useState<AppSpaceCreate | null>(null);
-  const [apiAppDraft, setApiAppDraft] = useState<AppSpaceCreate | null>(null);
+  const [appDraft, setAppDraft] = useState<AppSpaceDraft | null>(null);
+  const [apiAppDraft, setApiAppDraft] = useState<AppSpaceDraft | null>(null);
   const [newInfra, setNewInfra] = useState(false);
   const [infraDraft, setInfraDraft] = useState<InfraSpaceDraft | null>(null);
   const [activeSpaceId, setActiveSpaceId] = useState("");

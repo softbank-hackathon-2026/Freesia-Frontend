@@ -92,6 +92,36 @@ test("uses exact FastAPI routes, methods and payloads", async () => {
   assert.equal(calls[5].init?.body, undefined);
 });
 
+test("sandbox creation omits infra selection and retains the server default for detail lookup", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const payload = { name: "sandbox-web", repo_url: "https://github.com/team/web", branch: "main" };
+  const created = { ...payload, id: "sandbox-app", infra_id: "default/infra", created_at: "now", latest_deployment_id: null };
+  const defaultInfra = { id: created.infra_id, name: "DefaultInfra", description: "", network: "public", computes: ["ecs-fargate"], deployable_computes: ["ecs-fargate"], app_count: 1 };
+  const api = createApi("/api", async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify(init?.method === "POST" ? created : defaultInfra), { status: init?.method === "POST" ? 201 : 200 });
+  });
+  const result = await api.createApp(payload);
+  assert.deepEqual(result, created, "the backend's concrete infra_id remains in the app response");
+  assert.deepEqual(await api.infra(result.infra_id), defaultInfra);
+  assert.deepEqual(calls.map(call => [call.url, call.init?.method ?? "GET"]), [
+    ["/api/app-spaces", "POST"],
+    ["/api/infra-spaces/default%2Finfra", "GET"],
+  ]);
+  assert.deepEqual(JSON.parse(calls[0].init!.body as string), payload);
+});
+
+test("sandbox creation preserves the no_default_infra error code and server message", async () => {
+  const message = "서버 계약 오류: DefaultInfra가 설정되지 않았습니다.";
+  const api = createApi("/api", async () => new Response(JSON.stringify({ error: "no_default_infra", message }), { status: 400 }));
+  await assert.rejects(api.createApp({ name: "sandbox-web", repo_url: "https://github.com/team/web", branch: "main" }), error => {
+    assert.ok(error instanceof ApiError);
+    assert.equal(error.status, 400);
+    assert.equal(error.code, "no_default_infra");
+    assert.equal(error.message, message);
+    return true;
+  });
+});
 test("surfaces structured HTTP, non-JSON and network errors without demo fallback", async () => {
   await assert.rejects(
     createApi(

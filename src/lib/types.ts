@@ -22,6 +22,7 @@ export type AppSpaceCreate = {
   branch?: string;
   infra_id: string;
 };
+export type AppSpaceDraft = AppSpaceCreate & { sandbox?: boolean };
 export type AppSpace = AppSpaceCreate & {
   id: string;
   branch: string;

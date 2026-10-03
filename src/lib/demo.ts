@@ -227,6 +227,7 @@ export function makeDesign(
 export function validateApp(
   form: AppSpaceCreate,
   infraIds: string[],
+  allowMissingInfra = false,
 ): string | null {
   if (!form.name.trim() || form.name.length > 80)
     return "앱 이름을 1~80자로 입력하세요.";
@@ -243,7 +244,7 @@ export function validateApp(
     /[\s~^:?*[\\]|\.\.|\/\//.test(form.branch)
   )
     return "유효한 브랜치 이름을 입력하세요.";
-  if (!infraIds.includes(form.infra_id))
+  if (!(allowMissingInfra && !form.infra_id) && !infraIds.includes(form.infra_id))
     return "준비된 기반을 선택하세요. 미구축 설계에는 배포할 수 없습니다.";
   return null;
 }

@@ -366,6 +366,159 @@ async function appForm(page, name, infraId) {
   );
 }
 
+async function checkSandboxCreation(browser) {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const defaultInfra = { ...infra, id: "sandbox-default", name: "서버 기본 샌드박스" };
+  const createdApps = [];
+  const posts = [];
+  const detailReads = [];
+  const analyzed = new Set();
+  const defaultInfraError = "서버 계약 오류: DefaultInfra가 설정되지 않았습니다.";
+  let rejectDefault = false;
+  let defaultDetailHold;
+  let defaultDetailRequested;
+  let defaultReady = true;
+  await page.route("**/api/**", async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace("/api", "");
+    const json = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
+    if (path === "/infra-spaces") return json([infra]);
+    if (path === "/infra-spaces/sandbox-default") {
+      detailReads.push(path);
+      if (defaultDetailHold) {
+        defaultDetailRequested();
+        await defaultDetailHold;
+      }
+      return json({ ...defaultInfra, deployable_computes: defaultReady ? defaultInfra.deployable_computes : [] });
+    }
+    if (path === "/repositories") return json([repository]);
+    if (path === "/app-spaces" && request.method() === "POST") {
+      const body = request.postDataJSON();
+      posts.push(body);
+      if (rejectDefault && !Object.hasOwn(body, "infra_id"))
+        return json({ error: "no_default_infra", message: defaultInfraError }, 400);
+      const created = { ...app, ...body, id: `sandbox-app-${posts.length}`, infra_id: body.infra_id ?? defaultInfra.id };
+      createdApps.push(created);
+      return json(created, 201);
+    }
+    if (path === "/app-spaces") return json(createdApps);
+    if (path.endsWith("/analysis")) {
+      if (request.method() === "POST") analyzed.add(path);
+      return analyzed.has(path) ? json(analysis) : json({ message: "Analysis has not started" }, 404);
+    }
+    if (path.startsWith("/app-spaces/")) {
+      const created = createdApps.find(entry => entry.id === path.split("/")[2]);
+      if (created && path === `/app-spaces/${created.id}`) return json(created);
+    }
+    throw new Error(`Unexpected sandbox fixture request: ${request.method()} ${path}`);
+  });
+  await page.goto(url + "/?source=api&page=apps");
+  const name = page.getByLabel("앱 이름", { exact: true });
+  const repositorySelect = page.getByLabel("등록한 Repository", { exact: true });
+  const infraSelect = page.getByLabel("Infra Space", { exact: true });
+  const sandbox = page.getByRole("checkbox", { name: "샌드박스 배포", exact: true });
+  const submit = page.getByRole("button", { name: "애플리케이션 생성", exact: true });
+  const openForm = async value => {
+    await submit.click();
+    await name.fill(value);
+    await repositorySelect.selectOption(repository.id);
+  };
+  const create = async value => {
+    await submit.click();
+    await page.getByRole("heading", { name: value, exact: true }).waitFor();
+  };
+  await openForm("explicit-infra");
+  assert.equal(await sandbox.count(), 1, "API creation provides the sandbox checkbox beside Infra Space");
+  assert.equal(await sandbox.isChecked(), false);
+  assert.equal(await infraSelect.isDisabled(), false);
+  await infraSelect.selectOption(infra.id);
+  await create("explicit-infra");
+  assert.deepEqual(posts[0], { name: "explicit-infra", repo_url: repository.repo_url, branch: "main", infra_id: infra.id });
+  await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+  await openForm("checked-sandbox");
+  await infraSelect.selectOption(infra.id);
+  await sandbox.check();
+  assert.equal(await infraSelect.isDisabled(), true);
+  assert.equal(await infraSelect.inputValue(), infra.id);
+  await sandbox.uncheck();
+  assert.equal(await infraSelect.isDisabled(), false);
+  assert.equal(await infraSelect.inputValue(), infra.id, "unchecking preserves the chosen infrastructure");
+  await sandbox.check();
+  for (const [viewportName, viewport] of [["desktop", { width: 1440, height: 1000 }], ["mobile", { width: 390, height: 844 }]]) {
+    await page.setViewportSize(viewport);
+    const selectBox = await infraSelect.boundingBox();
+    const checkboxBox = await sandbox.boundingBox();
+    assert.ok(selectBox && checkboxBox);
+    assert.ok(checkboxBox.x >= selectBox.x + selectBox.width - 1, `${viewportName}: checkbox sits to the right of Infra Space`);
+    assert.ok(Math.min(selectBox.y + selectBox.height, checkboxBox.y + checkboxBox.height) > Math.max(selectBox.y, checkboxBox.y), `${viewportName}: select and checkbox share a row`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${viewportName}: no horizontal overflow`);
+    await page.screenshot({ path: `artifacts/sandbox-create-${viewportName}.png`, fullPage: true });
+  }
+  await navigate(page, "통합");
+  await navigate(page, "애플리케이션");
+  await submit.click();
+  assert.equal(await name.inputValue(), "checked-sandbox");
+  assert.equal(await repositorySelect.inputValue(), repository.id);
+  assert.equal(await sandbox.isChecked(), true, "sandbox draft persists navigation away and back");
+  assert.equal(await infraSelect.isDisabled(), true);
+  assert.equal(await infraSelect.inputValue(), infra.id);
+  await create("checked-sandbox");
+  assert.deepEqual(posts[1], { name: "checked-sandbox", repo_url: repository.repo_url, branch: "main" }, "checked sandbox omits infra_id and UI-only state");
+  await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click();
+  const candidate = page.locator(".candidate").filter({ hasText: "ecs-fargate" }).getByRole("button", { name: "이 후보 선택", exact: true });
+  await candidate.click();
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll("button")).find(button => button.textContent.trim() === "선택한 환경으로 구성안 조회")?.disabled);
+  assert.equal(await page.getByRole("button", { name: "선택한 환경으로 구성안 조회", exact: true }).isDisabled(), false, "hidden default infra supports normal candidate readiness");
+  assert.ok(detailReads.length > 0, "hidden default infra is fetched by its concrete id for readiness");
+  assert.ok(analyzed.has("/app-spaces/sandbox-app-2/analysis"), "sandbox app uses the normal analysis endpoint");
+  await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+  let releaseDefaultDetail;
+  defaultDetailHold = new Promise(resolve => { releaseDefaultDetail = resolve; });
+  const detailRequested = new Promise(resolve => { defaultDetailRequested = resolve; });
+  defaultReady = false;
+  await page.getByRole("button", { name: "checked-sandbox 상세 보기", exact: true }).click();
+  await detailRequested;
+  await page.getByRole("heading", { name: "실행 환경 후보", exact: true }).waitFor();
+  assert.equal(await page.locator(".candidate").count(), 0, "reopening hides old candidates while fresh default infrastructure is pending");
+  assert.equal(await page.getByRole("button", { name: "선택한 환경으로 구성안 조회", exact: true }).isDisabled(), true, "pending infrastructure cannot reuse cached readiness");
+  releaseDefaultDetail();
+  defaultDetailHold = undefined;
+  await candidate.waitFor();
+  await candidate.click();
+  assert.match(await page.locator(".candidate").filter({ hasText: "ecs-fargate" }).innerText(), /배포 준비 중/);
+  assert.equal(await page.getByRole("button", { name: "선택한 환경으로 구성안 조회", exact: true }).isDisabled(), true, "fresh empty deployable_computes overrides previously ready infrastructure");
+  await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+  await openForm("implicit-sandbox");
+  await sandbox.uncheck();
+  await infraSelect.selectOption("");
+  assert.equal(await infraSelect.locator(`option[value="${defaultInfra.id}"]`).count(), 0, "the hidden server default never becomes a selectable infrastructure");
+  await create("implicit-sandbox");
+  assert.deepEqual(posts[2], { name: "implicit-sandbox", repo_url: repository.repo_url, branch: "main" }, "empty infrastructure also omits infra_id");
+  const readsBeforeSwitch = detailReads.length;
+  const switchedInfraRead = page.waitForResponse(response => new URL(response.url()).pathname.endsWith("/infra-spaces/sandbox-default"));
+  await page.evaluate(id => { const next = new URL(window.location.href); next.searchParams.set("app", id); next.searchParams.delete("tab"); window.history.pushState(null, "", next); window.dispatchEvent(new window.PopStateEvent("popstate")); }, "sandbox-app-2");
+  await switchedInfraRead;
+  await page.getByRole("heading", { name: "checked-sandbox", exact: true }).waitFor();
+  await candidate.waitFor();
+  assert.ok(detailReads.length > readsBeforeSwitch, "direct same-default app switch fetches its own infrastructure detail");
+  await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+  await openForm("retained-on-no-default");
+  await infraSelect.selectOption(infra.id);
+  await sandbox.check();
+  rejectDefault = true;
+  await submit.click();
+  await page.getByRole("alert").waitFor();
+  assert.equal(await page.getByRole("alert").innerText(), defaultInfraError, "server no_default_infra message is displayed verbatim");
+  assert.equal(await name.inputValue(), "retained-on-no-default");
+  assert.equal(await repositorySelect.inputValue(), repository.id);
+  assert.equal(await infraSelect.inputValue(), infra.id);
+  assert.equal(await sandbox.isChecked(), true);
+  assert.equal(await infraSelect.isDisabled(), true);
+  assert.equal(await submit.isDisabled(), false, "failed server creation keeps a retryable draft");
+  assert.deepEqual(posts[3], { name: "retained-on-no-default", repo_url: repository.repo_url, branch: "main" });
+  await page.close();
+  record({ name: "api-sandbox-creation", checks: "explicit and omitted infra payloads; checkbox override/toggle/draft; no_default_infra retains draft; hidden default detail permits analysis/readiness; reopen clears cached readiness while pending and honors fresh empty readiness; direct same-default app switch refreshes detail; desktop/mobile same-row checkbox and no overflow" });
+}
 try {
   for (let i = 0; i < 60; i++) {
     if (server.exitCode !== null) throw new Error(serverLog);
@@ -383,6 +536,7 @@ try {
       "C:/Program Files/Google/Chrome/Application/chrome.exe",
     headless: true,
   });
+  await checkSandboxCreation(browser);
   // This fixture verifies the public default independently of the retained demo QA flow.
   const defaultPage = await browser.newPage();
   const defaultRequests = [];

@@ -588,6 +588,15 @@ form button {
   width: 100%;
   background: #ffffff;
 }
+.infra-choice-row { display: flex; align-items: center; gap: 16px; }
+.infra-choice-row select { flex: 1; min-width: 0; width: auto; }
+.app-form .sandbox-option { display: inline-flex; align-items: center; gap: 8px; margin: 0; white-space: nowrap; flex-shrink: 0; }
+.sandbox-option input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.app-form select:disabled { background: #f1f3f8; color: var(--muted); cursor: not-allowed; }
+@media (max-width: 480px) {
+  .infra-choice-row { gap: 10px; }
+  .app-form .sandbox-option { font-size: 14px; }
+}
 .form-actions {
   display: flex;
   gap: 12px;
