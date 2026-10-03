@@ -19,6 +19,7 @@ import type {
   InfraSpace,
   Repository,
   PlanSet,
+  RedeployContext,
 } from "../lib/types.ts";
 import { registeredRepositories } from "../lib/meeting.ts";
 import type { MeetingState } from "../lib/meeting.ts";
@@ -109,6 +110,11 @@ export default function Applications({
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
   const redeployDialog = useRef<HTMLDialogElement>(null);
   const redeployTarget = useRef<{ appId: string; deploymentId: string | undefined; session: number } | null>(null);
+  const redeployRequest = useRef<AbortController | null>(null);
+  const redeploySubmitting = useRef(false);
+  const [redeployContext, setRedeployContext] = useState<RedeployContext | null>(null);
+  const [redeployLoading, setRedeployLoading] = useState(false);
+  const [redeployPending, setRedeployPending] = useState(false);
   const [redeployReviewed, setRedeployReviewed] = useState(false);
   const [redeployError, setRedeployError] = useState("");
   const discardDialog = useRef<HTMLDialogElement>(null);
@@ -120,6 +126,7 @@ export default function Applications({
     () => () => {
       request.current?.abort();
       discardRequest.current?.abort();
+      redeployRequest.current?.abort();
       session.current++;
     },
     [],
@@ -176,7 +183,7 @@ export default function Applications({
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0];
   const reusablePlan = lastSuccess?.demo_pipeline?.plan;
   const canReusePlan = reusablePlan?.status === "template_ready" && reusablePlan.repo_url === selected?.repo_url && reusablePlan.branch === selected?.branch;
-  const redeployBlocked = busy || discarding || loading || !!streamId || teardownUnconfirmed
+  const redeployBlocked = busy || discarding || loading || redeployLoading || redeployPending || !!streamId || teardownUnconfirmed
     || (!!deployment && !["success", "failed"].includes(deployment.status))
     || (mode === "demo" ? storageBlocked || appHistory.some(entry => !["success", "failed"].includes(entry.status))
       : !!selected?.latest_deployment_id && !deployment);
@@ -399,34 +406,115 @@ export default function Applications({
       if (token === session.current) setBusy(false);
     }
   }
-  function openRedeploy() {
-    if (!selected || !hasDeploymentHistory || redeployBlocked) return;
-    redeployTarget.current = { appId: selected.id, deploymentId: lastSuccess?.id, session: session.current };
+  function closeRedeploy() {
+    redeployRequest.current?.abort(); redeployRequest.current = null;
+    redeployTarget.current = null; redeploySubmitting.current = false;
+    setRedeployContext(null); setRedeployLoading(false); setRedeployPending(false);
     setRedeployReviewed(false); setRedeployError("");
-    redeployDialog.current?.showModal();
-    redeployDialog.current?.querySelector("h2")?.focus();
   }
-  function redeploy() {
+  async function refreshRedeployState(appId: string, controller: AbortController, token: number) {
+    const fresh = await api.app(appId, controller.signal);
+    if (controller.signal.aborted || token !== session.current) return;
+    if (fresh.id !== appId) throw new Error("현재 앱 상태의 응답이 요청과 다릅니다.");
+    setSelected(fresh);
+    if (fresh.latest_deployment_id) {
+      const existing = await api.deployment(fresh.latest_deployment_id, controller.signal);
+      if (controller.signal.aborted || token !== session.current) return;
+      if (existing.app_space_id !== appId || existing.id !== fresh.latest_deployment_id) throw new Error("현재 배포 응답의 앱이 요청과 다릅니다.");
+      setDeployment(existing); setEvent(null); showDeploymentStage(existing);
+      setStreamId(["success", "failed"].includes(existing.status) ? "" : existing.id);
+    }
+    onRefresh();
+  }
+  function redeployMessage(e: unknown) {
+    if (e instanceof ApiError) {
+      if (e.status === 404 || e.status === 501) return "재배포 API 연동 대기입니다. 현재 서버에서 지원하지 않습니다.";
+      if (e.code === "redeploy_unavailable") return "재사용할 실제 성공 배포 구성이 없습니다. 설정 변경 · 재분석에서 새 구성을 확인하세요.";
+      if (e.code === "not_deployed") return "내리기 이력 이후 재배포할 성공 구성이 없습니다. 설정 변경 · 재분석에서 초기 배포 구성을 확인하세요.";
+    }
+    return e instanceof Error ? e.message : "재배포 설정을 확인하지 못했습니다.";
+  }
+  async function loadRedeployContext(notice = "") {
     const target = redeployTarget.current;
-    if (mode !== "demo" || !selected || !target || target.appId !== selected.id || target.session !== session.current
-      || target.deploymentId !== lastSuccess?.id || redeployBlocked || !redeployReviewed || !canReusePlan) return;
+    if (mode !== "api" || !selected || !target || target.appId !== selected.id || target.session !== session.current) return;
+    redeployRequest.current?.abort();
+    const controller = new AbortController(); redeployRequest.current = controller;
+    setRedeployContext(null); setRedeployReviewed(false); setRedeployLoading(true); setRedeployError(notice);
+    const current = () => !controller.signal.aborted && target === redeployTarget.current && target.session === session.current;
     try {
-      const result = startDemoDeployment(selected.id, reusablePlan!, false);
-      onStartDeployment(result);
-      request.current?.abort(); session.current++;
-      redeployTarget.current = null;
-      setSelected({ ...selected, latest_deployment_id: result.id });
-      setPlan(reusablePlan!); setChosen(result.compute); setReviewed(false); setFailCI(false);
-      setError(""); setPlanError(""); setDeployment(result); setEvent(null); setStreamId(result.id);
-      showDeploymentStage(result);
-      demoResumeStatus.current = result.status;
-      redeployDialog.current?.close();
+      const context = await api.redeployContext(target.appId, controller.signal);
+      if (!current()) return;
+      if (context.repo_url !== selected.repo_url || context.branch !== selected.branch) throw new Error("재배포 설정의 저장소·브랜치가 현재 앱과 다릅니다. 앱 정보를 새로 조회하세요.");
+      setRedeployContext(context);
     } catch (e) {
-      setRedeployError(e instanceof Error ? e.message : "재배포를 저장하지 못했습니다.");
+      if (!current()) return;
+      setRedeployError(redeployMessage(e));
+      if (e instanceof ApiError && ["deployment_in_progress", "teardown_in_progress"].includes(e.code ?? "")) {
+        if (e.code === "teardown_in_progress") setSelected(value => value?.id === target.appId ? { ...value, teardown_status: "requested" } : value);
+        try {
+          await refreshRedeployState(target.appId, controller, target.session);
+          if (current()) { setError(redeployMessage(e)); redeployDialog.current?.close(); }
+        } catch (refreshError) { if (current()) setRedeployError(`현재 상태 조회 실패: ${redeployMessage(refreshError)}`); }
+      }
+    } finally {
+      if (current()) setRedeployLoading(false);
+      if (redeployRequest.current === controller) redeployRequest.current = null;
     }
   }
-  function resetDetail() {
-    redeployDialog.current?.close(); redeployTarget.current = null;
+  function openRedeploy() {
+    if (!selected || !hasDeploymentHistory || redeployBlocked || redeploySubmitting.current) return;
+    redeployTarget.current = { appId: selected.id, deploymentId: lastSuccess?.id, session: session.current };
+    setRedeployReviewed(false); setRedeployError(""); setRedeployContext(null);
+    redeployDialog.current?.showModal();
+    redeployDialog.current?.querySelector("h2")?.focus();
+    if (mode === "api") void loadRedeployContext();
+  }
+  async function redeploy() {
+    const target = redeployTarget.current;
+    if (!selected || !target || target.appId !== selected.id || target.session !== session.current
+      || redeployBlocked || redeploySubmitting.current || !redeployReviewed) return;
+    if (mode === "demo" && (target.deploymentId !== lastSuccess?.id || !canReusePlan)) return;
+    if (mode === "api" && !redeployContext) return;
+    redeploySubmitting.current = true; setRedeployPending(true); setRedeployError("");
+    const controller = new AbortController(); redeployRequest.current = controller;
+    const current = () => !controller.signal.aborted && target === redeployTarget.current && target.session === session.current;
+    try {
+      const result = mode === "demo" ? startDemoDeployment(selected.id, reusablePlan!, false)
+        : await api.redeploy(selected.id, { source_deployment_id: redeployContext!.source_deployment_id, target_commit_sha: redeployContext!.target_commit_sha }, controller.signal);
+      if (!current()) return;
+      if (mode === "api" && (result.compute !== redeployContext!.compute || (result.plan_id != null && result.plan_id !== redeployContext!.plan.id))) throw new ApiError("재배포 응답의 실행 환경·구성안이 검토한 설정과 다릅니다.",201,"invalid_response");
+      onStartDeployment(result);
+      request.current?.abort(); session.current++;
+      setSelected({ ...selected, latest_deployment_id: result.id });
+      setPlan(mode === "demo" ? reusablePlan! : null); setPlans(null); setPlanId(""); setAnalysis(null);
+      setChosen(result.compute); setReviewed(false); setFailCI(false);
+      setError(""); setPlanError(""); setDeployment(result); setEvent(null); setStreamId(result.id);
+      showDeploymentStage(result); demoResumeStatus.current = result.status;
+      redeployDialog.current?.close();
+    } catch (e) {
+      if (!current()) return;
+      setRedeployError(redeployMessage(e));
+      if (mode === "api") {
+        setRedeployReviewed(false); setRedeployContext(null);
+        if (e instanceof ApiError && e.status === 409 && ["redeploy_source_changed", "redeploy_target_changed"].includes(e.code ?? "")) {
+          await loadRedeployContext("기준 성공 배포 또는 대상 커밋이 변경되었습니다. 갱신된 설정을 다시 검토하고 확인하세요.");
+        } else if (e instanceof ApiError && (e.code === "deployment_in_progress" || e.code === "teardown_in_progress" || !e.status || e.status >= 500 || e.code === "invalid_response")) {
+          if (e.code === "teardown_in_progress") setSelected(value => value?.id === target.appId ? { ...value, teardown_status: "requested" } : value);
+          try {
+            await refreshRedeployState(target.appId, controller, target.session);
+            if (current()) {
+              setError(e.status === 409 ? redeployMessage(e) : "재배포 요청의 처리 여부를 확인하지 못했습니다. 현재 배포 상태를 확인한 뒤 설정을 다시 조회하세요.");
+              redeployDialog.current?.close();
+            }
+          } catch (refreshError) { if (current()) setRedeployError(`현재 배포 조회 실패: ${redeployMessage(refreshError)} · 앱을 다시 열어 상태를 확인하세요.`); }
+        }
+      }
+    } finally {
+      if (target === redeployTarget.current) { redeploySubmitting.current = false; setRedeployPending(false); }
+      if (redeployRequest.current === controller) redeployRequest.current = null;
+    }
+  }  function resetDetail() {
+    redeployDialog.current?.close(); closeRedeploy();
     discardDialog.current?.close();
     request.current?.abort();
     discardRequest.current?.abort();
@@ -1150,6 +1238,12 @@ export default function Applications({
                       <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
                       <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
                       <p>실행 환경: {deployment.compute}</p>
+                      {mode === "api" && <div className="break-word" aria-label="배포 버전과 설정">
+                        <p>배포 ID: {deployment.id}</p>
+                        <p>커밋 SHA: {deployment.commit_sha ?? "서버 미제공"}</p>
+                        <p>구성안: {deployment.plan_id ?? "서버 미제공"}</p>
+                        <p>기준 성공 배포: {deployment.source_deployment_id ?? "서버 미제공"}</p>
+                      </div>}
                       {deployment.url && !teardownComplete && (
                         <p className="break-word">
                           {mode === "demo" ? "샘플 URL" : "서버 보고 URL"}: <code>{deployment.url}</code>
@@ -1177,7 +1271,7 @@ export default function Applications({
                     </div>
                   </div>
                   <p>이전 성공 설정을 유지하는 재배포입니다. 설정을 바꾸려면 설정 변경 · 재분석을 선택하세요.</p>
-                  <p className="muted">{mode === "demo" ? "DEMO · 저장된 설정으로 로컬 배포 과정을 시연합니다." : "연동 대기 · 최신 커밋 확인과 이전 성공 설정 재사용을 서버에서 지원해야 실행할 수 있습니다."}</p>
+                  <p className="muted">{mode === "demo" ? "DEMO · 저장된 설정으로 로컬 배포 과정을 시연합니다." : "서버에서 최신 커밋과 이전 성공 설정을 조회한 뒤 직접 검토하여 실행합니다."}</p>
                   {redeployBlocked && <p role="status">진행 중인 작업이나 상태 조회가 끝난 뒤 다시 확인하세요. 저장 오류가 있다면 먼저 해결하세요.</p>}
                 </section>}
 
@@ -1271,9 +1365,9 @@ export default function Applications({
         </>
       )}
       {selected && <dialog ref={redeployDialog} className="discard-dialog detail" aria-labelledby="app-redeploy-heading" aria-describedby="app-redeploy-description"
-        onClose={() => { redeployTarget.current = null; setRedeployReviewed(false); setRedeployError(""); }}>
+        aria-busy={redeployLoading || redeployPending} onCancel={event => { if (redeploySubmitting.current) event.preventDefault(); }} onClose={closeRedeploy}>
         <h2 id="app-redeploy-heading" tabIndex={-1}>새 버전 재배포</h2>
-        <p id="app-redeploy-description">{mode === "demo" ? "DEMO · 최신 커밋을 확인하지 않는 로컬 시연입니다. 실제 코드 갱신·AI 분석·클라우드 배포는 실행하지 않습니다." : "연동 대기 · 최신 커밋 확인과 이전 성공 설정 재사용을 위한 서버 계약이 필요합니다."}</p>
+        <p id="app-redeploy-description">{mode === "demo" ? "DEMO · 최신 커밋을 확인하지 않는 로컬 시연입니다. 실제 코드 갱신·AI 분석·클라우드 배포는 실행하지 않습니다." : "이전 성공 배포의 템플릿·설정값을 재사용합니다. 대상 커밋과 설정을 확인한 뒤 실행하세요. 현재 인프라와 워크플로 템플릿은 달라질 수 있으며 URL 유지나 롤백을 보장하지 않습니다."}</p>
         <dl>
           <dt>애플리케이션</dt><dd className="break-word">{selected.name}</dd>
           <dt>저장소</dt><dd className="break-word">{selected.repo_url}</dd>
@@ -1286,11 +1380,25 @@ export default function Applications({
           <pre tabIndex={0} aria-label="재사용할 설정값">{JSON.stringify(reusablePlan!.values, null, 2)}</pre>
           <label className="failure-option"><input type="checkbox" checked={redeployReviewed} disabled={redeployBlocked} onChange={e => setRedeployReviewed(e.target.checked)}/> 이전 성공 설정을 그대로 재사용합니다</label>
         </> : <p className="notice">재사용할 성공 배포 구성이 없습니다. 가장 최근 성공 기록의 템플릿·설정값이 없거나 현재 저장소·브랜치와 다릅니다. 설정 변경 · 재분석에서 새 구성을 확인하세요.</p>
-          : <p className="notice">대상 커밋 SHA: 서버 미제공<br/>이전 성공 설정: 서버 미제공<br/>대상 버전과 재사용 설정을 확인할 수 없어 재배포를 실행할 수 없습니다.</p>}
+          : redeployContext ? <>
+            <dl>
+              <dt>이전 성공 배포</dt><dd className="break-word">{redeployContext.source_deployment_id}</dd>
+              <dt>이전 커밋 SHA</dt><dd className="break-word">{redeployContext.source_commit_sha ?? "이전 커밋 SHA: 서버 미제공"}</dd>
+              <dt>대상 커밋 SHA</dt><dd className="break-word">{redeployContext.target_commit_sha}</dd>
+              <dt>실행 환경</dt><dd>{redeployContext.compute}</dd>
+              <dt>구성안</dt><dd className="break-word">{redeployContext.plan.id}</dd>
+              <dt>템플릿</dt><dd className="break-word">{redeployContext.plan.template}</dd>
+            </dl>
+            <pre tabIndex={0} aria-label="재사용할 설정값">{JSON.stringify(redeployContext.plan.values, null, 2)}</pre>
+            <label className="failure-option"><input type="checkbox" checked={redeployReviewed} disabled={redeployBlocked} onChange={e => setRedeployReviewed(e.target.checked)}/> 대상 커밋과 이전 성공 설정을 확인했습니다</label>
+          </> : !redeployLoading && <p className="notice">확인 가능한 대상 버전과 성공 설정이 있어야 재배포할 수 있습니다. 재사용할 구성이 없으면 취소 후 설정 변경 · 재분석을 선택하세요.</p>}
+        {redeployLoading && <p role="status">재배포 설정 조회 중…</p>}
+        {redeployPending && <p role="status">재배포 요청 중…</p>}
         {redeployError && <p className="error" role="alert">{redeployError}</p>}
         <div className="form-actions">
-          <button className="primary" disabled={mode !== "demo" || redeployBlocked || !canReusePlan || !redeployReviewed} onClick={redeploy}>{mode === "demo" ? "이 설정으로 재배포 · 데모" : "재배포 연동 대기"}</button>
-          <button className="secondary" onClick={() => redeployDialog.current?.close()}>취소</button>
+          <button className="primary" disabled={redeployBlocked || (mode === "demo" ? !canReusePlan : !redeployContext) || !redeployReviewed} onClick={redeploy}>{mode === "demo" ? "이 설정으로 재배포 · 데모" : "이 설정으로 재배포"}</button>
+                    {mode === "api" && !redeployContext && !redeployLoading && <button className="secondary" disabled={redeployBlocked} onClick={() => void loadRedeployContext()}>설정 다시 조회</button>}
+          <button className="secondary" disabled={redeployPending} onClick={() => redeployDialog.current?.close()}>취소</button>
         </div>
       </dialog>}
       {!creating && (

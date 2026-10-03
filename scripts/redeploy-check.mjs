@@ -25,9 +25,10 @@ try {
   await page.route('**/api/**',route=>{requests.push(route.request().url());return route.abort();});
   await page.goto(base + "/?source=demo");
   const seed = async (value=state)=>{
+    await page.goto(base + '/?source=demo');
     await page.evaluate(value=>localStorage.setItem('freesia.demo.v1',JSON.stringify(value)),value);
     await page.goto(`${base}/?source=demo&app=${app.id}`);
-    await page.getByRole('heading',{name:app.name,exact:true}).waitFor();
+    await page.getByRole('heading',{name:new RegExp('^'+app.name)}).waitFor().catch(async error=>{console.log(errors,await page.locator('body').innerText());throw error;});
   };
   await seed();
   assert.equal(await opener.count(),1,'deployed app must expose a separate redeploy entry');
@@ -81,70 +82,83 @@ try {
   }
   assert.deepEqual(requests,[],'demo redeploy must make no API requests');
   await page.unroute('**/api/**');
-  let apiApp = {...app,latest_deployment_id:previous.id,teardown_status:null,teardown_requested_at:null}, apiDeployment = {...previous,demo_pipeline:undefined}, holdAnalysis = false;
-  await page.addInitScript(()=>{window.EventSource=class extends window.EventTarget{constructor(){super();setTimeout(()=>this.dispatchEvent(new window.MessageEvent('progress',{data:JSON.stringify({status:'success',step:'done',message:'fixture complete',progress:100,url:null,at:'2026-10-02T10:00:00Z'})})),10);}close(){}};});
+  let apiApp = {...app,latest_deployment_id:previous.id,teardown_status:null,teardown_requested_at:null};
+  const originalContext={app_space_id:app.id,repo_url:app.repo_url,branch:app.branch,source_deployment_id:previous.id,source_commit_sha:null,target_commit_sha:'b'.repeat(40),compute:plan.compute,plan:{id:'saved-plan',template:plan.template,values:plan.values}};
+  let context=globalThis.structuredClone(originalContext), previewError=null, postError=null, holdPreview=false, holdPost=false, pendingPreview, pendingPost, previewCount=0;
+  const createdApi={...previous,id:'api-new-deployment',demo_pipeline:undefined,status:'success',commit_sha:'b'.repeat(40),plan_id:'saved-plan',source_deployment_id:previous.id};
+  let apiDeployment={...previous,demo_pipeline:undefined};
+  await page.addInitScript(()=>{window.streamUrls=[];window.EventSource=class extends window.EventTarget{constructor(url){super();window.streamUrls.push(url);setTimeout(()=>this.dispatchEvent(new window.MessageEvent('progress',{data:JSON.stringify({status:'success',step:'done',message:'fixture complete',progress:100,url:null,at:'2026-10-02T10:00:00Z'})})),10);}close(){}};});
   await page.route('**/api/**',async route=>{
     const req=route.request(),path=new URL(req.url()).pathname;
-    const json=body=>route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
-    if(req.method()!=='GET')mutations.push(path);
+    const json=(body,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)}).catch(()=>{});
+    if(req.method()!=='GET')mutations.push({path,body:req.postDataJSON()});
+    if(path.endsWith('/redeploy-context')){previewCount++;const snapshot=globalThis.structuredClone(context);if(holdPreview)await new Promise(resolve=>pendingPreview=resolve);return previewError ? json(previewError.body,previewError.status) : json(snapshot);}
+    if(path.endsWith('/redeployments')){if(holdPost)await new Promise(resolve=>pendingPost=resolve);if(postError)return json(postError.body,postError.status);apiApp={...apiApp,latest_deployment_id:createdApi.id};return json(createdApi,201);}
     if(path.endsWith('/repositories'))return json([]);
     if(path.endsWith('/infra-spaces'))return json([{id:'demo-public',name:'서버 기반',description:'fixture',network:'public',computes:['ecs-fargate'],deployable_computes:['ecs-fargate'],app_count:1}]);
     if(path.endsWith('/app-spaces'))return json([apiApp]);
     if(path.endsWith('/'+app.id))return json(apiApp);
-    if(path.endsWith('/resources'))return json([]);
+    if(path.endsWith('/resources')){requests.push(path);return json([]);}
+    if(path.endsWith('/'+createdApi.id))return json(createdApi);
     if(path.endsWith('/'+previous.id))return json(apiDeployment);
-    if(req.method()==='POST' && path.endsWith('/analysis'))return json({status:holdAnalysis?'running':'done',requirements:[],evidence:[],candidates:[{compute:'ecs-fargate',state:'selected',reason:'fixture',cons:[]}],mascot_message:null});
-    if(path.endsWith('/plans'))return json({status:'done',compute:'ecs-fargate',plans:[{id:'first-plan',name:'첫 배포 설정',summary:'fixture',pros:[],cons:[],template:'ecs-fargate/basic',values:{container_port:3000}}]});
-    if(path.endsWith('/deployments') && req.method()==='POST')return json(apiDeployment);
-    if(path.endsWith('/analysis'))return json({status:'running',requirements:[],evidence:[],candidates:[],mascot_message:null});
-    return route.fulfill({status:404,body:'unexpected fixture request'});
+    if(path.endsWith('/analysis'))return json({status:req.method()==='POST'?'running':'done',requirements:[],evidence:[],candidates:[],mascot_message:null});
+    return json({error:'not_found'},404);
   });
-  const openApi = async ()=>{await page.goto(`${base}/?source=api&app=${app.id}`);await page.getByRole('heading',{name:/^배포 상태/}).waitFor();};
-  const beforeApi = await saved();
-  for(const width of [1280,390]) {
+  const openApi=async()=>{await page.goto(`${base}/?source=api&app=${app.id}`);await page.getByRole('heading',{name:/^배포 상태/}).waitFor();await opener.waitFor();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(el=>el.textContent==='새 버전 재배포');return b&&!b.disabled;});};
+  const apiConfirm=dialog.getByRole('button',{name:'이 설정으로 재배포',exact:true});
+  const beforeApi=await saved();
+  for(const width of [1280,390]){
     await page.setViewportSize({width,height:900});await openApi();await opener.click();
-    const apiConfirm=dialog.getByRole('button',{name:'재배포 연동 대기',exact:true});
-    assert.ok(await apiConfirm.isDisabled());assert.match(await dialog.innerText(),/커밋.*미제공/);assert.match(await dialog.innerText(),/설정.*미제공/);
+    await dialog.getByLabel('재사용할 설정값').waitFor();
+    assert.equal(await apiConfirm.isDisabled(),true,'preview requires explicit settings review');
+    assert.match(await dialog.innerText(),/bbbbbbbb/);assert.match(await dialog.innerText(),/커밋.*미제공/);
+    assert.deepEqual(JSON.parse(await dialog.getByLabel('재사용할 설정값').innerText()),plan.values);
     assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth));
     await dialog.screenshot({path:`artifacts/redeploy-api-${width}.png`});
     await page.screenshot({path:`artifacts/redeploy-api-screen-${width}.png`});
-    await page.keyboard.press('Escape');assert.deepEqual(mutations,[],'API dialog cannot analyze, plan or deploy');
-    assert.equal(await opener.evaluate(el=>el===document.activeElement),true);
+    await dialog.getByRole('checkbox').check();await apiConfirm.scrollIntoViewIfNeeded();await dialog.screenshot({path:`artifacts/redeploy-api-review-${width}.png`});await page.keyboard.press('Escape');
+    await dialog.waitFor({state:'hidden'});assert.equal(await opener.evaluate(el=>el===document.activeElement),true);
+    assert.deepEqual(mutations,[],'preview and cancellation must never mutate');
   }
-  apiApp={...apiApp,teardown_status:'requested',teardown_requested_at:stamp};await openApi();assert.ok(await opener.isDisabled());
-  apiApp={...apiApp,teardown_status:undefined};await openApi();assert.ok(await opener.isDisabled(),'legacy teardown receipt blocks');
-  apiApp={...apiApp,teardown_status:null,teardown_requested_at:null};apiDeployment={...apiDeployment,status:'building'};await openApi();assert.ok(await opener.isDisabled());
-  apiDeployment={...apiDeployment,status:'success'};await openApi();holdAnalysis=true;
-  await page.getByRole('button',{name:'설정 변경 · 재분석',exact:true}).click();
-  await page.getByText(/코드를 분석하고 있습니다/).waitFor();assert.ok(await opener.isDisabled());
-  assert.deepEqual(mutations,[`/api/app-spaces/${app.id}/analysis`],'only separate explicit reanalysis can mutate');
-  await page.getByRole('button',{name:'앱 목록으로',exact:true}).click();
-  assert.equal(await dialog.isVisible(),false);
-  assert.deepEqual(await saved(),beforeApi,'API cannot change demo storage');
-  await openApi();await opener.click();
-  await page.goto(base + '/?source=demo&page=apps');
-  assert.equal(await dialog.isVisible(),false,'source change unmounts confirmation');
-  assert.deepEqual(mutations,[`/api/app-spaces/${app.id}/analysis`]);
-  await seed();await opener.click();
-  await page.getByRole('button',{name:'앱 목록으로',exact:true}).evaluate(el=>el.click());
-  assert.equal(await dialog.isVisible(),false,'navigation discards confirmation');
-  assert.deepEqual(await saved(),state);
-  await page.getByRole('button',{name:app.name+' 상세 보기',exact:true}).click();await opener.click();
-  assert.ok(await confirm.isDisabled(),'new session requires review again');
-  await page.locator('.sidebar-nav button').filter({hasText:'통합'}).evaluate(el=>el.click());
-  assert.equal(await dialog.isVisible(),false,'page unmount discards confirmation');
-  assert.deepEqual(await saved(),state);
-  apiApp={...apiApp,latest_deployment_id:null};holdAnalysis=false;
-  await page.goto(`${base}/?source=api&app=${app.id}`);
-  await page.getByRole('button',{name:'코드 분석 시작',exact:true}).click();
-  await page.getByRole('button',{name:'이 후보 선택',exact:true}).click();
-  await page.getByRole('button',{name:'선택한 환경으로 구성안 조회',exact:true}).click();
-  await page.getByRole('checkbox',{name:'설정값을 확인했습니다'}).check();
-  await page.getByRole('button',{name:'선택한 구성안으로 배포',exact:true}).click();
-  await page.getByRole('heading',{name:/^배포 상태/}).waitFor();
-  assert.equal(await opener.count(),1,'first API deployment must expose redeploy without reloading');
-  await opener.click();assert.ok(await dialog.getByRole('button',{name:'재배포 연동 대기',exact:true}).isDisabled());
-  assert.deepEqual(mutations,[`/api/app-spaces/${app.id}/analysis`,`/api/app-spaces/${app.id}/analysis`,`/api/app-spaces/${app.id}/plans`,`/api/app-spaces/${app.id}/deployments`]);
+  for(const value of [{...originalContext,app_space_id:'other-app'},{...originalContext,repo_url:'https://github.com/other/repo'},{...originalContext,target_commit_sha:'invalid'}]){
+    context=value;await opener.click();await dialog.getByRole('alert').waitFor();assert.ok(await apiConfirm.isDisabled());await dialog.getByRole('button',{name:'취소',exact:true}).click();
+  }
+  context=globalThis.structuredClone(originalContext);
+  for(const [status,code] of [[404,'not_found'],[501,'not_supported'],[409,'redeploy_unavailable'],[409,'not_deployed'],[502,'github_error']]){
+    previewError={status,body:{error:code,message:code}};await opener.click();await dialog.getByRole('alert').waitFor();assert.ok(await apiConfirm.isDisabled());await dialog.getByRole('button',{name:'취소',exact:true}).click();
+  }
+  previewError=null;holdPreview=true;await opener.click();await dialog.getByText('재배포 설정 조회 중…',{exact:true}).waitFor();await dialog.getByRole('button',{name:'취소',exact:true}).click();holdPreview=false;pendingPreview();
+  context={...originalContext,target_commit_sha:'c'.repeat(40)};await opener.click();await dialog.getByLabel('재사용할 설정값').waitFor();assert.match(await dialog.innerText(),/cccccccc/);assert.ok(await apiConfirm.isDisabled());await dialog.getByRole('button',{name:'취소',exact:true}).click();
+  context=globalThis.structuredClone(originalContext);
+  for(const code of ['redeploy_source_changed','redeploy_target_changed']){
+    await opener.click();await dialog.getByRole('checkbox').check();const count=previewCount;
+    postError={status:409,body:{error:code,message:'Changed'}};context={...context,target_commit_sha:'c'.repeat(40),source_deployment_id:'new-source'};
+    await apiConfirm.click();await page.waitForFunction(()=>{const d=document.querySelector('dialog[open]');return d?.textContent.includes('cccccccc')});
+    assert.equal(previewCount,count+1);assert.ok(await apiConfirm.isDisabled());assert.equal(await dialog.getByRole('checkbox').isChecked(),false);await dialog.getByRole('button',{name:'취소',exact:true}).click();context=globalThis.structuredClone(originalContext);
+  }
+  const initialMutations=mutations.length;
+  postError=null;holdPost=true;await opener.click();await dialog.getByRole('checkbox').check();
+  await apiConfirm.evaluate(el=>{el.click();el.click();});await dialog.getByText('재배포 요청 중…',{exact:true}).waitFor();
+  await page.keyboard.press('Escape');assert.ok(await dialog.isVisible());assert.ok(await dialog.getByRole('button',{name:'취소',exact:true}).isDisabled());assert.equal(mutations.length,initialMutations+1,'synchronous duplicate guard');
+  holdPost=false;pendingPost();await dialog.waitFor({state:'hidden'});
+  assert.deepEqual(mutations.at(-1),{path:`/api/app-spaces/${app.id}/redeployments`,body:{source_deployment_id:previous.id,target_commit_sha:'b'.repeat(40)}});
+  await page.getByText('구성안: saved-plan',{exact:true}).waitFor();
+  assert.ok(await page.evaluate(()=>window.streamUrls.some(url=>url.includes('/api-new-deployment/events'))));
+  assert.ok(requests.some(path=>path.includes('/api-new-deployment/resources')));
+  await page.reload();await page.getByText('구성안: saved-plan',{exact:true}).waitFor();assert.match(await page.locator('main').innerText(),/bbbbbbbb/);
+  assert.deepEqual(await saved(),beforeApi,'API must not alter DEMO storage');
+  assert.ok(mutations.every(entry=>entry.path.endsWith('/redeployments')),'redeploy never analyzes or creates plans');
+  apiApp={...apiApp,latest_deployment_id:previous.id};
+  for(const code of ['deployment_in_progress','teardown_in_progress']){
+    await openApi();await opener.click();await dialog.getByRole('checkbox').check();
+    postError={status:409,body:{error:code,message:code}};
+    if(code==='deployment_in_progress')apiApp={...apiApp,latest_deployment_id:createdApi.id};else apiApp={...apiApp,teardown_status:'requested',teardown_requested_at:stamp};
+    await apiConfirm.click();await dialog.waitFor({state:'hidden'});
+    if(code==='deployment_in_progress')await page.getByText('구성안: saved-plan',{exact:true}).waitFor();else assert.ok(await opener.isDisabled());
+  }
+  apiApp={...apiApp,teardown_status:null,teardown_requested_at:null};postError=null;await openApi();holdPreview=true;await opener.click();await dialog.getByText('재배포 설정 조회 중…',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'앱 목록으로',exact:true}).evaluate(el=>el.click());holdPreview=false;pendingPreview();assert.equal(await dialog.isVisible(),false);
+  await openApi();await page.getByRole('button',{name:'설정 변경 · 재분석',exact:true}).click();await page.getByText(/코드를 분석하고 있습니다/).waitFor();assert.ok(await opener.isDisabled());
+  assert.equal(mutations.at(-1).path,`/api/app-spaces/${app.id}/analysis`);
   assert.deepEqual(errors,[]);
-  console.log('PASS redeploy: exact successful plan + values, fresh ID/persistence/reload, no AI/API demo requests, API unavailable/no mutations, cancel/Escape/focus, desktop/mobile, legacy/failed/missing history, active/teardown/pending guards, storage failure; mocked API only');
-} finally {await browser.close();}
+  console.log('PASS redeploy: DEMO regression; API GET-only review, full SHA/template/values, schema/wrong-app checks, errors/unavailable, cancellation/races, source/target mismatch reconfirmation, duplicate/pending locks, new ID SSE/resources/reload metadata, busy/teardown recovery, explicit separate analysis, desktop/mobile; mocked API only');} finally {await browser.close();}

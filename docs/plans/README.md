@@ -335,3 +335,6 @@ Current 2026-10-03T14:32:30.0726816+09:00: resource tree only on progress/result
 2026-10-03T16:24:34+09:00: EC2 logs integration complete locally on codex/ec2-log-integration in Freesia-Frontend-ec2-logs. Actual EC2 GET/render verified via localhost5174 production API proxy; check47/focused10/review PASS and prior identical-tree E2E25 PASS. See infra-ai-flow-eval.md. Unpublished; shared primary checkout and localhost5173 preserved.
 
 2026-10-03T16:36:06+09:00: User explicitly approved commit and push of the current EC2 log diff to codex/ec2-log-integration. Verified product/tests unchanged. No PR/main merge/deploy requested.
+2026-10-03T16:21:08.5128734+09:00: Issue8 full-stack implementation approved on isolated codex/issue-8-redeploy in both repos. New preview+execution contract; frontend and backend workers active; feature-only PRs requested after verification. No live deployment/mainmerge.
+
+2026-10-03T16:56:26.4392114+09:00 Issue8 implemented and locally verified on latest main; separate review PRs next. See latest infra-ai-flow-eval and docs/contracts; no merge/deploy.

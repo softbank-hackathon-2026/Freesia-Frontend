@@ -1,4 +1,4 @@
-import type { Analysis, AppLogs, AppMetrics, AppSpace, AppSpaceCreate, Deployment, DeploymentEvent, InfraSpace, Repository, DeploymentResource, PlanSet, TeardownReceipt } from "./types.ts";
+import type { Analysis, AppLogs, AppMetrics, AppSpace, AppSpaceCreate, Deployment, DeploymentEvent, InfraSpace, Repository, DeploymentResource, PlanSet, RedeployContext, TeardownReceipt } from "./types.ts";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
@@ -22,7 +22,8 @@ function appShape(value: unknown): boolean {
 }
 function deploymentShape(value: unknown): boolean {
   const v = record(value);
-  return !!v && fields(v,["id","app_space_id","compute","created_at"]) && ["pending","building","deploying","success","failed"].includes(String(v.status)) && nullableString(v.url) && nullableString(v.reason);
+  return !!v && fields(v,["id","app_space_id","compute","created_at"]) && ["pending","building","deploying","success","failed"].includes(String(v.status)) && nullableString(v.url) && nullableString(v.reason)
+    && ["commit_sha","plan_id","source_deployment_id"].every(key => v[key] === undefined || nullableString(v[key]));
 }
 function analysisShape(value: unknown): boolean {
   const v = record(value);
@@ -48,6 +49,15 @@ function planSetShape(value: unknown): boolean {
     return !!p && fields(p,["id","name","summary","template"]) && strings(p.pros) && strings(p.cons) && !!record(p.values) && jsonValue(p.values);
   });
 }
+function redeployContextShape(value: unknown): boolean {
+  const v = record(value), plan = record(v?.plan);
+  const nonempty = (value: unknown) => typeof value === "string" && value.trim().length > 0;
+  const sha = (value: unknown) => typeof value === "string" && /^[a-f0-9]{40}$/i.test(value);
+  return !!v && ["app_space_id","repo_url","branch","source_deployment_id"].every(key => nonempty(v[key]))
+    && (v.source_commit_sha === null || sha(v.source_commit_sha)) && sha(v.target_commit_sha)
+    && ["ecs-fargate","lambda","ec2"].includes(String(v.compute)) && !!plan
+    && nonempty(plan.id) && nonempty(plan.template) && !!record(plan.values) && jsonValue(plan.values);
+}
 function monitoringShape(v: Record<string, unknown>): boolean {
   return typeof v.status === "string" && ["ok","waiting","not_deployed","unsupported","error"].includes(v.status) && nullableString(v.message);
 }
@@ -67,6 +77,8 @@ function metricsShape(value: unknown): boolean {
     && nullableString(v.measured_at);
 }
 function validShape(path: string, value: unknown, post: boolean): boolean {
+  if (path.endsWith("/redeploy-context")) return redeployContextShape(value);
+  if (path.endsWith("/redeployments")) return deploymentShape(value);
   if (/^\/app-spaces\/[^/]+\/metrics$/.test(path)) return metricsShape(value);
   if (/^\/app-spaces\/[^/]+\/logs(?:\?|$)/.test(path)) return logsShape(value);
   if (path.endsWith("/teardown")) {
@@ -173,6 +185,19 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
     createPlans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),
     plans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans?compute=${encodeURIComponent(compute)}`,undefined,"GET",signal),
     deploy: (id:string,compute:string,planId?:string,signal?:AbortSignal) => request<Deployment>(`${appPath(id)}/deployments`,{compute,...(planId ? {plan_id:planId} : {})},"POST",signal),
+    redeployContext: async (id:string, signal?:AbortSignal) => {
+      const context = await request<RedeployContext>(`${appPath(id)}/redeploy-context`,undefined,"GET",signal);
+      if (context.app_space_id !== id) throw new ApiError("재배포 설정의 앱이 요청과 다릅니다.",200,"invalid_response");
+      return context;
+    },
+    redeploy: async (id:string, body:{source_deployment_id:string;target_commit_sha:string}, signal?:AbortSignal) => {
+      const result = await request<Deployment>(`${appPath(id)}/redeployments`,body,"POST",signal);
+      if (result.app_space_id !== id || result.id === body.source_deployment_id
+        || (result.commit_sha != null && result.commit_sha !== body.target_commit_sha)
+        || (result.source_deployment_id != null && result.source_deployment_id !== body.source_deployment_id))
+        throw new ApiError("재배포 응답의 앱·버전·기준 배포가 요청과 다릅니다.",201,"invalid_response");
+      return result;
+    },
     teardown: async (id:string,signal?:AbortSignal) => {
       const receipt = await request<TeardownReceipt>(`${appPath(id)}/teardown`,undefined,"POST",signal);
       if (receipt.app_space_id !== id) throw new ApiError("내리기 응답의 앱이 요청과 다릅니다.",202,"invalid_response");

@@ -640,3 +640,42 @@ test("existing analysis restoration has a typed 190-second deadline distinct fro
   assert.equal(aborted, 2);
   assert.deepEqual(methods, ["GET", "GET"]);
 });
+
+const redeployContext = {
+  app_space_id: 'app-1', repo_url: 'https://github.com/team/web', branch: 'main',
+  source_deployment_id: 'success-1', source_commit_sha: null, target_commit_sha: 'b'.repeat(40), compute: 'ecs-fargate',
+  plan: {id: 'saved-plan', template: 'ecs-fargate/basic', values: {container_port: 4123, nested: {enabled:true}}},
+};
+const redeployResult = {id:'new-deployment', app_space_id:'app-1', compute:'ecs-fargate', status:'pending', url:null, reason:null, created_at:'now', commit_sha:'b'.repeat(40), plan_id:'saved-plan', source_deployment_id:'success-1'};
+test('redeploy preview is GET-only and execution sends exactly reviewed source and SHA', async () => {
+  const calls: {url:string;init?:RequestInit}[] = [];
+  const api = createApi('/api', async (url,init) => {calls.push({url:String(url),init}); return Response.json(String(url).endsWith('redeploy-context') ? redeployContext : redeployResult, {status:init?.method === 'POST' ? 201 : 200});});
+  assert.deepEqual(await api.redeployContext('app-1'),redeployContext);
+  assert.equal(calls[0].init?.method,'GET'); assert.equal(calls[0].init?.body,undefined);
+  assert.deepEqual(await api.redeploy('app-1',{source_deployment_id:'success-1',target_commit_sha:'b'.repeat(40)}),redeployResult);
+  assert.equal(calls[1].url,'/api/app-spaces/app-1/redeployments');
+  assert.deepEqual(JSON.parse(String(calls[1].init?.body)),{source_deployment_id:'success-1',target_commit_sha:'b'.repeat(40)});
+  assert.deepEqual(await api.deployment('new-deployment'),redeployResult);
+});
+test('redeploy rejects malformed and wrong-app contexts before execution', async () => {
+  for (const invalid of [null, {...redeployContext,app_space_id:'other'}, {...redeployContext,source_commit_sha:15}, {...redeployContext,target_commit_sha:'not-a-sha'}, {...redeployContext,source_deployment_id:''}, {...redeployContext,compute:'unknown'}, {...redeployContext,plan:{...redeployContext.plan,values:[]}}, {...redeployContext,plan:{...redeployContext.plan,id:''}}]) {
+    const api=createApi('/api',async()=>Response.json(invalid));
+    await assert.rejects(api.redeployContext('app-1'),{code:'invalid_response'});
+  }
+});
+test('redeploy rejects mismatched returned identity and provenance while legacy deployment metadata stays optional', async () => {
+  for (const invalid of [{...redeployResult,app_space_id:'other'}, {...redeployResult,id:'success-1'}, {...redeployResult,commit_sha:'a'.repeat(40)}, {...redeployResult,source_deployment_id:'other'}, {...redeployResult,plan_id:24}]) {
+    const api=createApi('/api',async()=>Response.json(invalid,{status:201}));
+    await assert.rejects(api.redeploy('app-1',{source_deployment_id:'success-1',target_commit_sha:'b'.repeat(40)}),{code:'invalid_response'});
+  }
+  const legacy={...redeployResult,commit_sha:undefined,plan_id:null,source_deployment_id:undefined};
+  assert.equal((await createApi('/api',async()=>Response.json(legacy)).deployment('new-deployment')).plan_id,null);
+});
+test('redeploy propagates cancellation and structured conflicts without a fallback request', async () => {
+  const controller=new AbortController(); let count=0;
+  const api=createApi('/api',async()=>{count++;controller.abort();return Response.json(redeployContext);});
+  await assert.rejects(api.redeployContext('app-1',controller.signal),{name:'AbortError'});
+  assert.equal(count,1);
+  const conflict=createApi('/api',async()=>Response.json({error:'redeploy_target_changed',message:'Changed'},{status:409}));
+  await assert.rejects(conflict.redeploy('app-1',{source_deployment_id:'success-1',target_commit_sha:'b'.repeat(40)}),{code:'redeploy_target_changed',status:409});
+});
