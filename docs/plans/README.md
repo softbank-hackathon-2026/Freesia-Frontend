@@ -315,3 +315,9 @@ Horizontal deployment-stage cards completed 2026-10-03T14:04:23.5065395+09:00: c
 Current task 2026-10-03T14:11:35.9407734+09:00 API Infra read-only action cleanup on codex/horizontal-deployment-stages. User approved commit/push of this follow-up; root owns product/docs, worker existing API E2E. No PR/merge/deploy.
 
 2026-10-03T14:19:28.6801179+09:00 API Infra read-only follow-up verified: check47/E2E25/harnesslint/diffPASS;1440/390buttonsabsent,list/detail/retryretained,legacydemo unchanged. User-authorized currentbranchcommit/push next; no PR/merge/deploy.
+
+Current 2026-10-03T14:32:30.0726816+09:00: resource tree only on progress/result and belowstatus. codex/deployment-tree-below; implementation/verificationactive, no commit/push/merge authorization. See latest spec/plan/contract.
+
+2026-10-03T14:35:28.3436042+09:00 userapproved currenttree-placement commit/push andmainmerge afterverification. No manualDeploy.
+
+2026-10-03T14:37:37.6646201+09:00 treebelowstatus locallyverified: check47/E2E25/flow15PASS,desktop/mobile1-3hidden/4-5stacked. Userauthorizedcommit/push/mainmerge; noDeploy. Seeevalevidence.

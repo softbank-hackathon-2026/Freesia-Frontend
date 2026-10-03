@@ -105,10 +105,25 @@ async function scenario(options = {}) {
 }
 async function visibleResources(page) {
   const tree = page.getByRole("region", { name: "배포 자원 상태", exact: true });
-  assert.equal(await tree.count(), 1, "existing deployment resources remain mounted while reviewing earlier stages");
+  assert.equal(await tree.count(), 1, "the current app deployment resources are visible in progress/result");
   assert.equal(await tree.isVisible(), true);
   await tree.locator(".resource-tree-node").waitFor();
   assert.match(await tree.textContent(), /aws_lambda_function.fixture/);
+}
+async function hiddenResources(page) {
+  assert.equal(await page.getByRole("region", { name: "배포 자원 상태", exact: true }).count(), 0, "analysis/choice/review do not display the deployment resource tree");
+}
+async function resourcesBelowStage(page) {
+  await visibleResources(page);
+  const [stage, tree] = await page.locator(".deployment-workspace").evaluate(element =>
+    [element.querySelector(".deployment-stage"), element.querySelector(".resource-tree")].map(panel => {
+      const { x, y, width, height } = panel.getBoundingClientRect();
+      return { x, y, width, height };
+    }));
+  assert.ok(stage && tree);
+  assert.ok(tree.y >= stage.y + stage.height, "resource tree follows the complete deployment status panel");
+  assert.ok(Math.abs(tree.x - stage.x) <= 1 && Math.abs(tree.width - stage.width) <= 1, "resource tree aligns with the full stage width");
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 }
 async function chooseAndReview(page) {
   await step(page, 2);
@@ -136,36 +151,42 @@ try {
     const { page, state } = await scenario({ latest: dep.id, deployment: { ...dep, status: "success" }, event: progress("success", 100), analysisSnapshot: analysis, holdAnalysis: true, otherApp: true });
     await step(page, 5); await visibleResources(page);
     const restored = mutations(state);
-    await visitStep(page, 1); await visibleResources(page);
-    await visitStep(page, 2); await visibleResources(page);
+    await visitStep(page, 1); await hiddenResources(page);
+    await visitStep(page, 2); await hiddenResources(page);
     assert.deepEqual(mutations(state), restored, "visiting earlier stages only changes the workflow view");
     await visitStep(page, 1);
     const started = page.waitForRequest(request => request.url().endsWith("/analysis") && request.method() === "POST");
     await page.getByRole("button", { name: "설정 변경 · 재분석", exact: true }).click(); await started;
-    await step(page, 1); await visibleResources(page);
+    await step(page, 1); await hiddenResources(page);
     assert.equal(await button(page, 5).isDisabled(), true, "old result cannot replace the active reanalysis step");
-    await page.screenshot({ path: "artifacts/deployment-resource-reanalysis-desktop.png", fullPage: true });
+    await page.screenshot({ path: "artifacts/deployment-resource-hidden-reanalysis-desktop.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
-    await visibleResources(page);
+    await hiddenResources(page);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    await page.screenshot({ path: "artifacts/deployment-resource-reanalysis-mobile.png", fullPage: true });
+    await page.screenshot({ path: "artifacts/deployment-resource-hidden-reanalysis-mobile.png", fullPage: true });
     await page.setViewportSize({ width: 1440, height: 1000 });
     state.holdAnalysis = false; state.releaseAnalysis();
-    await step(page, 2); await visibleResources(page);
-    await chooseAndReview(page); await visibleResources(page);
-    await page.screenshot({ path: "artifacts/deployment-resource-review-desktop.png", fullPage: true });
+    await step(page, 2); await hiddenResources(page);
+    await chooseAndReview(page); await hiddenResources(page);
+    await page.screenshot({ path: "artifacts/deployment-resource-hidden-review-desktop.png", fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
-    await visibleResources(page);
+    await hiddenResources(page);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    await page.screenshot({ path: "artifacts/deployment-resource-review-mobile.png", fullPage: true });
+    await page.screenshot({ path: "artifacts/deployment-resource-hidden-review-mobile.png", fullPage: true });
     assert.deepEqual(mutations(state).map(call => call[2]), [null, { compute: "lambda" }], "resource visibility never submits a deployment");
+    await page.reload(); await step(page, 5);
+    for (const [size, width, height] of [["desktop", 1440, 1000], ["mobile", 390, 844]]) {
+      await page.setViewportSize({ width, height }); await resourcesBelowStage(page);
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      await page.screenshot({ path: "artifacts/deployment-resource-result-" + size + ".png", fullPage: true });
+    }
     const resourceReads = state.calls.filter(call => call.path.endsWith("/resources")).length;
     await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
     await page.getByRole("button", { name: otherApp.name + " 상세 보기", exact: true }).click();
     await page.getByRole("heading", { name: otherApp.name, exact: true }).waitFor(); await step(page, 1);
     assert.equal(await page.getByRole("region", { name: "배포 자원 상태", exact: true }).count(), 0, "app B never inherits app A's resource tree");
     assert.equal(state.calls.filter(call => call.path.endsWith("/resources")).length, resourceReads, "never-deployed app B does not fetch resources");
-    await clean(page, state); record("restored resource tree persists through analysis/reanalysis/choice/review and clears when switching apps");
+    await clean(page, state); record("resource tree stays hidden in analysis/reanalysis/choice/review, restores below results on reload, and clears when switching apps");
   }
   {
     const { page, state } = await scenario({ analysisFailures: 1, failedMessage: "Controlled server failure: Bedrock throttled" });
@@ -314,11 +335,11 @@ try {
     assert.equal(await page.getByLabel("배포 진행률", { exact: true }).getAttribute("value"), "63");
     await page.locator("details").filter({ hasText: "aws_lambda_function.fixture" }).locator("summary").click();
     await page.getByText("aws_lambda_function.fixture", { exact: true }).waitFor();
-    await visibleResources(page);
+    await resourcesBelowStage(page);
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({ path: "artifacts/deployment-resource-progress-mobile.png", fullPage: true });
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await visibleResources(page);
+    await resourcesBelowStage(page);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
     await page.screenshot({ path: "artifacts/deployment-resource-progress-desktop.png", fullPage: true });
@@ -327,7 +348,7 @@ try {
     state.event = progress("success", 100); state.deployment = { ...dep, status: "success" };
     await step(page, 5);
     assert.equal(await page.getByRole("heading", { name: /^배포 상태.*success$/ }).count(), 1);
-    await visibleResources(page);
+    await resourcesBelowStage(page);
     const terminal = mutations(state);
     await page.getByRole("tab", { name: "로그", exact: true }).click();
     await page.getByText("Controlled log collection waiting", { exact: true }).waitFor();
@@ -375,6 +396,7 @@ try {
     }
     assert.deepEqual(mutations(state), [], "restoration never repeats business POSTs");
     await page.reload(); await step(page, status === "deploying" ? 4 : 5);
+    await resourcesBelowStage(page);
     assert.deepEqual(mutations(state), []);
     await clean(page, state);
   }
