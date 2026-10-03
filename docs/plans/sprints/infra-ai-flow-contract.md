@@ -342,3 +342,6 @@ User directed removing the two persistent Infra/API application instructional ba
 Design/plan: root owns ContextHelp.tsx, App.tsx, Applications.tsx and scoped styles; browser worker owns existing E2E expectation maintenance and focused QA. Acceptance: instructions absent by default, clicked/keyboard help opens and Escape/outside closes, no form submit, safe access link appears once beside result title and is hidden for invalid/non-success/demo/teardown cases, no desktop/mobile overflow. Required check and E2E plus focused QA/review before local completion.
 
 Contextual-help local completion 2026-10-04: implemented/tested/reviewed (check59/E2E27/focused10/reviewPASS); new help API provenance guard included. No Git publication. Refer to infra-ai-flow-eval.md current verified record.
+
+## VM network compatibility — approved 2026-10-04
+Explicit bugfix request covers design/implementation of three existing code locations: types.ts network union, api.ts network allowlist, App.tsx network label. Regression tests must demonstrate pre-fix invalid_response on mixed AWS+VM and VM detail; retain invalid-network rejection; browser validates mixed rows and exact 온프레미스 내부망 label. Required check and test:e2e. Production remains unchanged until separately approved publication/deployment.

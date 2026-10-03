@@ -435,3 +435,8 @@ Evidence: artifacts/contextual-help-{check,e2e,run}.log, contextual-help-results
 
 ## Contextual-help publication authorization — 2026-10-04
 User explicitly requested commit and push for the current codex/contextual-help diff after local completion. Check59/E2E27/focused10/independentreviewPASS remain valid; only authorization metadata added since final verification. Publish the resolved local origin/main integration plus scoped help/link code and maintained checks/records. No PR, main merge, deploy, backend, cloud or dependency actions authorized. Publication pending at record creation; canonical wiki/session INDEX will record actual SHA and remote verification.
+
+## VM network compatibility — 2026-10-04
+User-approved production bugfix active on codex/fix-onprem-network. Backend now returns network=vm; add contract acceptance and 온프레미스 내부망 label. See latest Day3 spec/plan and infra-ai-flow contract; verification pending. No Git publication or deployment authorization.
+
+VM network follow-up complete locally: check62/E2E27 and source review PASS. See latest infra-ai-flow-eval; uncommitted/unpushed, not deployed.

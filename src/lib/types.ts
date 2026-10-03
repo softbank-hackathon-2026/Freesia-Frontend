@@ -11,7 +11,7 @@ export type InfraSpace = {
   provider?: string | null;
   name: string;
   description: string;
-  network: "public" | "private" | "ha" | "multi-az" | "db-isolated";
+  network: "public" | "private" | "ha" | "multi-az" | "db-isolated" | "vm";
   computes: string[];
   deployable_computes?: string[];
   app_count: number;
