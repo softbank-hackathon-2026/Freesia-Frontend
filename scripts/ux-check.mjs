@@ -124,12 +124,13 @@ try {
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.screenshot({ path: "artifacts/ux-navigation-mobile.png", fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("combobox", { name: "데이터 소스", exact: true }).selectOption("demo");
+  await page.goto(base + "/?source=demo&page=apps");
   assert.equal(await page.getByRole("heading", { name: "First app", exact: true }).count(), 0);
   await page.goBack();
   await page.getByRole("heading", { name: "First app", exact: true }).waitFor();
   await page.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent === "모니터링");
-  assert.equal(await page.getByRole("combobox", { name: "데이터 소스", exact: true }).inputValue(), "api");
+  assert.equal(await page.getByRole("combobox", { name: "데이터 소스", exact: true }).count(), 0);
+  assert.equal(new URL(page.url()).searchParams.get("source"), "api");
   await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
   const slowRead = new Promise(resolve => appReadStarted = resolve); holdApp = true;
   await page.getByRole("button", { name: "First app 상세 보기", exact: true }).click(); await slowRead;

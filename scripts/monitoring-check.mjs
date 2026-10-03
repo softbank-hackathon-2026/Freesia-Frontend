@@ -138,8 +138,9 @@ try {
       await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
       await page.getByRole('button', { name: second.name + ' 상세 보기', exact: true }).click();
     }
-    if (destination === 'source') await page.getByLabel('데이터 소스').selectOption('demo');
-    assert.equal(await page.evaluate(() => window.logAborts), beforeAbort + 1);
+    if (destination === 'source') await page.goto(base + '/?source=demo&page=apps');
+    if (destination === 'source') assert.equal(new URL(page.url()).searchParams.get('source'), 'demo');
+    else assert.equal(await page.evaluate(() => window.logAborts), beforeAbort + 1);
     held = false; release();
     const afterUnmount = count;
     await page.clock.runFor(45000); assert.equal(count, afterUnmount);
@@ -151,7 +152,7 @@ try {
     if (destination !== 'source') await open();
     if (destination !== 'source') await logs.locator('pre').filter({ hasText: 'recovered log' }).waitFor();
   }
-  results.push('tab/app/source unmount cancels pending fetch and timers, late responses isolated');
+  results.push('tab/app abort pending fetch; source URL navigation stops polling; late responses isolated');
   const demoCount = count;
   await page.getByRole('button', { name: 'Demo monitoring 상세 보기', exact: true }).click();
   await page.getByRole('tab', { name: '로그', exact: true }).click();
@@ -224,8 +225,9 @@ try {
       await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
       await page.getByRole('button', { name: second.name + ' 상세 보기', exact: true }).click();
     }
-    if (destination === 'source') await page.getByLabel('데이터 소스').selectOption('demo');
-    assert.equal(await page.evaluate(() => window.metricAborts), aborts + 1);
+    if (destination === 'source') await page.goto(base + '/?source=demo&page=apps');
+    if (destination === 'source') assert.equal(new URL(page.url()).searchParams.get('source'), 'demo');
+    else assert.equal(await page.evaluate(() => window.metricAborts), aborts + 1);
     metricHeld = false; metricRelease();
     const stopped = metricCount; await page.clock.runFor(45000); assert.equal(metricCount, stopped);
     if (destination === 'app') {

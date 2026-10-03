@@ -269,3 +269,9 @@ Mobile disclosure focuses first navigation item on open and restores the visible
 Approved: app title with parenthesized successful deployment compute and 60-second/latest measurement copy. Existing infra-ai-flow contract contains ownership and checks. Implementation/verification pending on codex/monitoring-label-clarity; no Git publication authorized.
 
 Monitoring clarity implementation and local verification completed: matching successful compute in parentheses,60-second/latest reading copy; check43/E2E24/focused9 and independent source/visual PASS. See infra-ai-flow-eval. Local codex/monitoring-label-clarity diff only, publication/deployment pending.
+
+## Current follow-up — API default entry (2026-10-03)
+The user narrowed demo removal to API-by-default and no upper-right source selector. Demo code/tests retained, explicit source=demo only for internal QA. Applicable Day3 spec/plan and sprint contract section API default entry. Product edit implemented locally on codex/api-only-ui; check/E2E/source/visual verification pending, no publication/deployment.
+
+
+API default entry verification completed 2026-10-03T11:09:11.6806661+09:00: minimal App.tsx edit, retained demo code; check43/E2E25/targeted monitoring+UX+delete/source+visual PASS. See infra-ai-flow-eval.md. Local codex/api-only-ui, no Git publication or deployment.

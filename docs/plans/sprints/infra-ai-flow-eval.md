@@ -559,3 +559,13 @@ Handoff: local implementation+verification complete; source files Applications.t
 
 ## Git publication authorized — 2026-10-03
 User explicitly requested commit, push and merge for the current monitoring clarity diff. origin/main remains verified base bfb0de4, main is unprotected; no new PR creation is performed. Fresh npm test43PASS and diff checkPASS. Commit these approved7files on codex/monitoring-label-clarity, push that branch, then fast-forward main and push; no separate deploy workflow dispatch. Earlier uncommitted status is the pre-publication checkpoint.
+
+
+## API default entry verified — 2026-10-03T11:09:11.6806661+09:00
+User narrowed scope: retain demo implementation, API on normal entry, remove upper-right source selector. Original broad deletion was restored before minimal App.tsx (+1/-15). Explicit source=demo retained for QA. RED before edit; final npm run check PASS(TypeScript/ESLint/43tests/build), test:e2e PASS25groups, monitoring10/UX5/app-delete focused PASS. Independent read-only source review and parent-inspected desktop1440/mobile390 screenshots PASS; no JS errors or document horizontal overflow. Test images use controlled API fixtures, not cloud work.
+Optional standalone redeploy harness encountered its legacy seed-loop fixture failure; it is not counted as passing. Temporary diagnostic code removed; final check rerun PASS. Product deployment/monitoring/navigation functionality unchanged.
+Evidence: project .Codex/plans/2026-10-03-frontend-api-only logs and output/api-default-20261003. Branch codex/api-only-ui, uncommitted/unpushed. No Notion/backend/AWS/dependency changes. Existing unrelated Issue8 contract remains waiting separately.
+
+
+## Direct main publication authorization - 2026-10-03T11:16:12.4238326+09:00
+User explicitly approved committing and pushing this current API-default/no-selector diff directly on main. Origin main confirmed identical to the verified base4513f4, so no integration conflict. Prior local verification remains applicable; product files unchanged since those checks. This authorization supersedes the earlier unpublished handoff; no production deployment or backend/cloud changes included.

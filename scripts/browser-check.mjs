@@ -93,6 +93,14 @@ const deployment = {
   reason: null,
   created_at: "2026-09-30",
 };
+async function switchSource(page, source) {
+  const destination = new URL(page.url());
+  if (!destination.searchParams.has("page")) destination.searchParams.set("page", destination.searchParams.has("app") ? "apps" : "infra");
+  destination.searchParams.set("source", source);
+  destination.searchParams.delete("app");
+  destination.searchParams.delete("tab");
+  await page.goto(destination.href);
+}
 async function openNavigation(page) {
   if (!(await page.locator("#primary-navigation").isVisible()))
     await page
@@ -125,7 +133,6 @@ async function checkDashboardTheme(page) {
     const primary = style(".primary");
     const active = style(".sidebar-link.active");
     const link = style(".text-button");
-    const control = style(".mode-label select");
     return {
       canvas: root.backgroundColor,
       body: window.getComputedStyle(document.body).backgroundColor,
@@ -141,7 +148,6 @@ async function checkDashboardTheme(page) {
       secondaryBorderWidth: style(".secondary").borderTopWidth,
       panelBorderWidth: style(".infra-list").borderTopWidth,
       bannerBorderWidth: style(".source-banner").borderTopWidth,
-      controlBorder: control.borderTopColor,
       activeBackground: active.backgroundColor,
       activeColor: active.color,
       linkColor: link.color,
@@ -163,9 +169,6 @@ async function checkDashboardTheme(page) {
     assert.equal(border, "0px");
   }
   assert.equal(colors.primaryRadius, "6px");
-  assert.equal(colors.controlBorder, "rgb(98, 103, 124)");
-  assert.ok(contrastRatio(colors.controlBorder, "rgb(255, 255, 255)") >= 3);
-  assert.ok(contrastRatio(colors.controlBorder, "rgb(255, 193, 7)") >= 3);
   assert.ok(contrastRatio(colors.primaryColor, colors.primaryBackground) >= 4.5);
   assert.ok(contrastRatio(colors.primaryBackground, "rgb(255, 193, 7)") >= 3);
   assert.equal(colors.activeBackground, "rgb(234, 241, 255)");
@@ -368,6 +371,29 @@ try {
       "C:/Program Files/Google/Chrome/Application/chrome.exe",
     headless: true,
   });
+  // This fixture verifies the public default independently of the retained demo QA flow.
+  const defaultPage = await browser.newPage();
+  const defaultRequests = [];
+  await defaultPage.route("**/api/**", route => {
+    const path = new URL(route.request().url()).pathname;
+    defaultRequests.push(path);
+    const value = path.endsWith("/infra-spaces") ? [{ ...infra, name: "Default API fixture" }]
+      : path.endsWith("/app-spaces") ? [app] : path.endsWith("/repositories") ? [repository] : [];
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify(value) });
+  });
+  await defaultPage.goto(url);
+  await defaultPage.waitForTimeout(500);
+  assert.ok(defaultRequests.some(path => path.endsWith("/infra-spaces")), "plain URL must fetch backend API rather than start the demo");
+  assert.equal(await defaultPage.getByRole("button", { name: "Default API fixture", exact: true }).count(), 1);
+  assert.equal(await defaultPage.getByLabel("데이터 소스", { exact: true }).count(), 0, "upper-right source selector is removed");
+  assert.doesNotMatch(await defaultPage.locator("main").innerText(), /쇼핑몰 서비스|사내 업무 서비스|결제 서비스/);
+  await defaultPage.screenshot({ path: "artifacts/default-api-desktop.png", fullPage: true });
+  await defaultPage.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await defaultPage.getByLabel("데이터 소스", { exact: true }).count(), 0);
+  assert.equal(await defaultPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await defaultPage.screenshot({ path: "artifacts/default-api-mobile.png", fullPage: true });
+  await defaultPage.close();
+  results.push({ name: "default-api-without-source-selector", checks: "plain URL requests controlled backend fixtures, renders API Infra and hides the source selector" });
   const readinessPage=await browser.newPage();
   let readinessKnown=false, readinessPlanReject=false, readinessExisting=false, readinessPlanPosts=0, readinessDeployPosts=0;
   await readinessPage.route("**/api/**",async route=>{
@@ -437,7 +463,7 @@ try {
         }),
       }),
     );
-    await page.goto(url);
+    await page.goto(url + "/?source=demo");
     await checkSidebar(page, name === "mobile");
     await page.getByRole("heading", { name: "인프라 스페이스", exact: true }).waitFor();
     await checkDashboardTheme(page);
@@ -692,7 +718,7 @@ try {
     await page.getByRole("button",{name:"쇼핑몰 서비스",exact:true}).click();
     await page.getByRole("button",{name:"목록으로",exact:true}).click();
     assert.equal(await page.evaluate(()=>localStorage.getItem("freesia.demo.v1")),appStore);
-    await page.getByLabel("데이터 소스").selectOption("api");
+    await switchSource(page, "api");
     await checkSourceBanner(page);
     await page.getByRole("alert").first().waitFor();
     assert.match(
@@ -718,7 +744,7 @@ try {
       await page.locator("main").innerText(),
       /Infra Space 생성, 삭제, 인프라 배포 API는 아직/,
     );
-    await page.getByLabel("데이터 소스").selectOption("demo");
+    await switchSource(page, "demo");
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
@@ -735,7 +761,7 @@ try {
     await page.close();
   }
   const countPage = await browser.newPage();
-  await countPage.goto(url);
+  await countPage.goto(url + "/?source=demo");
   await countPage.evaluate((value) => localStorage.setItem("freesia.demo.v1", JSON.stringify(value)), {
     ...initialDemo(),
     apps: [{ ...app, id: "count-first", infra_id: "demo-public" }, { ...app, id: "count-second", infra_id: "demo-public" }],
@@ -815,7 +841,7 @@ try {
   apiStoreBefore = await apiPage.evaluate(() =>
     localStorage.getItem("freesia.demo.v1"),
   );
-  await apiPage.getByLabel("데이터 소스").selectOption("api");
+  await switchSource(apiPage, "api");
   await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
   const apiInfraPanel = apiPage.locator(".infra-list");
   assert.equal(await apiInfraPanel.getByRole("button", { name: "스페이스 삭제", exact: true }).isDisabled(), true);
@@ -954,7 +980,7 @@ try {
     apiStoreBefore,
     "API lifecycle must not write demo storage",
   );
-  await apiPage.getByLabel("데이터 소스").selectOption("demo");
+  await switchSource(apiPage, "demo");
   await apiPage
     .getByRole("heading", { name: "아직 애플리케이션이 없습니다" })
     .waitFor();
@@ -1119,7 +1145,7 @@ try {
     }
   });
   await racePage.goto(url);
-  await racePage.getByLabel("데이터 소스").selectOption("api");
+  await switchSource(racePage, "api");
   await racePage
     .getByRole("button", { name: "API 기반", exact: true })
     .waitFor();
@@ -1202,7 +1228,7 @@ try {
     }
   });
   await listOnly.goto(url);
-  await listOnly.getByLabel("데이터 소스").selectOption("api");
+  await switchSource(listOnly, "api");
   await listOnly
     .getByRole("button", { name: "API 기반", exact: true })
     .waitFor();
@@ -1270,7 +1296,7 @@ try {
         body: JSON.stringify({ message: "연결 실패" }),
       }),
     );
-    await page.goto(url);
+    await page.goto(url + "/?source=demo");
     for (const name of ["인프라 스페이스", "애플리케이션", "통합"])
       assert.equal(
         await page
@@ -1438,7 +1464,7 @@ try {
       saved.meeting.spaces.every((s) => s.status === "demo_deployed"),
       true,
     );
-    await page.getByLabel("데이터 소스").selectOption("api");
+    await switchSource(page, "api");
     assert.equal(
       await page
         .getByRole("button", { name: "GitHub 연결 · 데모", exact: true })
@@ -1494,7 +1520,7 @@ try {
     const applying = advanceInfraApply({ ...pending, id: "protected-applying", name: "Apply 진행 보호" });
     const completed = advanceInfraApply(advanceInfraApply({ ...applying, id: "protected-completed", name: "배포 완료 보호" }));
     const fixture = { ...initialDemo(), apps: [{ ...app, infra_id: linked.id }], meeting: { spaces: [target, retained, linked, legacy, pending, applying, completed], github: null } };
-    await deletePage.goto(url);
+    await deletePage.goto(url + "/?source=demo");
     await deletePage.evaluate(value => localStorage.setItem("freesia.demo.v1", JSON.stringify(value)), fixture);
     await deletePage.reload();
     const before = await deletePage.evaluate(() => JSON.parse(localStorage.getItem("freesia.demo.v1")));
@@ -1548,7 +1574,7 @@ try {
     const pointed = { ...target, id: "pointer-only", name: "배포 포인터 보호", latest_deployment_id: "unknown-history" };
     const fixture = { ...initialDemo(), apps: [target, retained, ...protectedApps, pointed], deployments: histories, designs: [makeDesign("설계 보존", "보존", { region: "ap-northeast-2", visibility: "private", availability: "single" })], meeting: { spaces: [makeInfraSpace({ name: "인프라 보존" })], github: registerRepository(null, target.repo_url) } };
     await deletePage.route("**/api/**", route => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "모드 전환 테스트 연결 실패" }) }));
-    await deletePage.goto(url);
+    await deletePage.goto(url + "/?source=demo");
     await deletePage.evaluate(value => localStorage.setItem("freesia.demo.v1", JSON.stringify(value)), fixture);
     await deletePage.reload();
     await navigate(deletePage, "애플리케이션");
@@ -1615,10 +1641,10 @@ try {
     assert.deepEqual(await deletePage.evaluate(() => JSON.parse(localStorage.getItem("freesia.demo.v1"))), before);
     await deletePage.keyboard.press("Escape");
     await opener.click();
-    await deletePage.getByLabel("데이터 소스", { exact: true }).selectOption("api");
+    await switchSource(deletePage, "api");
     assert.equal(await deletePage.getByRole("dialog", { name: "애플리케이션 삭제", exact: true }).count(), 0);
     assert.deepEqual(await deletePage.evaluate(() => JSON.parse(localStorage.getItem("freesia.demo.v1"))), before);
-    await deletePage.getByLabel("데이터 소스", { exact: true }).selectOption("demo");
+    await switchSource(deletePage, "demo");
     await opener.click();
     await deletePage.locator(".sidebar-nav").getByRole("button", { name: "인프라 스페이스", exact: true, includeHidden: true }).evaluate(element => element.click());
     assert.equal(await deletePage.getByRole("dialog", { name: "애플리케이션 삭제", exact: true }).count(), 0);
@@ -1637,7 +1663,7 @@ try {
       apps: [{ ...app, infra_id: preserved.id }],
       meeting: { spaces: [discarded,preserved], github: null },
     };
-    await cancelPage.goto(url);
+    await cancelPage.goto(url + "/?source=demo");
     await cancelPage.evaluate((value)=>localStorage.setItem("freesia.demo.v1",JSON.stringify(value)),fixture);
     await cancelPage.reload();
     assert.equal(await cancelPage.getByRole("heading",{name:"이전 별도 설계 · 읽기 전용",exact:true}).count(),0);
@@ -1683,7 +1709,7 @@ try {
   legacyRepositories.repositories[0].branch = "develop";
   legacyRepositories.registeredIds = [legacyRepositories.repositories[0].id];
   const branchRepositories = registerRepository(legacyRepositories,legacyRepositories.repositories[0].repo_url);
-  await branchPage.goto(url);
+  await branchPage.goto(url + "/?source=demo");
   await branchPage.evaluate((github)=>localStorage.setItem("freesia.demo.v1",JSON.stringify({version:1,designs:[],apps:[],deployments:[],meeting:{spaces:[],github}})),branchRepositories);
   await branchPage.reload();
   await navigate(branchPage,"애플리케이션");
@@ -1723,13 +1749,13 @@ try {
     if(path.endsWith("/infra-spaces"))return json([infra]);
     if(path.endsWith("/app-spaces"))return json([]);
   });
-  await repositoryRace.goto(url);
+  await repositoryRace.goto(url + "/?source=demo");
   await navigate(repositoryRace,"통합");
   await openIntegrationForm(repositoryRace);
   await repositoryRace.getByLabel("Repository URL",{exact:true}).fill("https://github.com/demo/only");
   await repositoryRace.getByRole("button",{name:"Repository 등록",exact:true}).click();
   const demoRegistry=await repositoryRace.evaluate(()=>localStorage.getItem("freesia.demo.v1"));
-  await repositoryRace.getByLabel("데이터 소스").selectOption("api");
+  await switchSource(repositoryRace, "api");
   await repositoryRace.getByRole("button",{name:"등록 해제: team/web (main)",exact:true}).waitFor();
   await openIntegrationForm(repositoryRace);
   await repositoryRace.getByLabel("Repository URL",{exact:true}).fill("https://github.com/team/late");
@@ -1739,7 +1765,7 @@ try {
   await pendingRepository;
   assert.equal(await repositoryRace.getByRole("button", { name: "목록으로", exact: true }).isDisabled(), true);
   assert.equal(await repositoryRace.getByRole("button", { name: "취소", exact: true }).isDisabled(), true);
-  await repositoryRace.getByLabel("데이터 소스").selectOption("demo");
+  await switchSource(repositoryRace, "demo");
   await openIntegrationForm(repositoryRace);
   await repositoryRace.getByLabel("Repository URL",{exact:true}).fill("https://github.com/demo/unfinished");
   releaseRepositoryPost();
@@ -1749,7 +1775,7 @@ try {
   assert.equal(await repositoryRace.locator(".repository-row").count(),0);
   assert.equal(await repositoryRace.getByLabel("Repository URL",{exact:true}).inputValue(),"https://github.com/demo/unfinished");
   assert.equal(await repositoryRace.evaluate(()=>localStorage.getItem("freesia.demo.v1")),demoRegistry);
-  await repositoryRace.getByLabel("데이터 소스").selectOption("api");
+  await switchSource(repositoryRace, "api");
   await repositoryRace.getByRole("button",{name:"등록 해제: team/late (main)",exact:true}).waitFor();
   assert.equal(await repositoryRace.locator(".repository-row").count(),2);
   await openIntegrationForm(repositoryRace);
@@ -1773,7 +1799,7 @@ try {
   await repositoryRace.close();
   results.push({name:"repository-mode-race",checks:"pending form Back/cancel disabled; source and main-navigation unmount ignore late API registration; demo input/storage retained; reentry reloads actual fixture list passed"});
   const quota = await browser.newPage();
-  await quota.goto(url);
+  await quota.goto(url + "/?source=demo");
   await createInfra(quota,"retain-code"); await answerInfra(quota,"<script>window.bad=1</script> 저장 오류 확인용");
   await quota.getByRole("button",{name:"답변으로 Terraform 생성",exact:true}).click();
   assert.doesNotMatch(await quota.getByLabel("Terraform 코드").innerText(),/window.bad/);
@@ -1793,7 +1819,7 @@ try {
       throw new DOMException("quota", "QuotaExceededError");
     };
   });
-  await infraQuota.goto(url);
+  await infraQuota.goto(url + "/?source=demo");
   await infraQuota
     .getByRole("button", { name: "스페이스 생성", exact: true })
     .click();
@@ -1830,7 +1856,7 @@ try {
       return original.call(this, key, value);
     };
   });
-  await pipelineQuota.goto(url);
+  await pipelineQuota.goto(url + "/?source=demo");
   await appForm(pipelineQuota, "retain-plan", "demo-public");
   await pipelineQuota
     .getByRole("button", { name: "애플리케이션 생성", exact: true })
@@ -1881,7 +1907,7 @@ try {
   await corrupt.addInitScript(() =>
     localStorage.setItem("freesia.demo.v1", '{"version":99}'),
   );
-  await corrupt.goto(url);
+  await corrupt.goto(url + "/?source=demo");
   await corrupt.getByRole("alert").waitFor();
   await navigate(corrupt, "애플리케이션");
   assert.equal(await corrupt.getByRole("button", { name: "애플리케이션 삭제", exact: true }).isDisabled(), true);
@@ -1899,7 +1925,7 @@ try {
   const legacyProgress = await browser.newPage();
   const oldDeployment={...deployment,id:"demo-old",app_space_id:"demo-old-app",status:"success",url:null};
   const oldApp={...app,id:"demo-old-app",name:"이전 배포",infra_id:"demo-public",latest_deployment_id:"demo-old"};
-  await legacyProgress.goto(url);
+  await legacyProgress.goto(url + "/?source=demo");
   await legacyProgress.evaluate(({oldApp,oldDeployment,state})=>{state.apps=[oldApp];state.deployments=[oldDeployment];localStorage.setItem("freesia.demo.v1",JSON.stringify(state));},{oldApp,oldDeployment,state:initialDemo()});
   await legacyProgress.goto(url+"/?source=demo&app=demo-old-app");
   await legacyProgress.getByRole("heading",{name:"이전 배포 (Lambda)",exact:true}).waitFor();

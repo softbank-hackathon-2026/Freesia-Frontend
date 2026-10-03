@@ -2,7 +2,7 @@
 
 Freesia는 준비된 인프라에 애플리케이션을 배포하고, 진행 상황과 자원 상태를 확인하는 플랫폼입니다. 이 저장소는 **React + TypeScript + Vite 기반 관리 콘솔**을 담당합니다.
 
-- [운영 콘솔 — API 모드](https://sbh.howon.me/?source=api)
+- [운영 콘솔](https://sbh.howon.me/)
 - 관련 저장소: [백엔드](https://github.com/softbank-hackathon-2026/Freesia-backend) · [앱 배포 워크플로](https://github.com/softbank-hackathon-2026/workload-deploy) · [플랫폼 인프라](https://github.com/softbank-hackathon-2026/platform-terraform)
 
 ## 1. 화면과 사용 흐름
@@ -36,7 +36,7 @@ flowchart LR
 
 ## 2. 로컬 실행
 
-필수 환경: **Node.js 24 이상**, npm. API 모드는 별도로 실행한 [Freesia 백엔드](https://github.com/softbank-hackathon-2026/Freesia-backend#readme)가 필요합니다.
+필수 환경: **Node.js 24 이상**, npm. 기본 API 화면은 별도로 실행한 [Freesia 백엔드](https://github.com/softbank-hackathon-2026/Freesia-backend#readme)가 필요합니다.
 
 ```sh
 npm ci
@@ -45,10 +45,10 @@ npm run dev
 
 | 접속 주소 | 데이터와 동작 |
 |---|---|
-| [localhost:5173](http://localhost:5173/) 또는 [데모 모드](http://localhost:5173/?source=demo) | 기본 모드. 브라우저 `localStorage`에 저장하는 샘플 데이터이며 실제 클라우드 작업을 하지 않음 |
-| [API 모드](http://localhost:5173/?source=api) | 백엔드가 반환한 데이터를 사용. 실제 배포 여부는 연결한 백엔드의 설정에 따름 |
+| [localhost:5173](http://localhost:5173/) | 기본 화면. 백엔드가 반환한 데이터를 사용하며 실제 배포 여부는 연결한 백엔드 설정에 따름 |
+| [명시적인 데모 QA 경로](http://localhost:5173/?source=demo) | 기존 데모 구현과 회귀 검사를 보존하는 경로. 브라우저 `localStorage`의 샘플 데이터 사용 |
 
-API 오류가 발생해도 데모 데이터로 자동 대체하지 않습니다. 두 모드의 데이터는 별개입니다.
+화면 오른쪽 위 데이터 소스 선택기는 제거했습니다. 일반 URL은 API로 시작하고, API 오류를 데모 데이터로 자동 대체하지 않습니다. 기존 데모 코드와 테스트는 유지하며 두 모드의 데이터는 별개입니다.
 
 ### 백엔드 연결
 
@@ -71,7 +71,7 @@ VITE_API_BASE_URL=/api
 
 ### 자주 확인할 사항
 
-- **서버 데이터 대신 샘플이 보임:** URL의 `source=api` 여부를 확인합니다.
+- **서버 데이터를 확인하려면:** 기본 URL로 접속합니다. 기존 `source=demo` 링크는 명시적으로 데모 QA 경로를 엽니다.
 - **API 연결 실패:** 백엔드 실행 상태, 8000 포트, `VITE_API_BASE_URL`의 `/api`, 직접 연결 시 CORS를 확인합니다.
 - **트리가 비어 있음:** 해당 배포의 자원 API가 목록을 반환하는지 확인합니다. 빈 목록을 임의의 샘플 자원으로 채우지 않습니다.
 - **5173 포트를 사용할 수 없음:** 기존 개발 서버를 사용하거나 종료한 뒤 재실행합니다. Vite는 `strictPort`를 사용합니다.

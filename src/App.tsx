@@ -31,7 +31,7 @@ function readRoute(): Route {
     ? requestedPage : params.get("app") ? "apps" : "infra";
   const app = page === "apps" ? params.get("app") || null : null;
   const tab = params.get("tab");
-  return { source: params.get("source") === "api" ? "api" : "demo", page, app,
+  return { source: params.get("source") === "demo" ? "demo" : "api", page, app,
     tab: app && (tab === "logs" || tab === "metrics") ? tab : "overview" };
 }
 function load() {
@@ -215,9 +215,6 @@ export default function App() {
     if (url.href !== location.href) history[replace ? "replaceState" : "pushState"](null, "", url);
     applyRoute(next);
   }
-  function changeMode(next: DataMode) {
-    if (next !== mode) navigate({ source: next, page, app: null, tab: "overview" });
-  }
   function nav(next: Route["page"]) {
     discardDialog.current?.close();
     setMenuOpen(false);
@@ -376,17 +373,6 @@ export default function App() {
               softbank-hackathon<small>인프라에서 애플리케이션까지</small>
             </span>
           </div>
-          <label className="mode-label">
-            데이터 소스
-            <select
-              aria-label="데이터 소스"
-              value={mode}
-              onChange={(e) => changeMode(e.target.value as DataMode)}
-            >
-              <option value="demo">데모</option>
-              <option value="api">백엔드 API</option>
-            </select>
-          </label>
         </div>
       </header>
       <div className="workspace">

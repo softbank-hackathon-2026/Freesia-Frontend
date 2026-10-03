@@ -23,7 +23,7 @@ try {
   const confirm = dialog.getByRole('button',{name:'이 설정으로 재배포 · 데모',exact:true});
   const saved = ()=>page.evaluate(()=>JSON.parse(localStorage.getItem('freesia.demo.v1')));
   await page.route('**/api/**',route=>{requests.push(route.request().url());return route.abort();});
-  await page.goto(base);
+  await page.goto(base + "/?source=demo");
   const seed = async (value=state)=>{
     await page.evaluate(value=>localStorage.setItem('freesia.demo.v1',JSON.stringify(value)),value);
     await page.goto(`${base}/?source=demo&app=${app.id}`);
@@ -122,7 +122,7 @@ try {
   assert.equal(await dialog.isVisible(),false);
   assert.deepEqual(await saved(),beforeApi,'API cannot change demo storage');
   await openApi();await opener.click();
-  await page.getByLabel('데이터 소스').evaluate(el=>{el.value='demo';el.dispatchEvent(new window.Event('change',{bubbles:true}));});
+  await page.goto(base + '/?source=demo&page=apps');
   assert.equal(await dialog.isVisible(),false,'source change unmounts confirmation');
   assert.deepEqual(mutations,[`/api/app-spaces/${app.id}/analysis`]);
   await seed();await opener.click();

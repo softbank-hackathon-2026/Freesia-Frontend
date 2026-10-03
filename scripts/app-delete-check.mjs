@@ -35,6 +35,7 @@ try {
     await page.goto(base+"/?source=api");
     await page.locator(".sidebar-nav").getByRole("button",{name:"애플리케이션",exact:true}).click();
     await page.getByRole("button",{name:app.name+" 상세 보기",exact:true}).waitFor();
+    await page.waitForFunction(() => [...document.querySelectorAll(".section-heading button")].some(button => button.textContent.trim() === "애플리케이션 삭제" && !button.disabled));
   };
   const opener = page.getByRole("button",{name:"애플리케이션 삭제",exact:true});
   const dialog = page.getByRole("dialog",{name:"애플리케이션 삭제",exact:true});
@@ -71,7 +72,7 @@ try {
   await mkdir("artifacts",{recursive:true});await page.screenshot({path:"artifacts/app-delete-api.png",fullPage:true});
   apps=[app];outcome="hold";await open();await opener.click();await confirm.click();
   await page.waitForFunction(()=>document.querySelector("#app-discard-target")?.disabled);
-  await page.getByLabel("데이터 소스",{exact:true}).evaluate(select => {select.value="demo";select.dispatchEvent(new window.Event("change",{bubbles:true}));});
+  await page.goto(base + "/?source=demo&page=apps");
   await page.getByText(/데모 모드 ·/).waitFor();
   release();
   await page.getByRole("button",{name:"애플리케이션 삭제",exact:true}).waitFor();

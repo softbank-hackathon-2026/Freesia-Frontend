@@ -41,7 +41,6 @@ try {
   assert.ok(infras.length > 0);
   await page.goto(baseURL);
   const demoBefore = await page.evaluate(() => localStorage.getItem("freesia.demo.v1"));
-  await page.getByLabel("데이터 소스").selectOption("api");
   await navigate("통합");
   assert.equal(await page.getByLabel("Repository URL").count(), 0);
   await page.getByRole("button", { name: "등록", exact: true }).click();
@@ -65,7 +64,6 @@ try {
   const invalid = await api.post(baseURL + "/api/repositories", { data: { repo_url: "https://example.com/invalid" } });
   assert.equal(invalid.status(), 422);
   await page.reload();
-  await page.getByLabel("데이터 소스").selectOption("api");
   await navigate("통합");
   await page.getByRole("button", { name: "등록 해제: " + repo.name + " (main)", exact: true }).waitFor();
   await page.screenshot({ path: "artifacts/local-api-integration-desktop.png", fullPage: true });
@@ -130,7 +128,6 @@ try {
   assert.equal(await page.locator(".pipeline-steps li").count(),6);
   await page.waitForFunction(()=>Number(document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value"))>0);
   await page.reload();
-  await page.getByLabel("데이터 소스").selectOption("api");
   await navigate("애플리케이션");
   if (await page.getByRole("button",{name:new RegExp(appName)}).count()) await page.getByRole("button",{name:new RegExp(appName)}).click();
   await page.waitForFunction(()=>document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value")==="100",{},{timeout:45000});
