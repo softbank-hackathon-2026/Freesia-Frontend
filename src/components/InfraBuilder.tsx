@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { InfraSpace } from "../lib/types.ts";
+import { getInfraProvider } from "../lib/providers.ts";
 import { advanceInfraApply, generateInfra, reviseInfra, startInfraApply } from "../lib/infraFlow.ts";
 import type { MeetingInfraSpace } from "../lib/meeting.ts";
 
 function InfraDesignLayout({ name, description, actions, notice, children }: {
   name: string;
-  description: string;
+  description: ReactNode;
   actions: ReactNode;
   notice: ReactNode;
   children: ReactNode;
@@ -31,7 +32,7 @@ function InfraDesignLayout({ name, description, actions, notice, children }: {
 export function ApiInfraBuilder({ space, onCancel }: { space: InfraSpace; onCancel: () => void }) {
   return <InfraDesignLayout
     name={space.name}
-    description={space.description}
+    description={<>{space.description}<span className="infra-provider-label">{getInfraProvider(space.provider).label}</span></>}
     actions={<button onClick={onCancel}>목록으로</button>}
     notice={<div className="notice">연동 대기 · 서버에서 받은 Infra Space 정보입니다. 요구사항 대화·Terraform·Apply 이력은 현재 API에서 제공하지 않습니다.</div>}
   >

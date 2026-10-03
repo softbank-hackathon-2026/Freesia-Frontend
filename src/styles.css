@@ -383,6 +383,36 @@ td small {
 .infra-list td:nth-child(4) { white-space: nowrap; }
 .infra-list .text-button { overflow-wrap: anywhere; }
 .infra-list .scroll-hint { padding-top: 0; }
+.infra-list tr[data-provider="aws"],
+.infra-list tr[data-provider="azure"],
+.infra-list tr[data-provider="gcp"] { background: #fff7ed; }
+.infra-list tr[data-provider="onprem"] { background: #f3f4f6; }
+.infra-list tr[data-provider="unknown"] { background: #fff; }
+.infra-identity { display: flex; align-items: flex-start; gap: 14px; }
+.infra-provider-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--muted);
+}
+.infra-provider-icon img { width: 48px; height: 48px; object-fit: contain; }
+.infra-provider-icon > span { font-size: 24px; }
+.infra-name { min-width: 0; }
+.infra-provider-label {
+  display: block;
+  width: fit-content;
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .empty {
   padding: 48px 24px;
   text-align: center;

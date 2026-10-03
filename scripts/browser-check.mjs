@@ -562,6 +562,92 @@ try {
   await defaultPage.screenshot({ path: "artifacts/default-api-mobile.png", fullPage: true });
   await defaultPage.close();
   record({ name: "default-api-without-source-selector", checks: "plain URL requests controlled backend fixtures, renders API Infra and hides the source selector" });
+  const providerPage = await browser.newPage();
+  const providerCases = [
+    { provider: "aws", label: "AWS", icon: "/providers/aws.png" },
+    { provider: "onprem", label: "온프레미스", icon: "/providers/on-premise.png" },
+    { provider: "gcp", label: "GCP", icon: "/providers/gcp.png" },
+    { provider: "azure", label: "Azure", icon: "/providers/azure.png" },
+    { provider: "future-provider", label: "환경 미확인" },
+    { provider: null, label: "환경 미확인" },
+    { label: "환경 미확인" },
+  ];
+  const providerInfras = providerCases.map((item, index) => ({
+    ...infra, id: `provider-${index}`, name: `Provider fixture ${index + 1}`,
+    ...(Object.hasOwn(item, "provider") ? { provider: item.provider } : {}),
+  }));
+  const providerCalls = [];
+  await providerPage.route("**/api/**", route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace(/^\/api/, "");
+    providerCalls.push({ path, method: request.method() });
+    const detail = providerInfras.find(item => path === `/infra-spaces/${item.id}`);
+    const value = path === "/infra-spaces" ? providerInfras : detail ?? [];
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify(value) });
+  });
+  await providerPage.goto(url + "/?source=api&page=infra");
+  const providerPanel = providerPage.locator(".infra-list");
+  await providerPanel.getByRole("button", { name: providerInfras[0].name, exact: true }).waitFor();
+  for (const [size, viewport] of [["desktop", { width: 1440, height: 1050 }], ["mobile", { width: 390, height: 844 }]]) {
+    await providerPage.setViewportSize(viewport);
+    assert.deepEqual(await providerPanel.getByRole("columnheader").allTextContents(), ["이름", "네트워크 구성", "연결된 애플리케이션", "생성된 시간"]);
+    const backgrounds = [];
+    for (const [index, item] of providerCases.entries()) {
+      const row = providerPanel.locator("tbody tr").filter({ has: providerPage.getByRole("button", { name: providerInfras[index].name, exact: true }) });
+      assert.equal(await row.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
+      const cell = row.getByRole("cell").first();
+      assert.equal(await cell.getByText(item.label, { exact: true }).count(), 1);
+      assert.match(await cell.innerText(), new RegExp(providerInfras[index].id));
+      backgrounds.push(await row.evaluate(element => window.getComputedStyle(element).backgroundColor));
+      if (item.icon) {
+        const icon = cell.locator(`img[src="${item.icon}"]`);
+        assert.equal(await icon.count(), 1);
+        await icon.evaluate(image => image.decode());
+        assert.ok(await icon.evaluate(image => image.naturalWidth > 0 && image.naturalHeight > 0));
+        const iconBox = await icon.boundingBox();
+        const nameBox = await cell.getByRole("button", { name: providerInfras[index].name, exact: true }).boundingBox();
+        assert.ok(iconBox.x + iconBox.width <= nameBox.x + 1, "provider icon precedes the name");
+      } else {
+        assert.equal(await cell.locator("img").count(), 0, "unknown provider has no fabricated cloud logo");
+        assert.equal(await cell.getByText("AWS", { exact: true }).count(), 0);
+      }
+    }
+    assert.equal(backgrounds[0], backgrounds[2]);
+    assert.equal(backgrounds[0], backgrounds[3]);
+    const orange = backgrounds[0].match(/[\d.]+/g).slice(0, 3).map(Number);
+    assert.ok(orange[0] >= 245 && orange[0] > orange[1] && orange[1] > orange[2] && orange[2] >= 210, "cloud rows use pale orange");
+    const gray = backgrounds[1].match(/[\d.]+/g).slice(0, 3).map(Number);
+    assert.ok(Math.min(...gray) >= 230 && Math.max(...gray) - Math.min(...gray) <= 12, "on-premise rows use pale gray");
+    assert.equal(backgrounds[4], backgrounds[5]);
+    assert.equal(backgrounds[4], backgrounds[6]);
+    assert.notEqual(backgrounds[4], backgrounds[0], "unknown providers keep a neutral background");
+    assert.equal(await providerPage.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+    if (size === "mobile") {
+      const scroller = providerPanel.locator(".table-scroll");
+      assert.ok(await scroller.evaluate(element => element.scrollWidth > element.clientWidth));
+      await scroller.focus();
+      await providerPage.keyboard.press("ArrowRight");
+      await providerPage.waitForFunction(() => document.querySelector(".infra-list .table-scroll").scrollLeft > 0);
+      await scroller.evaluate(element => { element.scrollLeft = 0; });
+    }
+    await providerPage.screenshot({ path: `artifacts/infra-providers-${size}.png`, fullPage: true });
+    for (const [index, item] of providerCases.entries()) {
+      const name = providerInfras[index].name;
+      const button = providerPanel.getByRole("button", { name, exact: true });
+      await button.focus();
+      await providerPage.keyboard.press("Enter");
+      await providerPage.getByRole("heading", { name, exact: true }).waitFor();
+      assert.ok(await providerPage.locator("main").getByText(item.label, { exact: true }).count() > 0, "selected infra keeps its provider label");
+      if (!item.icon) assert.equal(await providerPage.locator("main img[src='/providers/aws.png']").count(), 0);
+      assert.equal(await providerPage.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+      if (index === 1) await providerPage.screenshot({ path: `artifacts/infra-provider-detail-${size}.png`, fullPage: true });
+      await providerPage.getByRole("button", { name: "목록으로", exact: true }).click();
+    }
+  }
+  assert.ok(providerCalls.length > 0);
+  assert.ok(providerCalls.every(call => call.method === "GET"), "provider rendering never mutates backend or infrastructure");
+  await providerPage.close();
+  record({ name: "infra-provider-icons", checks: "four loaded provider icons, preserved columns/IDs, cloud/on-premise/unknown backgrounds, null/missing/unknown safety, keyboard detail navigation and mobile internal scroll" });
   const readinessPage=await browser.newPage();
   await readinessPage.emulateMedia({ reducedMotion: "reduce" });
   let readinessKnown=false, readinessPlanReject=false, readinessExisting=false, readinessPlanPosts=0, readinessDeployPosts=0;
