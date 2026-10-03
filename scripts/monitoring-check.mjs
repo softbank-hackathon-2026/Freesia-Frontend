@@ -1,14 +1,16 @@
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { setTimeout, clearTimeout } from 'node:timers';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rmdir, unlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { initialDemo } from '../src/lib/demo.ts';
 
 const base = process.env.MONITORING_CHECK_URL || 'http://localhost:15173';
 const server = process.env.MONITORING_CHECK_URL ? null : spawn(process.execPath,
   ['node_modules/vite/bin/vite.js', '--host', 'localhost', '--port', '15173', '--strictPort'], { stdio: 'pipe' });
-let browser;
+let browser, exportDirectory, exportPath;
 const results = [];
 try {
   if (server) await new Promise((resolve, reject) => {
@@ -25,7 +27,7 @@ try {
   const at = '2026-10-02T09:00:00Z';
   const app = { id: 'monitor-a', name: 'Monitoring A', repo_url: 'https://github.com/example/a', branch: 'main', infra_id: 'infra', created_at: at, latest_deployment_id: 'ec2-logs-deployment' };
   const second = { ...app, id: 'monitor-b', name: 'Monitoring B', latest_deployment_id: null };
-  const demo = { ...initialDemo(), apps: [{ ...app, id: 'demo-monitor', name: 'Demo monitoring', latest_deployment_id: null }] };
+  const demo = { ...initialDemo(), apps: [{ ...app, id: 'demo-monitor', name: 'Demo monitoring', latest_deployment_id: 'demo-monitor-success' }], deployments: [{ id: 'demo-monitor-success', app_space_id: 'demo-monitor', compute: 'ecs-fargate', status: 'success', url: null, reason: null, created_at: at }] };
   await page.addInitScript(value => {
     localStorage.setItem('freesia.demo.v1', JSON.stringify(value));
     window.logAborts = 0; window.metricAborts = 0;
@@ -67,6 +69,7 @@ try {
     if (titleDeployment && path.endsWith('/deployments/' + titleDeployment.id + '/events')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `event: progress\ndata: ${JSON.stringify({ status: titleDeployment.status, progress: titleDeployment.status === 'success' ? 100 : 0, message: 'title fixture', step: 'complete', at, url: null })}\n\n` });
     if (titleDeployment && path.endsWith('/deployments/' + titleDeployment.id + '/resources')) return json([]);
     if (titleDeployment && path.endsWith('/deployments/' + titleDeployment.id)) return json(titleDeployment);
+    if ([app.id, second.id].some(id => path.endsWith('/app-spaces/' + id + '/redeploy-context'))) return json({ error: 'redeploy_unsupported', message: 'Monitoring fixture has no redeployment context' }, 404);
     if ([app.id, second.id].some(id => path.endsWith('/app-spaces/' + id + '/analysis'))) return json({ error: 'analysis_not_found', message: 'Fixture has no saved analysis' }, 404);
     if (path.endsWith('/repositories')) return json([]);
     if (path.endsWith('/infra-spaces')) return json([{ id: 'infra', name: 'Fixture', description: '', network: 'public', computes: ['ecs-fargate'], app_count: 2 }]);
@@ -82,6 +85,235 @@ try {
   };
   const logs = page.getByRole('region', { name: '애플리케이션 로그', exact: true });
   const refresh = () => logs.getByRole('button', { name: '로그 새로고침', exact: true });
+  const observation = page.getByRole('region', { name: '배포 후 운영 확인', exact: true });
+  const inlineLogs = observation.getByRole('region', { name: '애플리케이션 로그', exact: true });
+  const inlineMetrics = observation.getByRole('region', { name: '모니터링', exact: true });
+  const inlineRefresh = () => inlineLogs.getByRole('button', { name: '로그 새로고침', exact: true });
+  const inlineMetricRefresh = () => inlineMetrics.getByRole('button', { name: '지표 새로고침', exact: true });
+  const downloadButton = scope => scope.getByRole('button', { name: '로그 .txt 다운로드', exact: true });
+  const exportUnavailable = async scope => {
+    if (await downloadButton(scope).count()) assert.ok(await downloadButton(scope).isDisabled());
+  };
+  const inlineReady = async () => {
+    await page.waitForFunction(() => {
+      const scope = document.querySelector('[aria-label="배포 후 운영 확인"]');
+      return scope && [...scope.querySelectorAll('button')].filter(button => /새로고침/.test(button.textContent)).every(button => !button.disabled);
+    });
+  };
+  const overview = async () => {
+    await page.goto(base + '/?source=api&app=' + app.id);
+    await page.locator('.page-heading h1').filter({ hasText: app.name }).waitFor();
+  };
+  const originalName = app.name;
+  const originalPayload = JSON.parse(JSON.stringify(payload));
+  const fetchedLines = Array.from({ length: 100 }, (_, index) => ({
+    at: new Date(Date.parse(at) + index * 1000).toISOString(),
+    message: `한글 로그 ${String(index + 1).padStart(3, '0')} · ${index === 99 ? '<img src=x onerror="window.logExecuted=true"> 마지막 내용' : '애플리케이션 본문'}`,
+  }));
+  app.name = '한글 서비스: 테스트 / 샘플?';
+  payload = { status: 'ok', message: null, lines: fetchedLines };
+  await mkdir('artifacts', { recursive: true });
+  await page.clock.install({ time: new Date('2026-10-03T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-10-03T00:00:01Z'));
+  metricHeld = true;
+  const initialMetricPending = new Promise(resolve => metricStarted = resolve);
+  const initialReads = { logs: count, metrics: metricCount };
+  await overview();
+  await observation.waitFor();
+  await initialMetricPending;
+  await inlineLogs.locator('pre').filter({ hasText: '한글 로그 100' }).waitFor();
+  assert.equal(count, initialReads.logs + 1);
+  assert.equal(metricCount, initialReads.metrics + 1);
+  assert.ok(await inlineMetricRefresh().isDisabled());
+  await inlineMetrics.getByText('지표 조회 중…', { exact: true }).waitFor();
+  const preview = await inlineLogs.locator('pre').innerText();
+  assert.equal(preview.split('\n').length, 15);
+  assert.match(preview, /한글 로그 086/);
+  assert.doesNotMatch(preview, /한글 로그 001/);
+  assert.equal(await inlineLogs.locator('img').count(), 0);
+  assert.equal(await page.evaluate(() => window.logExecuted), undefined);
+  assert.ok(await downloadButton(inlineLogs).isEnabled());
+  metricHeld = false; metricRelease();
+  await inlineMetrics.getByText('120.68 ms', { exact: true }).waitFor();
+  await inlineReady();
+  results.push('successful result immediately reads logs and metrics independently; held metrics do not block latest15 escaped logs');
+
+  const beforeDownload = { logs: count, metrics: metricCount };
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'unfetched replacement must not enter export' }] };
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    downloadButton(inlineLogs).click(),
+  ]);
+  assert.match(download.suggestedFilename(), /^한글.*\d{8}-\d{6}\.txt$/);
+  assert.doesNotMatch(download.suggestedFilename(), /[<>:"/\\|?*]|\p{Cc}/u);
+  // Playwright holds its target file exclusively while saving on Windows.
+  // Keep that target outside Vite's watched project to avoid watcher EBUSY.
+  exportDirectory = await mkdtemp(join(tmpdir(), 'freesia-post-deploy-'));
+  exportPath = join(exportDirectory, 'logs.txt');
+  await download.saveAs(exportPath);
+  const bytes = await readFile(exportPath);
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+  const exported = bytes.subarray(3).toString('utf8');
+  assert.doesNotMatch(exported.replaceAll('\r\n', ''), /[\r\n]/);
+  const exportedLines = exported.split('\r\n').filter(Boolean);
+  assert.equal(exportedLines.length, 100);
+  fetchedLines.forEach((line, index) => {
+    assert.ok(exportedLines[index].includes(line.at));
+    assert.ok(exportedLines[index].endsWith(line.message));
+  });
+  assert.doesNotMatch(exported, /unfetched replacement/);
+  assert.deepEqual({ logs: count, metrics: metricCount }, beforeDownload);
+  payload = { status: 'ok', message: null, lines: fetchedLines };
+  results.push('TXT export preserves fetched100 snapshot, UTC timestamps, Korean UTF8 BOM/CRLF and safe timestamped filename without another GET');
+  await page.screenshot({ path: 'artifacts/post-deploy-observation-desktop.png', fullPage: true });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'artifacts/post-deploy-observation-mobile.png', fullPage: true });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  results.push('inline successful result captures desktop1440/mobile390 with no page overflow');
+  const beforeTabs = { logs: count, metrics: metricCount };
+  await page.getByRole('tab', { name: '로그', exact: true }).click();
+  await logs.locator('pre').filter({ hasText: '한글 로그 001' }).waitFor();
+  assert.equal((await logs.locator('pre').innerText()).split('\n').length, 100);
+  assert.equal(count, beforeTabs.logs + 1);
+  assert.equal(metricCount, beforeTabs.metrics);
+  assert.ok(await downloadButton(logs).isEnabled());
+  await page.getByRole('tab', { name: '개요', exact: true }).click();
+  await inlineReady();
+  assert.equal((await inlineLogs.locator('pre').innerText()).split('\n').length, 15);
+  assert.equal(count, beforeTabs.logs + 2);
+  assert.equal(metricCount, beforeTabs.metrics + 1);
+  results.push('existing logs tab retains all100 and download; overview remounts15-line preview with both independent reads');
+
+  const beforeInlinePoll = { logs: count, metrics: metricCount };
+  await page.clock.runFor(14999);
+  assert.deepEqual({ logs: count, metrics: metricCount }, beforeInlinePoll);
+  metricHeld = true;
+  const inlineMetricPending = new Promise(resolve => metricStarted = resolve);
+  await page.clock.runFor(1); await inlineMetricPending;
+  await page.waitForFunction(() => !document.querySelector('[aria-label="배포 후 운영 확인"] [aria-label="애플리케이션 로그"] button')?.disabled);
+  assert.equal(count, beforeInlinePoll.logs + 1);
+  assert.equal(metricCount, beforeInlinePoll.metrics + 1);
+  await page.clock.runFor(45000);
+  assert.equal(metricCount, beforeInlinePoll.metrics + 1);
+  assert.ok(await inlineMetricRefresh().isDisabled());
+  metricHeld = false; metricRelease(); await inlineReady();
+  const metricsAfterCompletion = metricCount;
+  await page.clock.runFor(14999); assert.equal(metricCount, metricsAfterCompletion);
+  await page.clock.runFor(1); await inlineReady();
+  assert.equal(metricCount, metricsAfterCompletion + 1);
+  results.push('inline views keep independent completion-based15s polling with no overlapping metrics request');
+
+  status = 500; payload = { message: 'inline log HTTP failure' };
+  await inlineRefresh().click();
+  await inlineLogs.getByRole('alert').filter({ hasText: 'inline log HTTP failure' }).waitFor();
+  await inlineMetrics.getByText('120.68 ms', { exact: true }).waitFor();
+  await exportUnavailable(inlineLogs);
+  assert.equal(await inlineLogs.locator('pre').count(), 0);
+  status = 200; payload = { status: 'ok', message: null, lines: [{ at, message: 'independent recovered Korean 로그' }] };
+  await inlineRefresh().click();
+  await inlineLogs.locator('pre').filter({ hasText: 'independent recovered Korean 로그' }).waitFor();
+  metricStatus = 500; metricPayload = { message: 'inline metric HTTP failure' };
+  await inlineMetricRefresh().click();
+  await inlineMetrics.getByRole('alert').filter({ hasText: 'inline metric HTTP failure' }).waitFor();
+  assert.equal(await inlineMetrics.locator('.metrics > div').count(), 0);
+  assert.ok(await downloadButton(inlineLogs).isEnabled());
+  metricStatus = 200; metricPayload = { ...metricFixture, status: 'waiting', message: 'inline metrics collecting' };
+  await inlineMetricRefresh().click(); await inlineMetrics.getByText('수집 대기', { exact: true }).waitFor();
+  await inlineLogs.locator('pre').filter({ hasText: 'independent recovered Korean 로그' }).waitFor();
+  assert.equal(await inlineMetrics.locator('.metrics > div').count(), 0);
+  assert.ok(await downloadButton(inlineLogs).isEnabled());
+  payload = { status: 'waiting', message: 'inline logs collecting', lines: [] };
+  await inlineRefresh().click(); await inlineLogs.getByText('수집 대기', { exact: true }).waitFor();
+  await exportUnavailable(inlineLogs);
+  metricStatus = 200; metricPayload = { ...metricFixture, cpu_percent: null };
+  await inlineMetricRefresh().click(); await inlineMetrics.getByText('측정값 없음', { exact: true }).first().waitFor();
+  assert.equal(await inlineMetrics.locator('.metrics > div').first().locator('strong').innerText(), '—');
+  assert.equal(await inlineMetrics.getByRole('alert').count(), 0);
+  payload = { status: 'ok', message: null, lines: fetchedLines };
+  metricPayload = { ...metricFixture };
+  await inlineRefresh().click(); await inlineMetricRefresh().click(); await inlineReady();
+  results.push('inline log/metric HTTP failures, waiting and recovery are independent; missing readings stay unknown and export unavailable without actual logs');
+
+  held = true; metricHeld = true;
+  const previousLogPending = new Promise(resolve => started = resolve);
+  const previousMetricPending = new Promise(resolve => metricStarted = resolve);
+  await inlineRefresh().click(); await inlineMetricRefresh().click();
+  await previousLogPending; await previousMetricPending;
+  await exportUnavailable(inlineLogs);
+  const previousReleases = { logs: release, metrics: metricRelease };
+  const generationAborts = await page.evaluate(() => ({ logs: window.logAborts, metrics: window.metricAborts }));
+  await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
+  assert.deepEqual(await page.evaluate(() => ({ logs: window.logAborts, metrics: window.metricAborts })), { logs: generationAborts.logs + 1, metrics: generationAborts.metrics + 1 });
+  assert.equal(await observation.count(), 0);
+  app.latest_deployment_id = 'inline-new-success';
+  titleDeployment = { ...titleDeployment, id: app.latest_deployment_id, created_at: '2026-10-02T09:05:00Z' };
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'new deployment fresh 로그' }] };
+  metricPayload = { ...metricFixture, cpu_percent: 33 };
+  held = false; metricHeld = false;
+  await page.getByRole('button', { name: app.name + ' 상세 보기', exact: true }).click();
+  await inlineLogs.locator('pre').filter({ hasText: 'new deployment fresh 로그' }).waitFor();
+  await inlineMetrics.getByText('33%', { exact: true }).waitFor();
+  previousReleases.logs(); previousReleases.metrics(); await page.clock.runFor(1);
+  assert.doesNotMatch(await inlineLogs.locator('pre').innerText(), /한글 로그 100/);
+  assert.equal(await inlineMetrics.getByText('0%', { exact: true }).count(), 0);
+  results.push('inline app navigation aborts both requests; new deployment remount ignores late logs and metrics from previous success');
+  await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
+  const undeployedAppReads = { logs: count, metrics: metricCount };
+  await page.getByRole('button', { name: second.name + ' 상세 보기', exact: true }).click();
+  await page.locator('.page-heading h1').filter({ hasText: second.name }).waitFor();
+  assert.equal(await observation.count(), 0);
+  assert.deepEqual({ logs: count, metrics: metricCount }, undeployedAppReads);
+
+  for (const deploymentStatus of ['failed', 'building', 'deploying']) {
+    titleDeployment.status = deploymentStatus;
+    const reads = { logs: count, metrics: metricCount };
+    await overview();
+    await page.getByText('배포 상태 · ' + deploymentStatus, { exact: true }).waitFor();
+    assert.equal(await observation.count(), 0);
+    assert.deepEqual({ logs: count, metrics: metricCount }, reads);
+  }
+  titleDeployment.status = 'success'; titleDeployment.app_space_id = second.id;
+  await overview(); assert.equal(await observation.count(), 0);
+  titleDeployment.app_space_id = app.id;
+  for (const teardownStatus of ['requested', 'success']) {
+    app.teardown_status = teardownStatus; app.teardown_requested_at = '2026-10-02T09:10:00Z';
+    if (teardownStatus === 'success') app.teardown_finished_at = '2026-10-02T09:11:00Z';
+    const reads = { logs: count, metrics: metricCount };
+    await overview();
+    await page.getByText(teardownStatus === 'requested' ? /앱을 내리는 중입니다/ : /내림 완료/).waitFor();
+    assert.equal(await observation.count(), 0);
+    assert.deepEqual({ logs: count, metrics: metricCount }, reads);
+  }
+  delete app.teardown_status; delete app.teardown_requested_at; delete app.teardown_finished_at;
+  results.push('failed/running/latest-new-attempt/mismatched-app/requested-or-completed-teardown states never expose old successful inline monitoring');
+
+  await overview(); await inlineReady();
+  held = true; metricHeld = true;
+  const sourceLogPending = new Promise(resolve => started = resolve);
+  const sourceMetricPending = new Promise(resolve => metricStarted = resolve);
+  await inlineRefresh().click(); await inlineMetricRefresh().click();
+  await sourceLogPending; await sourceMetricPending;
+  const sourceReleases = { logs: release, metrics: metricRelease };
+  await page.goto(base + '/?source=demo&page=apps');
+  held = false; metricHeld = false; sourceReleases.logs(); sourceReleases.metrics();
+  const sourceReads = { logs: count, metrics: metricCount };
+  await page.clock.runFor(45000);
+  assert.deepEqual({ logs: count, metrics: metricCount }, sourceReads);
+  await page.getByRole('button', { name: 'Demo monitoring 상세 보기', exact: true }).click();
+  await observation.waitFor();
+  await inlineLogs.getByText('샘플', { exact: true }).waitFor();
+  await inlineMetrics.getByText('샘플 수치', { exact: true }).waitFor();
+  assert.equal(await downloadButton(inlineLogs).count(), 0);
+  await page.clock.runFor(45000);
+  assert.deepEqual({ logs: count, metrics: metricCount }, sourceReads);
+  results.push('source change stops both inline reads; demo successful result labels sample logs/metrics and makes zero monitoring HTTP calls');
+
+  // Existing tab-focused lifecycle checks use an undeployed result so switching to
+  // overview unmounts monitoring rather than deliberately starting inline reads.
+  app.name = originalName; app.latest_deployment_id = null; titleDeployment = null;
+  payload = originalPayload; metricPayload = { ...metricFixture };
   await open();
   await logs.locator('pre').filter({ hasText: 'first log' }).waitFor();
   await logs.getByText('최근 애플리케이션 로그 · 최대 100줄 · 약 15초마다 새로고침 · 시간은 브라우저 현지 시간 기준입니다.', { exact: true }).waitFor();
@@ -89,7 +321,7 @@ try {
   assert.equal(await page.evaluate(() => window.logExecuted), undefined);
   assert.match(await logs.locator('pre').innerText(), /2026/);
   assert.equal(await logs.getByText('샘플', { exact: true }).count(), 0);
-  assert.equal(await page.locator('.page-heading h1').innerText(), app.name + ' (EC2)');
+  assert.equal(await page.locator('.page-heading h1').innerText(), app.name);
   await logs.locator('pre').filter({ hasText: 'sample-shop listening on 3000' }).waitFor();
   results.push('successful EC2 deployment reads app stdout, local timestamp, escaped log content and neutral query-window copy');
   await mkdir('artifacts', { recursive: true });
@@ -103,6 +335,7 @@ try {
     await refresh().click();
     await logs.getByText(label, { exact: true }).waitFor();
     await logs.getByText(state + ' fixture', { exact: true }).waitFor();
+    await exportUnavailable(logs);
     assert.equal(await logs.locator('pre').count(), 0);
     assert.doesNotMatch(await logs.innerText(), /\[DEMO\]|샘플|no application connection/);
     if (state === 'waiting') {
@@ -114,18 +347,19 @@ try {
   }
   payload = { status: 'ok', message: null, lines: [] };
   await refresh().click(); await logs.getByText('수집된 애플리케이션 로그가 없습니다.', { exact: true }).waitFor();
+  await exportUnavailable(logs);
   status = 500; payload = { message: 'fixture HTTP failure' };
   await refresh().click(); await logs.getByRole('alert').filter({ hasText: 'fixture HTTP failure' }).waitFor();
+  await exportUnavailable(logs);
   assert.equal(await logs.locator('pre').count(), 0);
   assert.doesNotMatch(await logs.innerText(), /\[DEMO\]|샘플|no application connection/);
   status = 200; payload = { status: 'unknown', message: null, lines: [] };
   await refresh().click(); await logs.getByRole('alert').filter({ hasText: '응답 형식' }).waitFor();
+  await exportUnavailable(logs);
   payload = { status: 'ok', message: null, lines: [{ at, message: 'recovered log' }] };
   await refresh().click(); await logs.locator('pre').filter({ hasText: 'recovered log' }).waitFor();
   results.push('EC2 waiting-to-ok, business error, empty, HTTP 500, invalid payload and manual recovery never use demo fallback');
 
-  await page.clock.install({ time: new Date('2026-10-03T00:00:00Z') });
-  await page.clock.pauseAt(new Date('2026-10-03T00:00:01Z'));
   await refresh().click(); await logs.locator('pre').filter({ hasText: 'recovered log' }).waitFor();
   await refresh().waitFor({ state: 'visible' });
   await page.waitForFunction(() => !document.querySelector('[aria-label="애플리케이션 로그"] button')?.disabled);
@@ -152,7 +386,7 @@ try {
   const oldGenerationRelease = release;
   const oldGenerationAborts = await page.evaluate(() => window.logAborts);
   app.latest_deployment_id = 'ec2-logs-redeployment';
-  titleDeployment = { ...titleDeployment, id: app.latest_deployment_id, created_at: '2026-10-02T09:05:00Z' };
+  titleDeployment = { id: app.latest_deployment_id, app_space_id: app.id, compute: 'ec2', status: 'failed', url: null, reason: null, created_at: '2026-10-02T09:05:00Z' };
   payload = { status: 'ok', message: null, lines: [{ at, message: 'sample-shop listening on 3000 · new deployment' }] };
   held = false;
   await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
@@ -199,6 +433,7 @@ try {
   await page.getByRole('tab', { name: '로그', exact: true }).click();
   await logs.getByText('샘플', { exact: true }).waitFor();
   assert.match(await logs.locator('pre').innerText(), /DEMO/);
+  assert.equal(await downloadButton(logs).count(), 0);
   await page.clock.runFor(45000); assert.equal(count, demoCount);
   results.push('demo keeps sample label and sends zero monitoring requests');
   app.latest_deployment_id = null; titleDeployment = null;
@@ -347,4 +582,6 @@ try {
 } finally {
   await browser?.close();
   server?.kill();
+  if (exportPath) await unlink(exportPath);
+  if (exportDirectory) await rmdir(exportDirectory);
 }

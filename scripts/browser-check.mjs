@@ -428,6 +428,8 @@ try {
       return json({status:"done",compute:"ecs-fargate",plans:[{id:"ready-plan",name:"기본 구성",summary:"기본값",pros:[],cons:[],template:"ecs-fargate/basic",values:{cpu:256,memory:512,container_port:3000}}]});
     }
     if(path.endsWith("/deployments")) {readinessDeployPosts++;readinessExisting=true;return json({error:"deployment_in_progress",message:"이미 배포가 진행 중입니다"},409);}
+    if(req.method()==="GET" && path.endsWith("/logs"))return json({status:"waiting",message:null,lines:[]});
+    if(req.method()==="GET" && path.endsWith("/metrics"))return json({status:"waiting",message:null,compute:"ecs-fargate",cpu_percent:null,memory_percent:null,response_time_ms:null,request_count:null,error_count:null,measured_at:null});
     if(path.endsWith("/resources"))return json([]);
     if(path.endsWith("/events"))return route.fulfill({contentType:"text/event-stream",body:'event: progress\ndata: '+JSON.stringify({status:"success",step:"done",progress:100,message:"기존 배포 완료",url:null,at:"now"})+'\n\n'});
     return json({...deployment,compute:"ecs-fargate",status:"success"});

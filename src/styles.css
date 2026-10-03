@@ -1223,3 +1223,8 @@ progress {
 /* Stack reported resources below deployment progress and results. */
 .deployment-workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; margin-bottom: 24px; }
 .deployment-workspace > .panel { min-width: 0; margin-bottom: 0; }
+
+.deployment-observation { display: grid; gap: 16px; min-width: 0; }
+.deployment-observation-heading h2 { margin: 0 0 8px; }
+.deployment-observation-heading p { margin: 0; }
+.deployment-observation > .panel { min-width: 0; margin-bottom: 0; }

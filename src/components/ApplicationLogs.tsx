@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, createApi } from "../lib/api.ts";
 import type { AppLogs, DataMode } from "../lib/types.ts";
+import { buildLogExport } from "../lib/logExport.ts";
 
 const api = createApi(import.meta.env.VITE_API_BASE_URL || "/api");
 const labels = { ok: "로그 수신", waiting: "수집 대기", not_deployed: "미배포", unsupported: "지원 안 됨", error: "수집 오류" };
@@ -12,7 +13,7 @@ const messages = {
   error: "로그를 수집하지 못했습니다. 잠시 후 다시 확인하세요.",
 };
 
-export default function ApplicationLogs({ id, mode }: { id: string; mode: DataMode }) {
+export default function ApplicationLogs({ id, mode, appName, previewLines }: { id: string; mode: DataMode; appName?: string; previewLines?: number }) {
   const [logs, setLogs] = useState<AppLogs | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(mode === "api");
@@ -49,6 +50,23 @@ export default function ApplicationLogs({ id, mode }: { id: string; mode: DataMo
     return () => { controller.abort(); clearTimeout(timer); refresh.current = null; };
   }, [id, mode]);
 
+  const canDownload = mode === "api" && !loading && !error && logs?.status === "ok" && logs.lines.length > 0;
+  const visibleLines = previewLines === undefined ? logs?.lines ?? [] : [...(logs?.lines ?? [])]
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at)).slice(-previewLines);
+  function download() {
+    if (!canDownload || !logs) return;
+    const { blob, filename } = buildLogExport(appName ?? id, logs.lines);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    try { link.click(); }
+    finally {
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }
   const status = error ? "조회 실패" : logs ? labels[logs.status] : "조회 중";
   return <section className="panel" aria-label="애플리케이션 로그">
     <div className="section-heading">
@@ -60,7 +78,13 @@ export default function ApplicationLogs({ id, mode }: { id: string; mode: DataMo
 [DEMO] 12:00:03 INFO Sample log; no application connection`}</pre> : <>
       <div className="panel-body">
         <p className="muted">최근 애플리케이션 로그 · 최대 100줄 · 약 15초마다 새로고침 · 시간은 브라우저 현지 시간 기준입니다.</p>
-        <button disabled={loading} onClick={() => refresh.current?.()}>로그 새로고침</button>
+        <div className="heading-actions">
+          <button disabled={loading} onClick={() => refresh.current?.()}>로그 새로고침</button>
+          <button disabled={!canDownload} onClick={download}>로그 .txt 다운로드</button>
+        </div>
+        {!error && logs?.status === "ok" && logs.lines.length > 0 && <p className="muted">
+          {previewLines !== undefined && <>미리보기 최근 {visibleLines.length}줄 · </>}수신 {logs.lines.length}줄 · TXT에 수신된 모든 로그를 저장합니다. TXT 시간은 UTC 기준입니다.
+        </p>}
         {loading && <p role="status">{logs ? "로그 갱신 중…" : "로그 조회 중…"}</p>}
         {error && <p role="alert">{error}</p>}
         {!error && logs && (logs.status !== "ok" || logs.lines.length === 0) &&
@@ -68,7 +92,7 @@ export default function ApplicationLogs({ id, mode }: { id: string; mode: DataMo
         {!error && logs?.status === "ok" && logs.lines.length > 0 && logs.message && <p>{logs.message}</p>}
       </div>
       {!error && logs?.status === "ok" && logs.lines.length > 0 &&
-        <pre className="log-output" tabIndex={0} aria-label="수집된 로그">{logs.lines.map(line =>
+        <pre className="log-output" tabIndex={0} aria-label="수집된 로그">{visibleLines.map(line =>
           `[${new Date(line.at).toLocaleString("ko-KR", { hour12: false })}] ${line.message}`).join("\n")}</pre>}
     </>}
   </section>;
