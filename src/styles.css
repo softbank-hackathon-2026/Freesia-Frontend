@@ -1146,3 +1146,43 @@ progress {
 @media (max-width: 800px) {
   .resource-tree-scroll-hint { display: block; font-size: 12px; margin-bottom: 12px; }
 }
+
+
+/* Application deployment stages keep navigation visible without nesting sticky inside a panel. */
+.deployment-app-summary { padding: 16px 20px; }
+.deployment-app-summary > div { display: flex; align-items: center; gap: 12px; }
+.deployment-app-summary h2 { margin: 0; font-size: 16px; }
+.deployment-app-summary dl { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 12px 0 0; }
+.deployment-app-summary dl > div { min-width: 0; }
+.deployment-app-summary dt { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.deployment-app-summary dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.deployment-stepper { position: sticky; top: 12px; z-index: 3; padding: 16px 20px; margin-bottom: 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 3px 20px #2b2e4618; }
+.deployment-stepper > p { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; }
+.deployment-stepper > p span { font-size: 12px; color: var(--muted); }
+.deployment-stepper > p strong { color: var(--accent); }
+.deployment-stepper ol { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; }
+.deployment-stepper li { min-width: 0; }
+.deployment-stepper button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px; text-align: left; font-size: 13px; border: 1px solid transparent; background: var(--surface); }
+.deployment-stepper button[aria-current="step"] { color: var(--accent-hover); background: var(--accent-soft); border-color: var(--accent); }
+.deployment-stepper button.complete:not([aria-current="step"]) { background: var(--paper); color: var(--accent-hover); }
+.deployment-step-number { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: var(--paper); border: 1px solid currentColor; font-size: 11px; }
+.deployment-stage h2 { margin: 0; scroll-margin-top: 156px; }
+.deployment-stage-actions, .deployment-review-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.deployment-stage-actions > p { margin: 0; }
+.deployment-management-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.deployment-stage .deployment-progress-body { padding: 0; }
+@media (max-width: 690px) {
+  .deployment-app-summary { padding: 16px; }
+  .deployment-app-summary dl { gap: 10px 18px; }
+  .deployment-app-summary dl > div:first-child { flex-basis: 100%; }
+  .deployment-stepper { top: 8px; padding: 12px; margin-bottom: 16px; }
+  .deployment-stepper ol { gap: 4px; }
+  .deployment-stepper button { flex-direction: column; justify-content: flex-start; gap: 6px; padding: 8px 2px; text-align: center; font-size: 10px; }
+  .deployment-stepper button > span:last-child { overflow-wrap: anywhere; }
+  .deployment-stage h2 { scroll-margin-top: 170px; }
+  .deployment-stage-actions > button { width: 100%; }
+  .deployment-management-actions { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .deployment-stepper *, .deployment-stage * { scroll-behavior: auto; }
+}

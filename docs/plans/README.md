@@ -275,3 +275,13 @@ The user narrowed demo removal to API-by-default and no upper-right source selec
 
 
 API default entry verification completed 2026-10-03T11:09:11.6806661+09:00: minimal App.tsx edit, retained demo code; check43/E2E25/targeted monitoring+UX+delete/source+visual PASS. See infra-ai-flow-eval.md. Local codex/api-only-ui, no Git publication or deployment.
+
+
+## Current follow-up — application deployment step flow (proposed2026-10-03)
+User requested automatic staged screens instead of cumulative scrolling. Concrete existing-flow spec/plan/contract above are ready for one combined scope/design/unit-plan approval. No product edit yet. Reference Claude artifact access failed403; five-stage design reflects the user's stated intent and inspected existing handlers. No publication approved.
+
+
+## Application stepflow approved - 2026-10-03T11:25:38.3542723+09:00
+User explicitly approved the presented five-step design, existing-flow spec/plan/unit contract and implementation on another branch, followed by commit and push of the completed diff. Current branch codex/deployment-step-flow. Approval covers scoped feature implementation/verification and publication to this branch only; main merge, PR, deployment/backend/cloud/Notion changes not included.
+
+Application deployment step flow implementation and verification completed 2026-10-03T11:41:33.0681214+09:00: five-stage/current-panel UI; check43/E2E25/focused4/source+visual PASS. User-approved commit/push to codex/deployment-step-flow next; no PR/main merge/deploy. See infra-ai-flow-eval.md for evidence and fixture limitations.

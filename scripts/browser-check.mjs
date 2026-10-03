@@ -101,6 +101,11 @@ async function switchSource(page, source) {
   destination.searchParams.delete("tab");
   await page.goto(destination.href);
 }
+async function reviewDeploymentStep(page, label) {
+  const target = page.getByRole("navigation", { name: "배포 단계", exact: true }).getByRole("button", { name: label, exact: true });
+  await target.click();
+  assert.equal(await target.getAttribute("aria-current"), "step");
+}
 async function openNavigation(page) {
   if (!(await page.locator("#primary-navigation").isVisible()))
     await page
@@ -431,7 +436,7 @@ try {
   readinessPlanReject=true;await readinessPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
   await readinessPage.getByText(/배포 준비 중입니다/).waitFor();
   readinessPlanReject=false;await readinessPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
-  const singleReview=readinessPage.getByRole("region",{name:"배포 변경 확인",exact:true});
+  const singleReview=readinessPage.getByRole("region",{name:"구성안 검토",exact:true});
   await singleReview.getByRole("heading",{name:"기본 구성",exact:true}).waitFor();
   assert.equal(await singleReview.getByRole("button",{name:"이 구성안 선택",exact:true}).count(),0);
   assert.equal(await singleReview.getByLabel("설정값을 확인했습니다",{exact:true}).isDisabled(),false);
@@ -638,7 +643,9 @@ try {
       fullPage: true,
     });
     assert.equal(await page.locator(".candidate").count(), 2);
+    await reviewDeploymentStep(page, "코드 분석");
     await page.getByRole("img", { name: "읽기 전용 분석 분기 트리" }).waitFor();
+    await reviewDeploymentStep(page, "실행 환경 선택");
     await page
       .locator(".candidate")
       .filter({ hasText: "lambda" })
@@ -666,7 +673,7 @@ try {
         exact: true,
       })
       .click();
-    await page.getByText("failed", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: /^배포 상태.*failed$/ }).waitFor();
     await page
       .getByRole("button", {
         name: "실패 내용 확인 · 재시도 준비",
@@ -699,7 +706,7 @@ try {
     await appCard.focus();
     await appCard.press("Enter");
     await page.getByRole("heading", { name: "demo-web", exact: true }).waitFor();
-    await page.getByText("success", { exact: true }).waitFor();
+    await page.getByRole("heading", { name: /^배포 상태.*success$/ }).waitFor();
     await page.screenshot({path:`artifacts/day3-pipeline-result-${name}.png`,fullPage:true});
     await page.getByRole("tab", { name: "로그", exact: true }).click();
     assert.match(await page.locator(".log-output").innerText(), /DEMO/);
@@ -930,13 +937,14 @@ try {
   await apiPage.getByText(/구성안 API 연동 대기입니다/).waitFor();
   for (const [size,width,height] of [["desktop",1440,1000],["mobile",390,844]]) {
     await apiPage.setViewportSize({width,height});
-    const review=apiPage.getByRole("region",{name:"배포 변경 확인",exact:true});
+    const review=apiPage.getByRole("region",{name:"실행 환경 선택",exact:true});
     await review.waitFor();
     assert.match(await review.innerText(),/lambda/);
     assert.match(await review.innerText(),/연동 대기/);
     assert.equal(await apiPage.getByLabel("샘플 템플릿 설정값",{exact:true}).count(),0);
     assert.equal(await apiPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).isDisabled(),false);
-    assert.equal(await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
+    assert.equal(await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).count(),0);
+    assert.equal(await apiPage.getByRole("navigation",{name:"배포 단계",exact:true}).getByRole("button",{name:"구성안 검토",exact:true}).isDisabled(),true);
     assert.equal(await apiPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false);
     await apiPage.screenshot({path:"artifacts/api-app-parity-"+size+".png",fullPage:true});
   }
@@ -948,7 +956,7 @@ try {
   serverStatus="building";
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button",{name:/api-web/}).click();
-  await apiPage.getByText("success",{exact:true}).waitFor();
+  await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   assert.equal(await apiPage.locator(".pipeline-steps li").count(),6);
   assert.equal(await apiPage.locator(".pipeline-steps .complete").count(),6);
   assert.deepEqual(await apiPage.locator(".pipeline-steps li span").allTextContents(),Array(6).fill("완료"));
@@ -957,13 +965,13 @@ try {
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,1,"existing active deployment resumes SSE");
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button",{name:/api-web/}).click();
-  await apiPage.getByText("success",{exact:true}).waitFor();
+  await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,2,"terminal deployment receives current snapshot after reentry");
   await apiPage.locator("details").filter({hasText:"aws_ecs_service.web"}).locator("summary").click();
   await apiPage.getByText("aws_ecs_service.web",{exact:true}).waitFor();
   await apiPage.reload();
-  await apiPage.getByText("success",{exact:true}).waitFor();
+  await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,3,"refresh restores app and terminal snapshot");
   await apiPage.getByRole("tab", { name: "로그", exact: true }).click();
@@ -1176,7 +1184,7 @@ try {
   await racePage.waitForTimeout(500);
   assert.equal(
     await racePage
-      .getByRole("heading", { name: "배포 상태", exact: true })
+      .getByRole("heading", { name:/^배포 상태/ })
       .count(),
     0,
     "late app A deploy must not populate app B",
@@ -1271,7 +1279,7 @@ try {
   );
   assert.equal(
     await listOnly
-      .getByRole("heading", { name: "배포 상태", exact: true })
+      .getByRole("heading", { name:/^배포 상태/ })
       .count(),
     0,
   );
@@ -1971,7 +1979,7 @@ try {
   await plansPage.getByText(/구성안 준비에 실패했습니다/).waitFor();
   failPlans=false;
   await plansPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
-  const review=plansPage.getByRole("region",{name:"배포 변경 확인",exact:true});
+  const review=plansPage.getByRole("region",{name:"구성안 검토",exact:true});
   await review.getByRole("heading",{name:"확장 구성",exact:true}).waitFor();
   assert.equal(planReads,1); assert.equal(await review.locator(".candidate").count(),2);
   assert.equal(await review.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
@@ -1980,6 +1988,7 @@ try {
   await review.getByLabel("설정값을 확인했습니다",{exact:true}).check();
   // A single plan goes directly to review without a redundant selection step.
   planCount=1;
+  await reviewDeploymentStep(plansPage, "실행 환경 선택");
   await plansPage.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
   await review.getByRole("heading",{name:"기본 구성",exact:true}).waitFor();
   assert.equal(await review.locator(".candidate").count(),1);

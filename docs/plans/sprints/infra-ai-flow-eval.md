@@ -569,3 +569,15 @@ Evidence: project .Codex/plans/2026-10-03-frontend-api-only logs and output/api-
 
 ## Direct main publication authorization - 2026-10-03T11:16:12.4238326+09:00
 User explicitly approved committing and pushing this current API-default/no-selector diff directly on main. Origin main confirmed identical to the verified base4513f4, so no integration conflict. Prior local verification remains applicable; product files unchanged since those checks. This authorization supersedes the earlier unpublished handoff; no production deployment or backend/cloud changes included.
+
+
+## Application stepflow - RED verified 2026-10-03T11:27:25.5365272+09:00
+Approved five-stage UI and branch commit/push. New focused behavioral harness exits1 because current stacked overview exposes zero stage navs, expected one. App/server boot succeeded; parent independently inspected log. Implementation started on codex/deployment-step-flow. No PASS claim yet.
+
+## Application step flow verified
+Implemented five stages with a sticky stage navigator and one primary panel. Successful analysis and plan responses advance the view; accepted deployments show progress and matching terminal events show results. Viewing earlier stages sends no mutation requests. Explicit compute choice, reviewed settings and deployment click remain required. Fresh reload restores only latest deployment progress/result; pre-deployment drafts are not persisted by this change.
+Existing API/demo data behavior, session cancellation, polling, SSE/reconnect, resource tree, logs/metrics, app teardown/deletion and redeploy entry remain intact. Current workflow identity prevents an older successful deployment from taking over a new analysis. Synchronous request lock blocks duplicate starts. Heading focus/scroll follows actual stage changes and reduced-motion preferences.
+Verification: meaningful focused RED (missing stage navigation) before product edits, then focused GREEN4groups. Final Node24 npm run check PASS(TypeScript/ESLint/43native tests/build); npm run test:e2e PASS25groups, focused script lint and git diff check PASS. Independent read-only source review PASS; parent inspected desktop1440/mobile390, auto-scroll progress viewport and result screenshots. Controlled API fixtures validate UI contracts; this is not a new AWS/AI deployment test.
+Files: Applications.tsx/styles.css, README and existing plan/contract/evaluation records, permanent deployment-flow-check harness plus existing browser/followup/local-api/redeploy selectors. No backend/cloud/Notion/build-config/dependency changes. Claude artifact was inaccessible403; no inspected-reference fidelity claim.
+Publication: user explicitly authorized this completed feature diff to be committed and pushed on codex/deployment-step-flow. No PR/main merge/production deployment authorized. Evidence in artifacts/deployment-flow-{red,green,e2e}.log, deployment-flow-results.json, browser-results.json and project session check-final.log. Final check exit0, full E2E exit0.
+Verified at: 2026-10-03T11:41:33.0681214+09:00

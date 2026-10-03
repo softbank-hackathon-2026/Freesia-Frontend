@@ -91,7 +91,7 @@ try {
   assert.match(await page.locator(".deploy-actions").innerText(),/사용자 선택: 없음/);
   const fargate = page.locator(".candidate").filter({has:page.getByText("ecs-fargate",{exact:true})});
   await fargate.getByRole("button",{name:"이 후보 선택",exact:true}).click();
-  const review=page.getByRole("region",{name:"배포 변경 확인",exact:true});
+  const review=page.getByRole("region",{name:"구성안 검토",exact:true});
   await review.waitFor();
   const planResponse = page.waitForResponse(r=>r.url().endsWith(`/app-spaces/${app.id}/plans`) && r.request().method()==="POST");
   await page.getByRole("button",{name:"선택한 환경으로 구성안 조회",exact:true}).click();
@@ -124,7 +124,7 @@ try {
   assert.equal((await duplicateDeployment.json()).error,"deployment_in_progress");
   assert.equal((await (await get(`/app-spaces/${app.id}`)).json()).latest_deployment_id,dep.id);
   results.push("app create201, actual single server plan200, explicit plan/settings review, UI deployment201 sends plan_id, unready compute400, duplicate deployment409 preserves current ID");
-  await page.getByRole("heading",{name:"배포 상태",exact:true}).waitFor();
+  await page.getByRole("heading",{name:/^배포 상태/}).waitFor();
   assert.equal(await page.locator(".pipeline-steps li").count(),6);
   await page.waitForFunction(()=>Number(document.querySelector('progress[aria-label="배포 진행률"]')?.getAttribute("value"))>0);
   await page.reload();

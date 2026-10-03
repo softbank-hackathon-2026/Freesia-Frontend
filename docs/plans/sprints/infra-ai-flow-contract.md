@@ -233,3 +233,11 @@ Ownership: parent Applications.tsx and existing monitoring-check.mjs/docs; worke
 Acceptance: successful Lambda/Fargate/EC2 title labels, no wrong suffix for undeployed/failed/teardown/other-app states; existing measured_at/null/zero/polling behavior retained; desktop/mobile readable with no horizontal overflow. Verification: targeted behavioral RED/GREEN in the existing monitoring harness, npm run check, npm run test:e2e, focused monitoring checks and independent read-only code/visual review.
 ## API default entry — approved 2026-10-03
 User explicitly corrected scope to retain demo code and only default to API plus hide the data-source selector. Full-removal edits were restored before this unit. Ownership root App.tsx/docs; tests worker scripts/README. No interface/API/dependency change; explicit source=demo remains an internal QA route. Acceptance: normal URL shows controlled backend data without selector, API errors never show client samples, existing API/demo regression coverage retained. Node24 browser RED on restored app: plain URL fetched no API Infra; then minimal product edit. Required check/E2E and focused/source/visual review; no commit/push/PR/deployment approval.
+
+
+## Application deployment step flow — approval pending 2026-10-03
+Goal: replace stacked deployment sections with an explicit five-step view and automatic transition only at successful existing business-operation boundaries. Ownership and tests follow the current Day3 spec/plan proposed section. Existing API endpoints/SSE/resource semantics/teardown/monitoring retained; candidate choice and actual deployment remain user-triggered. No backend/dependencies/cloud/Notion/Git actions. Done requires check/E2E/focused transition tests, independent source review and parent-inspected1440/390 screenshots. Reference artifact inaccessible403; do not claim a visual copy.
+
+
+## Application stepflow approved - 2026-10-03T11:25:38.3542723+09:00
+User explicitly approved the presented five-step design, existing-flow spec/plan/unit contract and implementation on another branch, followed by commit and push of the completed diff. Current branch codex/deployment-step-flow. Approval covers scoped feature implementation/verification and publication to this branch only; main merge, PR, deployment/backend/cloud/Notion changes not included.

@@ -99,7 +99,7 @@ try {
     if(path.endsWith('/analysis'))return json({status:'running',requirements:[],evidence:[],candidates:[],mascot_message:null});
     return route.fulfill({status:404,body:'unexpected fixture request'});
   });
-  const openApi = async ()=>{await page.goto(`${base}/?source=api&app=${app.id}`);await page.getByRole('heading',{name:'배포 상태',exact:true}).waitFor();};
+  const openApi = async ()=>{await page.goto(`${base}/?source=api&app=${app.id}`);await page.getByRole('heading',{name:/^배포 상태/}).waitFor();};
   const beforeApi = await saved();
   for(const width of [1280,390]) {
     await page.setViewportSize({width,height:900});await openApi();await opener.click();
@@ -141,7 +141,7 @@ try {
   await page.getByRole('button',{name:'선택한 환경으로 구성안 조회',exact:true}).click();
   await page.getByRole('checkbox',{name:'설정값을 확인했습니다'}).check();
   await page.getByRole('button',{name:'선택한 구성안으로 배포',exact:true}).click();
-  await page.getByRole('heading',{name:'배포 상태',exact:true}).waitFor();
+  await page.getByRole('heading',{name:/^배포 상태/}).waitFor();
   assert.equal(await opener.count(),1,'first API deployment must expose redeploy without reloading');
   await opener.click();assert.ok(await dialog.getByRole('button',{name:'재배포 연동 대기',exact:true}).isDisabled());
   assert.deepEqual(mutations,[`/api/app-spaces/${app.id}/analysis`,`/api/app-spaces/${app.id}/analysis`,`/api/app-spaces/${app.id}/plans`,`/api/app-spaces/${app.id}/deployments`]);
