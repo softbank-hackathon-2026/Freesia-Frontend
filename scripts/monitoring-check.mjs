@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout, clearTimeout } from 'node:timers';
 import { mkdir, mkdtemp, readFile, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { Buffer } from 'node:buffer';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { initialDemo } from '../src/lib/demo.ts';
@@ -91,7 +92,10 @@ try {
   const inlineMetrics = observation.getByRole('region', { name: '모니터링', exact: true });
   const inlineRefresh = () => inlineLogs.getByRole('button', { name: '로그 새로고침', exact: true });
   const inlineMetricRefresh = () => inlineMetrics.getByRole('button', { name: '지표 새로고침', exact: true });
-  const downloadButton = scope => scope.getByRole('button', { name: '로그 .txt 다운로드', exact: true });
+  const downloadButton = scope => scope.getByRole('button', { name: '전체 로그 .txt 다운로드', exact: true });
+  const search = scope => scope.getByRole('searchbox', { name: '로그 메시지 검색', exact: true });
+  const pause = scope => scope.getByRole('button', { name: '자동 갱신 일시정지', exact: true });
+  const resume = scope => scope.getByRole('button', { name: '자동 갱신 재개', exact: true });
   const exportUnavailable = async scope => {
     if (await downloadButton(scope).count()) assert.ok(await downloadButton(scope).isDisabled());
   };
@@ -133,6 +137,7 @@ try {
   assert.doesNotMatch(preview, /한글 로그 001/);
   assert.equal(await inlineLogs.locator('img').count(), 0);
   assert.equal(await page.evaluate(() => window.logExecuted), undefined);
+  await inlineLogs.getByRole('searchbox', { name: '로그 메시지 검색', exact: true }).waitFor();
   assert.ok(await downloadButton(inlineLogs).isEnabled());
   metricHeld = false; metricRelease();
   await inlineMetrics.getByText('120.68 ms', { exact: true }).waitFor();
@@ -173,6 +178,144 @@ try {
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.setViewportSize({ width: 1440, height: 1000 });
   results.push('inline successful result captures desktop1440/mobile390 with no page overflow');
+
+  // Search filters all fetched lines before the inline latest15 preview.
+  const beforeSearch = { logs: count, metrics: metricCount };
+  await search(inlineLogs).fill('한글 로그 001');
+  await inlineLogs.getByText('검색 결과 1줄', { exact: true }).waitFor();
+  assert.match(await inlineLogs.locator('pre').innerText(), /한글 로그 001/);
+  assert.equal(await inlineLogs.locator('mark').innerText(), '한글 로그 001');
+  assert.deepEqual({ logs: count, metrics: metricCount }, beforeSearch);
+  const [filteredDownload] = await Promise.all([page.waitForEvent('download'), downloadButton(inlineLogs).click()]);
+  const stream = await filteredDownload.createReadStream();
+  const chunks = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  const filteredExport = Buffer.concat(chunks).subarray(3).toString('utf8');
+  assert.equal(filteredExport.split('\r\n').filter(Boolean).length, 100);
+  assert.match(filteredExport, /한글 로그 001/);
+  assert.match(filteredExport, /한글 로그 100/);
+  assert.deepEqual({ logs: count, metrics: metricCount }, beforeSearch);
+  await search(inlineLogs).fill('missing literal');
+  await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).waitFor();
+  assert.equal(await inlineLogs.locator('pre').count(), 0);
+  assert.ok(await downloadButton(inlineLogs).isEnabled());
+  await search(inlineLogs).fill('');
+  assert.equal((await inlineLogs.locator('pre').innerText()).split('\n').length, 15);
+  results.push('search includes older fetched lines before preview cap, no extra GET; filtered TXT still exports complete100; clear and no-match states');
+
+  payload = { status: 'ok', message: null, lines: [
+    { at, message: 'TIMEOUT Timeout timeout' },
+    { at, message: 'a+b.[x] literal only' },
+    { at, message: 'aaabXx not a literal match' },
+    { at, message: '<img src=x onerror="window.logExecuted=true"> 사용자 로그' },
+  ] };
+  await inlineRefresh().click(); await inlineReady();
+  await search(inlineLogs).fill('timeout');
+  assert.equal(await inlineLogs.locator('mark').count(), 3);
+  assert.deepEqual(await inlineLogs.locator('mark').allTextContents(), ['TIMEOUT', 'Timeout', 'timeout']);
+  await search(inlineLogs).fill('a+b.[x]');
+  assert.equal(await inlineLogs.locator('mark').innerText(), 'a+b.[x]');
+  assert.doesNotMatch(await inlineLogs.locator('pre').innerText(), /aaab/);
+  await search(inlineLogs).fill('IMG');
+  assert.equal(await inlineLogs.locator('mark').innerText(), 'img');
+  assert.equal(await inlineLogs.locator('img').count(), 0);
+  assert.equal(await page.evaluate(() => window.logExecuted), undefined);
+  await search(inlineLogs).fill('');
+  results.push('message-only case-insensitive literal search highlights every match, escapes regex characters and renders hostile HTML as text');
+
+  const pauseCounts = { logs: count, metrics: metricCount };
+  const frozen = await inlineLogs.locator('pre').innerText();
+  await pause(inlineLogs).click();
+  assert.equal(await resume(inlineLogs).getAttribute('aria-pressed'), 'true');
+  await page.clock.runFor(45000);
+  await inlineReady();
+  assert.equal(count, pauseCounts.logs);
+  assert.equal(await inlineLogs.locator('pre').innerText(), frozen);
+  assert.ok(metricCount > pauseCounts.metrics, 'Pausing logs must not pause metric requests');
+  results.push('pause retains received snapshot and stops only automatic log requests while metrics keep polling');
+
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'manual snapshot while paused' }] };
+  await inlineRefresh().click(); await inlineReady();
+  assert.equal(count, pauseCounts.logs + 1);
+  await inlineLogs.locator('pre').filter({ hasText: 'manual snapshot while paused' }).waitFor();
+  assert.equal(await resume(inlineLogs).getAttribute('aria-pressed'), 'true');
+  await page.clock.runFor(45000); await inlineReady();
+  assert.equal(count, pauseCounts.logs + 1);
+  results.push('manual refresh while paused performs one GET and leaves automatic log polling paused');
+
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'resume snapshot' }] };
+  await resume(inlineLogs).focus();
+  await page.keyboard.press('Enter'); await inlineReady();
+  const resumedCount = count;
+  assert.equal(resumedCount, pauseCounts.logs + 2);
+  assert.equal(await pause(inlineLogs).getAttribute('aria-pressed'), 'false');
+  await inlineLogs.locator('pre').filter({ hasText: 'resume snapshot' }).waitFor();
+  await page.clock.runFor(14999); assert.equal(count, resumedCount);
+  await page.clock.runFor(1); await inlineReady();
+  assert.equal(count, resumedCount + 1);
+  results.push('keyboard resume fetches immediately and then restores completion-based15s polling');
+
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'late cancelled snapshot' }] };
+  held = true;
+  const pendingPause = new Promise(resolve => started = resolve);
+  await inlineRefresh().click(); await pendingPause;
+  const pauseRelease = release;
+  const pauseAborts = await page.evaluate(() => window.logAborts);
+  await pause(inlineLogs).click();
+  await inlineReady();
+  assert.equal(await page.evaluate(() => window.logAborts), pauseAborts + 1);
+  assert.match(await inlineLogs.locator('pre').innerText(), /resume snapshot/);
+  held = false;
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'fresh resumed snapshot' }] };
+  await resume(inlineLogs).click(); await inlineReady();
+  pauseRelease();
+  await inlineLogs.locator('pre').filter({ hasText: 'fresh resumed snapshot' }).waitFor();
+  assert.doesNotMatch(await inlineLogs.locator('pre').innerText(), /late cancelled snapshot/);
+  results.push('pause aborts a pending fetch; immediate resume accepts new data and ignores late cancelled response');
+
+  await search(inlineLogs).fill('not present');
+  payload = { status: 'waiting', message: 'Search must not hide collecting state', lines: [] };
+  await inlineRefresh().click(); await inlineReady();
+  await inlineLogs.getByText('수집 대기', { exact: true }).waitFor();
+  assert.equal(await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
+  status = 500; payload = { message: 'Search must not hide HTTP failure' };
+  await inlineRefresh().click(); await inlineReady();
+  await inlineLogs.getByRole('alert').filter({ hasText: 'Search must not hide HTTP failure' }).waitFor();
+  assert.equal(await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
+  status = 200; payload = { status: 'ok', message: null, lines: [] };
+  await inlineRefresh().click(); await inlineReady();
+  assert.equal(await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
+  results.push('active search never replaces waiting, HTTP error or genuinely empty log states with no-match copy');
+  payload = { status: 'ok', message: null, lines: fetchedLines };
+  await search(inlineLogs).fill('한글 로그 001');
+  await inlineRefresh().click(); await inlineReady();
+  await page.screenshot({ path: 'artifacts/log-search-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await search(inlineLogs).focus();
+  assert.equal(await search(inlineLogs).evaluate(input => input === document.activeElement), true);
+  await pause(inlineLogs).click();
+  await page.screenshot({ path: 'artifacts/log-search-mobile.png', fullPage: true });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  results.push('search and pause controls remain keyboard accessible and fit mobile390 without page overflow');
+
+  await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
+  await page.getByRole('button', { name: second.name + ' 상세 보기', exact: true }).click();
+  await page.getByRole('tab', { name: '로그', exact: true }).click();
+  await logs.locator('pre').filter({ hasText: 'second app log' }).waitFor();
+  assert.equal(await search(logs).inputValue(), '');
+  assert.equal(await pause(logs).getAttribute('aria-pressed'), 'false');
+  assert.doesNotMatch(await logs.locator('pre').innerText(), /한글 로그/);
+  await search(logs).fill('second');
+  await pause(logs).click();
+  await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
+  await page.getByRole('button', { name: app.name + ' 상세 보기', exact: true }).click();
+  await inlineReady();
+  assert.equal(await search(inlineLogs).inputValue(), '');
+  assert.equal(await pause(inlineLogs).getAttribute('aria-pressed'), 'false');
+  assert.equal((await inlineLogs.locator('pre').innerText()).split('\n').length, 15);
+  results.push('app switch resets search/pause and never carries another app snapshot');
+
   const beforeTabs = { logs: count, metrics: metricCount };
   await page.getByRole('tab', { name: '로그', exact: true }).click();
   await logs.locator('pre').filter({ hasText: '한글 로그 001' }).waitFor();
@@ -436,7 +579,17 @@ try {
   assert.match(await logs.locator('pre').innerText(), /DEMO/);
   assert.equal(await downloadButton(logs).count(), 0);
   await page.clock.runFor(45000); assert.equal(count, demoCount);
-  results.push('demo keeps sample label and sends zero monitoring requests');
+  await search(logs).fill('GET');
+  assert.match(await logs.locator('pre').innerText(), /GET \/ -> 200/);
+  assert.equal(await logs.locator('mark').innerText(), 'GET');
+  assert.equal(await pause(logs).count(), 0);
+  assert.equal(await resume(logs).count(), 0);
+  await search(logs).fill('not in samples');
+  await logs.getByText('검색 결과가 없습니다.', { exact: true }).waitFor();
+  await search(logs).fill('');
+  assert.equal((await logs.locator('pre').innerText()).split('\n').length, 3);
+  assert.equal(count, demoCount);
+  results.push('demo keeps sample label, supports local search, has no polling pause or TXT action and sends zero monitoring requests');
   app.latest_deployment_id = null; titleDeployment = null;
   const metrics = page.getByRole('region', { name: '모니터링', exact: true });
   const metricRefresh = () => metrics.getByRole('button', { name: '지표 새로고침', exact: true });
