@@ -641,8 +641,10 @@ form button {
 }
 .app-space-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 20px; }
 .app-space-card { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: 20px; border: 0; border-radius: 6px; text-align: start; background: #fff; box-shadow: 0 2px 12px #2b2e460c; }
-.app-space-card:hover:not(:disabled) { background: var(--accent-soft); }
+.app-space-card:hover:not(:disabled) { background: var(--app-provider-background, var(--paper)); box-shadow: 0 0 0 1px var(--line), 0 4px 14px #2b2e461a; }
 .app-card-field { display: grid; gap: 6px; min-width: 0; overflow-wrap: anywhere; }
+.app-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.app-card-heading > span:last-child { flex-shrink: 0; }
 .app-card-label { color: var(--muted); font-size: 12px; font-weight: 600; }
 .app-card-name { font-size: 18px; line-height: 1.4; }
 .app-card-reference { color: var(--muted); font-size: 12px; }
@@ -1374,9 +1376,9 @@ button.app-delete-outline:hover:not(:disabled) { background: var(--danger-paper)
 /* Application environments come from their linked foundation, never their names. */
 .app-space-card[data-provider="aws"], .app-space-card[data-provider="gcp"], .app-space-card[data-provider="azure"],
 .deployment-app-summary[data-provider="aws"], .deployment-app-summary[data-provider="gcp"], .deployment-app-summary[data-provider="azure"],
-.app-selected-infra[data-provider="aws"], .app-selected-infra[data-provider="gcp"], .app-selected-infra[data-provider="azure"] { background: #fff7ed; }
-.app-space-card[data-provider="onprem"], .deployment-app-summary[data-provider="onprem"], .app-selected-infra[data-provider="onprem"] { background: #f3f4f6; }
-.app-space-card[data-provider="unknown"], .deployment-app-summary[data-provider="unknown"], .app-selected-infra[data-provider="unknown"] { background: var(--paper); }
+.app-selected-infra[data-provider="aws"], .app-selected-infra[data-provider="gcp"], .app-selected-infra[data-provider="azure"] { --app-provider-background: #fff7ed; background: var(--app-provider-background); }
+.app-space-card[data-provider="onprem"], .deployment-app-summary[data-provider="onprem"], .app-selected-infra[data-provider="onprem"] { --app-provider-background: #f3f4f6; background: var(--app-provider-background); }
+.app-space-card[data-provider="unknown"], .deployment-app-summary[data-provider="unknown"], .app-selected-infra[data-provider="unknown"] { --app-provider-background: var(--paper); background: var(--app-provider-background); }
 .app-heading-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .app-provider-label { display: inline-flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 12px; font-weight: 600; }
 .app-heading-identity .app-provider-label[data-provider="aws"], .app-heading-identity .app-provider-label[data-provider="gcp"], .app-heading-identity .app-provider-label[data-provider="azure"] { background: #fff7ed; }

@@ -370,7 +370,7 @@ async function checkAppProviders(browser) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: "reduce" });
   const cases = [
     { provider: "aws", label: "AWS", icon: "/providers/aws.png" },
-    { provider: "onprem", label: "온프레미스", icon: "/providers/on-premise.png" },
+    { provider: "onprem", label: "On-premises", icon: "/providers/on-premise.png" },
     { provider: "gcp", label: "GCP", icon: "/providers/gcp.png" },
     { provider: "azure", label: "Azure", icon: "/providers/azure.png" },
     { provider: "future-provider", label: "환경 미확인" },
@@ -380,6 +380,7 @@ async function checkAppProviders(browser) {
   const listed = cases.map((item, index) => ({ ...infra, id: `app-provider-${index}`, name: `Provider ${index}`, ...(Object.hasOwn(item, "provider") ? { provider: item.provider } : {}) }));
   const hidden = { ...infra, id: "app-provider-default", name: "Hidden Default", provider: "gcp" };
   const fixtureApps = listed.map((item, index) => ({ ...app, id: `provider-app-${index}`, name: `Provider App ${index}`, infra_id: item.id }));
+  fixtureApps[0].name = "Fukuoka SoftBank Hawks — Application Deployment Portal";
   for (const [id, infraId] of [["hidden-a", hidden.id], ["hidden-b", hidden.id], ["failed", "provider-failed"], ["wrong", "provider-wrong"]])
     fixtureApps.push({ ...app, id, name: `Provider ${id}`, infra_id: infraId });
   const reads = [];
@@ -432,7 +433,14 @@ async function checkAppProviders(browser) {
     const label = current.getByLabel(`배포 환경: ${item.label}`, { exact: true });
     await label.waitFor();
     assert.equal(await label.getByText(item.label, { exact: true }).count(), 1);
-    backgrounds.push(await current.evaluate(element => window.getComputedStyle(element).backgroundColor));
+    await page.mouse.move(0, 0);
+    const normal = await current.evaluate(element => ({ background: window.getComputedStyle(element).backgroundColor, shadow: window.getComputedStyle(element).boxShadow }));
+    backgrounds.push(normal.background);
+    await current.hover();
+    await current.evaluate(async element => { window.getComputedStyle(element).getPropertyValue("background-color"); await Promise.all(element.getAnimations().map(animation => animation.finished)); });
+    const hovered = await current.evaluate(element => ({ background: window.getComputedStyle(element).backgroundColor, shadow: window.getComputedStyle(element).boxShadow }));
+    assert.equal(hovered.background, normal.background, `${item.label}: hover preserves the actual environment background`);
+    assert.notEqual(hovered.shadow, normal.shadow, `${item.label}: hover feedback uses a visible shadow`);
     if (item.icon) {
       const icon = label.locator(`img[src="${item.icon}"]`);
       await icon.evaluate(image => image.decode());
@@ -451,6 +459,25 @@ async function checkAppProviders(browser) {
   for (const [size, viewport] of [["desktop", { width: 1280, height: 1000 }], ["mobile", { width: 390, height: 844 }]]) {
     await page.setViewportSize(viewport);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    for (const entry of fixtureApps.slice(0, 7)) {
+      const current = card(entry);
+      const row = current.locator(".app-card-heading");
+      const badgeBox = await row.locator(".app-provider-label").boundingBox();
+      const rowBox = await row.boundingBox();
+      const title = current.locator(".app-card-name");
+      const titleBox = await title.boundingBox();
+      assert.ok(rowBox && badgeBox && titleBox);
+      assert.ok(Math.abs(badgeBox.x + badgeBox.width - rowBox.x - rowBox.width) <= 1, `${size}: provider badge aligns to the top row's right edge`);
+      assert.ok(badgeBox.y >= rowBox.y - 1 && badgeBox.y + badgeBox.height <= rowBox.y + rowBox.height + 1);
+      assert.ok(titleBox.y >= rowBox.y + rowBox.height - 1, `${size}: app title stays below the provider row`);
+      assert.ok(Math.abs(titleBox.x - rowBox.x) <= 1 && titleBox.width >= rowBox.width - 1, `${size}: app title uses the full card content width`);
+    }
+    const longTitle = card(fixtureApps[0]).locator(".app-card-name");
+    const titleBox = await longTitle.boundingBox();
+    const lineHeight = await longTitle.evaluate(element => Number.parseFloat(window.getComputedStyle(element).lineHeight));
+    assert.ok(titleBox.height > lineHeight * 1.5, `${size}: the long fixture title wraps without overlapping the badge`);
+    await card(fixtureApps[0]).hover();
+    await card(fixtureApps[0]).screenshot({ path: `artifacts/app-card-layout-${size}.png` });
     await page.screenshot({ path: `artifacts/app-provider-list-${size}.png`, fullPage: true });
   }
   const back = () => page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
@@ -521,7 +548,7 @@ async function checkAppProviders(browser) {
   await page.waitForFunction(() => document.querySelector(".app-detail-heading")?.getAttribute("data-provider") === "gcp");
   assert.deepEqual(unexpected, [], "only controlled provider fixture APIs are called");
   await page.close();
-  record({ name: "app-space-providers", checks: "seven provider values in cards/details/options; shared hidden-default lookup dedup; failed/wrong-ID unknown fallback; app-switch stale response isolation; explicit/sandbox payload unchanged; desktop/mobile screenshots and no overflow" });
+  record({ name: "app-space-providers", checks: "seven provider values in cards/details/options; hover preserves background with shadow feedback; top-right provider row and full-width wrapped titles on desktop/mobile; shared hidden-default lookup dedup; failed/wrong-ID unknown fallback; app-switch stale response isolation; explicit/sandbox payload unchanged; desktop/mobile screenshots and no overflow" });
 }
 async function checkSandboxCreation(browser) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
@@ -723,7 +750,7 @@ try {
   const providerPage = await browser.newPage();
   const providerCases = [
     { provider: "aws", label: "AWS", icon: "/providers/aws.png" },
-    { provider: "onprem", label: "온프레미스", icon: "/providers/on-premise.png", network: "vm" },
+    { provider: "onprem", label: "On-premises", icon: "/providers/on-premise.png", network: "vm" },
     { provider: "gcp", label: "GCP", icon: "/providers/gcp.png" },
     { provider: "azure", label: "Azure", icon: "/providers/azure.png" },
     { provider: "future-provider", label: "환경 미확인" },
@@ -1446,6 +1473,14 @@ try {
   assert.equal(await apiPage.locator(".pipeline-steps .complete").count(),6);
   assert.deepEqual(await apiPage.locator(".pipeline-steps li span").allTextContents(),Array(6).fill("완료"));
   assert.equal(await apiPage.getByText("샘플 commit:",{exact:false}).count(),0);
+  const deploymentDetails = apiPage.locator('details[aria-label="배포 버전과 설정"]');
+  assert.equal(await deploymentDetails.getAttribute("open"), null, "technical metadata starts collapsed");
+  const deploymentId = deploymentDetails.getByText("배포 ID:", { exact: false });
+  assert.equal(await deploymentId.isVisible(), false, "deployment identifier is hidden by default");
+  await deploymentDetails.locator("summary").click();
+  assert.equal(await deploymentId.isVisible(), true, "technical metadata remains available on demand");
+  await deploymentDetails.locator("summary").click();
+  assert.equal(await deploymentId.isVisible(), false, "technical metadata can be collapsed again");
   await apiPage.screenshot({path:"artifacts/api-existing-deployment-parity-mobile.png",fullPage:true});
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,1,"existing active deployment resumes SSE");
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();

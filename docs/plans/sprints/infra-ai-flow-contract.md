@@ -354,3 +354,19 @@ Contextual-help local completion 2026-10-04: implemented/tested/reviewed (check5
 
 ## VM network compatibility — approved 2026-10-04
 Explicit bugfix request covers design/implementation of three existing code locations: types.ts network union, api.ts network allowlist, App.tsx network label. Regression tests must demonstrate pre-fix invalid_response on mixed AWS+VM and VM detail; retain invalid-network rejection; browser validates mixed rows and exact 온프레미스 내부망 label. Required check and test:e2e. Production remains unchanged until separately approved publication/deployment.
+
+
+## App card hover and provider placement — 2026-10-04
+User requests preserving environment color on pointer hover and moving the provider badge to the top-right of each application card. Bounded fix: keep the original environment background on hover, use border/shadow feedback, put the existing provider badge beside the small name label with the application title on its own full-width row. Preserve accessible card name/description, keyboard focus, actual provider values and API behavior. Branch codex/app-card-provider-layout from main3050fda; root owns Applications.tsx/styles.css and these reused records, browser worker owns the existing provider scenario assertions/screens. Verify hover color, alignment/non-overlap, desktop/mobile and required check/E2E. No Git publication requested for this new diff.
+
+
+## Application heading help removal — 2026-10-04
+User explicitly requested removing the question-mark help beside the Application heading. Remove only application-context-help in Applications.tsx; retain other contextual help and existing card edits. No API or publication changes. Verification pending.
+
+
+## On-premises environment label - 2026-10-04
+User requested English provider name in the Infra Space row. Change the shared provider label from Korean to On-premises so Infra/App provider badges and choices stay consistent; preserve API onprem value, icons, colors and Korean network explanation. Existing browser assertions updated to the requested label. No Git publication requested. Required checks pending.
+
+
+## Deployment metadata disclosure and UI publication - 2026-10-04
+User approved finishing the proposed deployment detail disclosure, committing/pushing the accumulated card/provider/help UI changes on codex/app-card-provider-layout, creating a PR and merging main, and running frontend Deploy if available. Native details/summary hides technical IDs by default; progress, runtime, app access and failures remain visible. Maintain existing API and AWS workflow. Browser regression verifies collapse/expand. Latest main equals branch base3050fda. Required check and full browser validation before publication; verify PR CI and exact merged SHA before dispatching existing manual deploy.yml on main. No backend or resource provisioning changes.
