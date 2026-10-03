@@ -1049,22 +1049,47 @@ progress {
 }
 .pipeline-steps {
   display: grid;
-  gap: 10px;
-  padding-left: 24px;
+  grid-template-columns: repeat(6, minmax(76px, 1fr));
+  gap: 8px;
+  margin: 20px 0;
+  padding: 2px 0 8px;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.pipeline-steps:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .pipeline-steps li {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--surface);
   color: var(--muted);
-  padding: 6px;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .pipeline-steps li.complete {
-  color: var(--ink);
-  background: var(--surface);
-  border-radius: 6px;
+  color: #365c3e;
+  background: #e8f1e5;
 }
-.pipeline-steps span {
-  font-size: 12px;
-  margin-right: 12px;
+.pipeline-steps li.current {
+  color: #973e28;
+  background: #fcebe3;
+  border-color: #bd5b3f;
 }
+.pipeline-steps li.failed {
+  color: var(--danger-ink);
+  background: var(--danger-paper);
+  border-color: var(--danger);
+}
+.pipeline-steps strong { font-size: 13px; }
+.pipeline-steps span { font-size: 12px; }
 .file-tab {
   border: 1px solid var(--control-border);
   padding: 10px 16px;

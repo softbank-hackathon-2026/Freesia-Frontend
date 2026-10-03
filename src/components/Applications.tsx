@@ -1117,11 +1117,11 @@ export default function Applications({
                       {viewStep === 4 && <p role="status">{deployment.status === "success" ? "배포가 완료되었습니다." : "배포에 실패했습니다. 실패 이유를 확인하고 명시적으로 다시 시도하세요."}</p>}
                       <p>{event?.message ?? "현재 배포 상태를 표시합니다."}</p>
                       {reconnecting && <p role="status">배포 연결 복구 중… {streamError} <button onClick={()=>{setStreamError("");setStreamRetry(n=>n+1);}}>배포 상태 다시 연결</button></p>}
-                      <ol className="pipeline-steps">
+                      <ol className="pipeline-steps" aria-label="배포 세부 단계" tabIndex={0}>
                         {pipelineSteps.map((step,i)=>{
                           const current = mode === "demo" ? demoStep(deployment) : pipelineStepIds.indexOf(event?.step ?? "");
                           const label = current < 0 ? "확인 중" : i < current || (i === current && deployment.status === "success") ? "완료" : i === current ? deployment.status === "failed" ? "실패" : "진행 중" : "대기";
-                          return <li key={step} className={label === "완료" ? "complete" : ""}><span>{label}</span>{step}</li>;
+                          return <li key={step} className={label === "완료" ? "complete" : label === "진행 중" ? "current" : label === "실패" ? "failed" : ""} aria-current={label === "진행 중" ? "step" : undefined}><strong>{step}</strong><span>{label}</span></li>;
                         })}
                       </ol>
                       {mode === "demo" && <p className="notice">로컬 샘플 진행입니다. 외부 GitHub·AWS 작업은 실행하지 않습니다.</p>}
