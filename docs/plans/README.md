@@ -303,3 +303,15 @@ Current follow-up: resource tree visibility regression on codex/resource-tree-vi
 Resource-tree visibility follow-up verified 2026-10-03T13:27:06.9663764+09:00: check47/E2E25/flow15/tree/source+visual PASS. Implementation complete on codex/resource-tree-visibility; local only, no Git publication or production deployment. See infra-ai-flow-eval current section.
 
 Publication now explicitly authorized 2026-10-03T13:34:24.1659173+09:00: commit/push codex/resource-tree-visibility and merge into main after CI. Actual123 resource data is empty in local simulation; the UI fix does not create resources.
+
+Current bounded task: horizontal deployment-stage cards, user screenshot directed. Branch codex/horizontal-deployment-stages; existing spec/plan/contract updated; verification in progress, no publication.
+
+Horizontal deployment-stage cards completed 2026-10-03T14:04:23.5065395+09:00: check47/E2E25/flow15/visual4 PASS. Six cards in one row with mobile keyboard scrolling and state colors; existing progress/tree preserved. codex/horizontal-deployment-stages remains local/uncommitted/unpushed. See infra-ai-flow-eval.md.
+
+2026-10-03T14:07:10.2337429+09:00 user approved current branch commit/push and runtime title investigation. Existing parenthesized compute contract checked against4513f4e, verification in progress; no PR/main merge/deploy approval.
+
+2026-10-03T14:08:47.5152085+09:00 compute-title investigation completed: actual123 ECS Fargate title visible; Lambda/Fargate/failure/teardown fixture4 PASS. No title code edit needed. Horizontal cards ready for user-authorized commit/push on codex/horizontal-deployment-stages; no PR/merge/deploy.
+
+Current task 2026-10-03T14:11:35.9407734+09:00 API Infra read-only action cleanup on codex/horizontal-deployment-stages. User approved commit/push of this follow-up; root owns product/docs, worker existing API E2E. No PR/merge/deploy.
+
+2026-10-03T14:19:28.6801179+09:00 API Infra read-only follow-up verified: check47/E2E25/harnesslint/diffPASS;1440/390buttonsabsent,list/detail/retryretained,legacydemo unchanged. User-authorized currentbranchcommit/push next; no PR/merge/deploy.

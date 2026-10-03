@@ -102,6 +102,12 @@ async function switchSource(page, source) {
   destination.searchParams.delete("tab");
   await page.goto(destination.href);
 }
+async function assertReadOnlyInfra(page) {
+  for (const name of ["새로고침", "스페이스 생성", "스페이스 삭제"])
+    assert.equal(await page.locator(".infra-list").getByRole("button", { name, exact: true }).count(), 0, "API infra is read-only: " + name + " is absent");
+  assert.equal(await page.getByLabel("Space 이름", { exact: true }).count(), 0, "API mode has no infra creation form");
+  assert.equal(await page.getByRole("dialog", { name: "스페이스 삭제", exact: true, includeHidden: true }).count(), 0, "API mode has no infra deletion dialog");
+}
 async function reviewDeploymentStep(page, label) {
   const target = page.getByRole("navigation", { name: "배포 단계", exact: true }).getByRole("button", { name: label, exact: true });
   await target.click();
@@ -392,10 +398,12 @@ try {
   assert.ok(defaultRequests.some(path => path.endsWith("/infra-spaces")), "plain URL must fetch backend API rather than start the demo");
   assert.equal(await defaultPage.getByRole("button", { name: "Default API fixture", exact: true }).count(), 1);
   assert.equal(await defaultPage.getByLabel("데이터 소스", { exact: true }).count(), 0, "upper-right source selector is removed");
+  await assertReadOnlyInfra(defaultPage);
   assert.doesNotMatch(await defaultPage.locator("main").innerText(), /쇼핑몰 서비스|사내 업무 서비스|결제 서비스/);
   await defaultPage.screenshot({ path: "artifacts/default-api-desktop.png", fullPage: true });
   await defaultPage.setViewportSize({ width: 390, height: 844 });
   assert.equal(await defaultPage.getByLabel("데이터 소스", { exact: true }).count(), 0);
+  await assertReadOnlyInfra(defaultPage);
   assert.equal(await defaultPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await defaultPage.screenshot({ path: "artifacts/default-api-mobile.png", fullPage: true });
   await defaultPage.close();
@@ -740,8 +748,7 @@ try {
       /테스트 백엔드 연결 실패/,
     );
     await navigate(page, "인프라 스페이스");
-    assert.equal(await page.locator(".infra-list .section-heading").getByRole("button", { name: "스페이스 생성", exact: true }).count(), 1);
-    assert.equal(await page.locator(".infra-list .section-heading").getByRole("button", { name: "새로고침", exact: true }).isEnabled(), true);
+    await assertReadOnlyInfra(page);
     assert.equal(await page.locator(".infra-list .section-heading").getByRole("heading").innerText(), "인프라 스페이스");
     assert.equal(await page.getByText("등록된 기반이 없습니다.", { exact: true }).count(), 0);
     assert.equal(
@@ -756,7 +763,7 @@ try {
     );
     assert.match(
       await page.locator("main").innerText(),
-      /Infra Space 생성, 삭제, 인프라 배포 API는 아직/,
+      /애플리케이션 담당자는 준비된 인프라를 조회/,
     );
     await switchSource(page, "demo");
     assert.equal(
@@ -796,7 +803,7 @@ try {
   let hasDeployment = false;
   let apiRepositories = [repository];
   const apiAnalyses = new Map();
-  let apiInfras = [infra], infraRequestHold;
+  let apiInfras = [infra], infraRequestHold, infraFailure = false;
   await apiPage.route("**/api/**", async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname.replace("/api", "");
@@ -814,7 +821,11 @@ try {
       apiRepositories = apiRepositories.filter(repo=>repo.id!==path.split("/").at(-1));
       return route.fulfill({status:204});
     }
-    else if (path === "/infra-spaces") { if (infraRequestHold) await infraRequestHold; value = apiInfras; }
+    else if (path === "/infra-spaces") {
+      if (infraRequestHold) await infraRequestHold;
+      if (infraFailure) return route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ message: "인프라 조회 실패 fixture" }) });
+      value = apiInfras;
+    }
     else if (path === "/app-spaces" && req.method() === "GET") value = [app];
     else if (path === "/app-spaces") value = {...app,...req.postDataJSON(),id:"app-created"};
     else if (path === "/app-spaces/app-api")
@@ -863,37 +874,43 @@ try {
   await switchSource(apiPage, "api");
   await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
   const apiInfraPanel = apiPage.locator(".infra-list");
-  assert.equal(await apiInfraPanel.getByRole("button", { name: "스페이스 삭제", exact: true }).isDisabled(), true);
-  assert.match(await apiPage.locator("main").innerText(), /삭제.*API는 아직 없습니다/);
-  assert.equal(calls.some(call => call.method === "DELETE" && call.path.startsWith("/infra-spaces")), false);
+  await assertReadOnlyInfra(apiPage);
+  assert.match(await apiPage.locator("main").innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
+  assert.deepEqual(calls.filter(call => call.path.startsWith("/infra-spaces") && call.method !== "GET"), []);
   const apiInfraRow = apiInfraPanel.getByRole("row").filter({ has: apiPage.getByRole("button", { name: "API 기반", exact: true }) });
   assert.equal(await apiInfraRow.getByRole("cell").nth(2).innerText(), "0", "keep server app_count even when the app list contains a linked app");
   assert.equal(await apiInfraRow.getByRole("cell").nth(3).innerText(), "미제공");
   apiInfras = [];
   let releaseInfra;
   infraRequestHold = new Promise((resolve) => { releaseInfra = resolve; });
-  await apiInfraPanel.getByRole("button", { name: "새로고침", exact: true }).click();
+  await apiPage.reload();
   await apiInfraPanel.getByText("불러오는 중…", { exact: true }).waitFor();
-  assert.equal(await apiInfraPanel.getByRole("button", { name: "새로고침", exact: true }).isDisabled(), true);
-  assert.equal(await apiInfraPanel.getByRole("button", { name: "스페이스 생성", exact: true }).isVisible(), true);
+  await assertReadOnlyInfra(apiPage);
   assert.equal(await apiInfraPanel.locator(".section-heading").getByRole("heading").innerText(), "인프라 스페이스");
   releaseInfra();
   infraRequestHold = undefined;
   await apiInfraPanel.getByText("등록된 기반이 없습니다.", { exact: true }).waitFor();
   assert.equal(await apiInfraPanel.getByRole("heading", { name: "인프라 스페이스 (0)", exact: true }).count(), 1);
+  await assertReadOnlyInfra(apiPage);
   apiInfras = [infra];
-  await apiInfraPanel.getByRole("button", { name: "새로고침", exact: true }).click();
+  infraFailure = true;
+  await apiPage.reload();
+  const infraAlert = apiPage.getByRole("alert").filter({ hasText: "인프라 목록을 불러오지 못했습니다." });
+  await infraAlert.waitFor();
+  assert.match(await infraAlert.innerText(), /인프라 조회 실패 fixture/);
+  await assertReadOnlyInfra(apiPage);
+  const infraReadsBeforeRetry = calls.filter(call => call.path === "/infra-spaces" && call.method === "GET").length;
+  infraFailure = false;
+  await infraAlert.getByRole("button", { name: "다시 시도", exact: true }).click();
   await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
+  assert.ok(calls.filter(call => call.path === "/infra-spaces" && call.method === "GET").length > infraReadsBeforeRetry, "error retry preserves GET-only infra recovery");
 
   for (const [size,width,height] of [["desktop",1440,1000],["mobile",390,844]]) {
     await apiPage.setViewportSize({width,height});
     assert.equal(await apiInfraRow.getByRole("cell").nth(2).innerText(), "0");
     assert.equal(await apiPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await apiPage.screenshot({ path: `artifacts/ui-02-api-infra-list-${size}.png`, fullPage: true });
-    await apiPage.getByRole("button",{name:"스페이스 생성",exact:true}).click();
-    await apiPage.getByLabel("Space 이름",{exact:true}).fill("not-created");
-    assert.equal(await apiPage.getByRole("button",{name:"Space 생성",exact:true}).isDisabled(),true);
-    await apiPage.getByRole("button",{name:"목록으로",exact:true}).click();
+    await assertReadOnlyInfra(apiPage);
     await apiPage.getByRole("button",{name:"API 기반",exact:true}).click();
     for (const name of ["인프라 질의응답","인프라 코드 검토","인프라 Apply 결과"]) {
       await apiPage.getByRole("region",{name,exact:true}).waitFor();
@@ -961,7 +978,7 @@ try {
     await apiPage.screenshot({path:"artifacts/api-app-parity-"+size+".png",fullPage:true});
   }
   assert.equal(calls.filter(c=>c.path.endsWith("/deployments")&&c.method==="POST").length,0,"no sample deployment may bypass missing plan API");
-  assert.equal(calls.filter(c=>c.path==="/infra-spaces"&&c.method==="POST").length,0);
+  assert.deepEqual(calls.filter(call => call.path.startsWith("/infra-spaces") && call.method !== "GET"), [], "API infra list/detail/loading/empty/error retry never mutates infrastructure");
   assert.equal(await apiPage.locator(".candidate").filter({hasText:"ecs-fargate"}).getByText("추천",{exact:true}).count(),1);
   // Existing server deployment remains observable even though new deployment is unavailable.
   hasDeployment=true;
@@ -1503,7 +1520,7 @@ try {
     assert.equal(await page.getByRole("button",{name:"Repository 등록",exact:true}).isDisabled(),true);
     assert.equal(await page.locator(".repository-row").count(),0);
     await navigate(page, "인프라 스페이스");
-    assert.equal(await page.getByRole("button",{name:"스페이스 생성",exact:true}).count(),1);
+    await assertReadOnlyInfra(page);
     for (const name of [
       "AI로 인프라 설계",
       "인프라 배포 · 데모",

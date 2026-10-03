@@ -459,11 +459,10 @@ export default function App() {
                 })
               }
             />
-          ) : newInfra ? (
+          ) : newInfra && mode === "demo" ? (
             <InfraSpaceForm
               key={mode}
-              unavailable={mode === "api"}
-              draft={mode === "demo" ? infraDraft : null}
+              draft={infraDraft}
               onDraft={setInfraDraft}
               onCreate={createSpace}
               onCancel={() => setNewInfra(false)}
@@ -488,13 +487,13 @@ export default function App() {
                   <div className="eyebrow">INFRA SPACE</div>
                   <h1>인프라 스페이스</h1>
                   <p>
-                    VPC, Subnet 등 공통 네트워크 기반을 설계하고, 연결된 애플리케이션을 확인하세요.
+                    {mode === "demo" ? "VPC, Subnet 등 공통 네트워크 기반을 설계하고, 연결된 애플리케이션을 확인하세요." : "준비된 공통 네트워크 기반과 연결된 애플리케이션을 확인하세요."}
                   </p>
                 </div>
               </div>
               {mode === "api" && (
                 <p className="notice">
-                  연동 대기: Infra Space 생성, 삭제, 인프라 배포 API는 아직 없습니다. 서버 기반은 읽기 전용이며, 대화, 코드, Apply 영역은 API 연결 후 사용할 수 있습니다.
+                  애플리케이션 담당자는 준비된 인프라를 조회하고, 앱 배포 시 사용할 기반을 선택할 수 있습니다.
                 </p>
               )}
               {mode === "demo" &&
@@ -562,7 +561,7 @@ export default function App() {
               <section className="panel infra-list" aria-labelledby="infra-list-heading">
                 <div className="section-heading">
                   <h2 id="infra-list-heading">인프라 스페이스{!loading && !error && ` (${availableInfras.length})`}</h2>
-                  <div className="heading-actions">
+                  {mode === "demo" && <div className="heading-actions">
                     <button
                       className="secondary icon-button"
                       aria-label="새로고침"
@@ -587,8 +586,8 @@ export default function App() {
                     </button>
                     <button
                       className="secondary"
-                      disabled={mode === "api" || !discardableSpaces.length || !!storeError}
-                      title={mode === "api" ? "Infra Space 삭제 API가 아직 없습니다." : "미구축 DEMO Space 삭제"}
+                      disabled={!discardableSpaces.length || !!storeError}
+                      title="미구축 DEMO Space 삭제"
                       onClick={() => {
                         setDiscardId(discardableSpaces[0].id);
                         setDiscardError("");
@@ -597,7 +596,7 @@ export default function App() {
                     >
                       스페이스 삭제
                     </button>
-                  </div>
+                  </div>}
                 </div>
                 {loading ? (
                   <div className="empty" aria-live="polite">불러오는 중…</div>
@@ -665,7 +664,7 @@ export default function App() {
               {mode === "demo" && !discardableSpaces.length && (
                 <p className="muted">삭제할 수 있는 미구축 DEMO Space가 없습니다.</p>
               )}
-              <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="infra-discard-heading" aria-describedby="infra-discard-description">
+              {mode === "demo" && <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="infra-discard-heading" aria-describedby="infra-discard-description">
                 <h2 id="infra-discard-heading">스페이스 삭제</h2>
                 <p id="infra-discard-description">선택한 DEMO Space의 요구사항과 코드가 브라우저에서 삭제돼요. 실제 AWS 리소스에는 영향을 주지 않아요. 배포 중이거나 앱이 연결된 Space와 준비된 예시는 삭제할 수 없어요.</p>
                 <label htmlFor="infra-discard-target">삭제할 Space</label>
@@ -684,7 +683,7 @@ export default function App() {
                     }
                   }}>선택한 Space 삭제</button>
                 </div>
-              </dialog>
+              </dialog>}
               {selected && (
                 <section className="panel detail" aria-label="인프라 상세">
                   <div className="section-heading">
