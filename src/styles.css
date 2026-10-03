@@ -1374,7 +1374,7 @@ button.app-delete-outline:hover:not(:disabled) { background: var(--danger-paper)
 }
 @media (max-width: 690px) {
   .app-detail-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .app-detail-actions .app-delete-outline { grid-column: 1 / -1; }
+  .app-detail-actions .app-delete-outline, .app-detail-actions .app-access-actions { grid-column: 1 / -1; }
   .deployment-management-dialog { padding: 20px; }
   .deployment-management-dialog .form-actions button { flex: 1 1 auto; }
 }

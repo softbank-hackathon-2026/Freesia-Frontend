@@ -8,9 +8,10 @@ import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { initialDemo } from '../src/lib/demo.ts';
 
-const base = process.env.MONITORING_CHECK_URL || 'http://localhost:15173';
+const port = process.env.MONITORING_CHECK_PORT || '15173';
+const base = process.env.MONITORING_CHECK_URL || `http://localhost:${port}`;
 const server = process.env.MONITORING_CHECK_URL ? null : spawn(process.execPath,
-  ['node_modules/vite/bin/vite.js', '--host', 'localhost', '--port', '15173', '--strictPort'], { stdio: 'pipe' });
+  ['node_modules/vite/bin/vite.js', '--host', 'localhost', '--port', port, '--strictPort'], { stdio: 'pipe' });
 let browser, exportDirectory, exportPath;
 const results = [];
 try {
@@ -23,6 +24,7 @@ try {
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(7000);
+  page.setDefaultNavigationTimeout(30000);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const at = '2026-10-02T09:00:00Z';
@@ -87,11 +89,8 @@ try {
   };
   const logs = page.getByRole('region', { name: '애플리케이션 로그', exact: true });
   const refresh = () => logs.getByRole('button', { name: '로그 새로고침', exact: true });
-  const observation = page.getByRole('region', { name: '배포 후 운영 확인', exact: true });
-  const inlineLogs = observation.getByRole('region', { name: '애플리케이션 로그', exact: true });
-  const inlineMetrics = observation.getByRole('region', { name: '모니터링', exact: true });
-  const inlineRefresh = () => inlineLogs.getByRole('button', { name: '로그 새로고침', exact: true });
-  const inlineMetricRefresh = () => inlineMetrics.getByRole('button', { name: '지표 새로고침', exact: true });
+  const metrics = page.getByRole('region', { name: '모니터링', exact: true });
+  const metricRefresh = () => metrics.getByRole('button', { name: '지표 새로고침', exact: true });
   const downloadButton = scope => scope.getByRole('button', { name: '전체 로그 .txt 다운로드', exact: true });
   const search = scope => scope.getByRole('searchbox', { name: '로그 메시지 검색', exact: true });
   const pause = scope => scope.getByRole('button', { name: '자동 갱신 일시정지', exact: true });
@@ -99,15 +98,21 @@ try {
   const exportUnavailable = async scope => {
     if (await downloadButton(scope).count()) assert.ok(await downloadButton(scope).isDisabled());
   };
-  const inlineReady = async () => {
-    await page.waitForFunction(() => {
-      const scope = document.querySelector('[aria-label="배포 후 운영 확인"]');
-      return scope && [...scope.querySelectorAll('button')].filter(button => /새로고침/.test(button.textContent)).every(button => !button.disabled);
-    });
-  };
+  const logsReady = () => page.waitForFunction(() => {
+    const button = document.querySelector('[aria-label="애플리케이션 로그"] .log-actions button');
+    return button && !button.disabled;
+  });
+  const metricReady = () => page.waitForFunction(() => {
+    const button = document.querySelector('[aria-label="모니터링"] button');
+    return button && !button.disabled;
+  });
   const overview = async () => {
     await page.goto(base + '/?source=api&app=' + app.id);
     await page.locator('.page-heading h1').filter({ hasText: app.name }).waitFor();
+  };
+  const assertOverviewHasNoMonitoring = async () => {
+    assert.equal(await logs.count(), 0);
+    assert.equal(await metrics.count(), 0);
   };
   const originalName = app.name;
   const originalPayload = JSON.parse(JSON.stringify(payload));
@@ -120,41 +125,41 @@ try {
   await mkdir('artifacts', { recursive: true });
   await page.clock.install({ time: new Date('2026-10-03T00:00:00Z') });
   await page.clock.pauseAt(new Date('2026-10-03T00:00:01Z'));
-  metricHeld = true;
-  const initialMetricPending = new Promise(resolve => metricStarted = resolve);
   const initialReads = { logs: count, metrics: metricCount };
   await overview();
-  await observation.waitFor();
-  await initialMetricPending;
-  await inlineLogs.locator('pre').filter({ hasText: '한글 로그 100' }).waitFor();
-  assert.equal(count, initialReads.logs + 1);
-  assert.equal(metricCount, initialReads.metrics + 1);
-  assert.ok(await inlineMetricRefresh().isDisabled());
-  await inlineMetrics.getByText('지표 조회 중…', { exact: true }).waitFor();
-  const preview = await inlineLogs.locator('pre').innerText();
-  assert.equal(preview.split('\n').length, 15);
-  assert.match(preview, /한글 로그 086/);
-  assert.doesNotMatch(preview, /한글 로그 001/);
-  assert.equal(await inlineLogs.locator('img').count(), 0);
-  assert.equal(await page.evaluate(() => window.logExecuted), undefined);
-  await inlineLogs.getByRole('searchbox', { name: '로그 메시지 검색', exact: true }).waitFor();
-  assert.ok(await downloadButton(inlineLogs).isEnabled());
-  metricHeld = false; metricRelease();
-  await inlineMetrics.getByText('120.68 ms', { exact: true }).waitFor();
-  await inlineReady();
-  results.push('successful result immediately reads logs and metrics independently; held metrics do not block latest15 escaped logs');
+  const stages = page.getByRole('navigation', { name: '배포 단계', exact: true });
+  await stages.getByRole('button').nth(3).click();
+  assert.equal(await stages.getByRole('button').nth(3).getAttribute('aria-current'), 'step');
+  await assertOverviewHasNoMonitoring();
+  await stages.getByRole('button').nth(4).click();
+  assert.equal(await stages.getByRole('button').nth(4).getAttribute('aria-current'), 'step');
+  await assertOverviewHasNoMonitoring();
+  await page.clock.runFor(45000);
+  assert.deepEqual({ logs: count, metrics: metricCount }, initialReads, 'Overview stages4/5 must not request logs or metrics');
+  results.push('deployment overview stages4 and5 contain no log/metric components and make zero monitoring GETs');
 
+  await page.getByRole('tab', { name: '로그', exact: true }).click();
+  await logs.locator('pre').filter({ hasText: '한글 로그 100' }).waitFor();
+  await logsReady();
+  assert.equal(count, initialReads.logs + 1);
+  assert.equal(metricCount, initialReads.metrics);
+  assert.equal((await logs.locator('pre').innerText()).split('\n').length, 100);
+  assert.equal(await logs.locator('img').count(), 0);
+  assert.equal(await page.evaluate(() => window.logExecuted), undefined);
+  await search(logs).waitFor();
+  assert.ok(await downloadButton(logs).isEnabled());
+  results.push('entering the logs tab immediately fetches all100 escaped log entries without metric requests');
   const beforeDownload = { logs: count, metrics: metricCount };
   payload = { status: 'ok', message: null, lines: [{ at, message: 'unfetched replacement must not enter export' }] };
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    downloadButton(inlineLogs).click(),
+    downloadButton(logs).click(),
   ]);
   assert.match(download.suggestedFilename(), /^한글.*\d{8}-\d{6}\.txt$/);
   assert.doesNotMatch(download.suggestedFilename(), /[<>:"/\\|?*]|\p{Cc}/u);
   // Playwright holds its target file exclusively while saving on Windows.
   // Keep that target outside Vite's watched project to avoid watcher EBUSY.
-  exportDirectory = await mkdtemp(join(tmpdir(), 'freesia-post-deploy-'));
+  exportDirectory = await mkdtemp(join(tmpdir(), 'freesia-monitoring-tabs-'));
   exportPath = join(exportDirectory, 'logs.txt');
   await download.saveAs(exportPath);
   const bytes = await readFile(exportPath);
@@ -171,22 +176,22 @@ try {
   assert.deepEqual({ logs: count, metrics: metricCount }, beforeDownload);
   payload = { status: 'ok', message: null, lines: fetchedLines };
   results.push('TXT export preserves fetched100 snapshot, UTC timestamps, Korean UTF8 BOM/CRLF and safe timestamped filename without another GET');
-  await page.screenshot({ path: 'artifacts/post-deploy-observation-desktop.png', fullPage: true });
+  await page.screenshot({ path: 'artifacts/monitoring-tabs-logs-desktop.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: 'artifacts/post-deploy-observation-mobile.png', fullPage: true });
+  await page.screenshot({ path: 'artifacts/monitoring-tabs-logs-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.setViewportSize({ width: 1440, height: 1000 });
-  results.push('inline successful result captures desktop1440/mobile390 with no page overflow');
+  results.push('logs tab captures desktop1440/mobile390 with no page overflow');
 
-  // Search filters all fetched lines before the inline latest15 preview.
+  // Search and export operate on all fetched lines in the logs tab.
   const beforeSearch = { logs: count, metrics: metricCount };
-  await search(inlineLogs).fill('한글 로그 001');
-  await inlineLogs.getByText('검색 결과 1줄', { exact: true }).waitFor();
-  assert.match(await inlineLogs.locator('pre').innerText(), /한글 로그 001/);
-  assert.equal(await inlineLogs.locator('mark').innerText(), '한글 로그 001');
+  await search(logs).fill('한글 로그 001');
+  await logs.getByText('검색 결과 1줄', { exact: true }).waitFor();
+  assert.match(await logs.locator('pre').innerText(), /한글 로그 001/);
+  assert.equal(await logs.locator('mark').innerText(), '한글 로그 001');
   assert.deepEqual({ logs: count, metrics: metricCount }, beforeSearch);
-  const [filteredDownload] = await Promise.all([page.waitForEvent('download'), downloadButton(inlineLogs).click()]);
+  const [filteredDownload] = await Promise.all([page.waitForEvent('download'), downloadButton(logs).click()]);
   const stream = await filteredDownload.createReadStream();
   const chunks = [];
   for await (const chunk of stream) chunks.push(chunk);
@@ -195,13 +200,13 @@ try {
   assert.match(filteredExport, /한글 로그 001/);
   assert.match(filteredExport, /한글 로그 100/);
   assert.deepEqual({ logs: count, metrics: metricCount }, beforeSearch);
-  await search(inlineLogs).fill('missing literal');
-  await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).waitFor();
-  assert.equal(await inlineLogs.locator('pre').count(), 0);
-  assert.ok(await downloadButton(inlineLogs).isEnabled());
-  await search(inlineLogs).fill('');
-  assert.equal((await inlineLogs.locator('pre').innerText()).split('\n').length, 15);
-  results.push('search includes older fetched lines before preview cap, no extra GET; filtered TXT still exports complete100; clear and no-match states');
+  await search(logs).fill('missing literal');
+  await logs.getByText('검색 결과가 없습니다.', { exact: true }).waitFor();
+  assert.equal(await logs.locator('pre').count(), 0);
+  assert.ok(await downloadButton(logs).isEnabled());
+  await search(logs).fill('');
+  assert.equal((await logs.locator('pre').innerText()).split('\n').length, 100);
+  results.push('search covers all fetched100 lines without extra GET; filtered TXT still exports complete100; clear and no-match states');
 
   payload = { status: 'ok', message: null, lines: [
     { at, message: 'TIMEOUT Timeout timeout' },
@@ -209,91 +214,91 @@ try {
     { at, message: 'aaabXx not a literal match' },
     { at, message: '<img src=x onerror="window.logExecuted=true"> 사용자 로그' },
   ] };
-  await inlineRefresh().click(); await inlineReady();
-  await search(inlineLogs).fill('timeout');
-  assert.equal(await inlineLogs.locator('mark').count(), 3);
-  assert.deepEqual(await inlineLogs.locator('mark').allTextContents(), ['TIMEOUT', 'Timeout', 'timeout']);
-  await search(inlineLogs).fill('a+b.[x]');
-  assert.equal(await inlineLogs.locator('mark').innerText(), 'a+b.[x]');
-  assert.doesNotMatch(await inlineLogs.locator('pre').innerText(), /aaab/);
-  await search(inlineLogs).fill('IMG');
-  assert.equal(await inlineLogs.locator('mark').innerText(), 'img');
-  assert.equal(await inlineLogs.locator('img').count(), 0);
+  await refresh().click(); await logsReady();
+  await search(logs).fill('timeout');
+  assert.equal(await logs.locator('mark').count(), 3);
+  assert.deepEqual(await logs.locator('mark').allTextContents(), ['TIMEOUT', 'Timeout', 'timeout']);
+  await search(logs).fill('a+b.[x]');
+  assert.equal(await logs.locator('mark').innerText(), 'a+b.[x]');
+  assert.doesNotMatch(await logs.locator('pre').innerText(), /aaab/);
+  await search(logs).fill('IMG');
+  assert.equal(await logs.locator('mark').innerText(), 'img');
+  assert.equal(await logs.locator('img').count(), 0);
   assert.equal(await page.evaluate(() => window.logExecuted), undefined);
-  await search(inlineLogs).fill('');
+  await search(logs).fill('');
   results.push('message-only case-insensitive literal search highlights every match, escapes regex characters and renders hostile HTML as text');
 
   const pauseCounts = { logs: count, metrics: metricCount };
-  const frozen = await inlineLogs.locator('pre').innerText();
-  await pause(inlineLogs).click();
-  assert.equal(await resume(inlineLogs).getAttribute('aria-pressed'), 'true');
+  const frozen = await logs.locator('pre').innerText();
+  await pause(logs).click();
+  assert.equal(await resume(logs).getAttribute('aria-pressed'), 'true');
   await page.clock.runFor(45000);
-  await inlineReady();
+  await logsReady();
   assert.equal(count, pauseCounts.logs);
-  assert.equal(await inlineLogs.locator('pre').innerText(), frozen);
-  assert.ok(metricCount > pauseCounts.metrics, 'Pausing logs must not pause metric requests');
-  results.push('pause retains received snapshot and stops only automatic log requests while metrics keep polling');
+  assert.equal(await logs.locator('pre').innerText(), frozen);
+  assert.equal(metricCount, pauseCounts.metrics, 'The inactive metrics tab must make no requests');
+  results.push('pause retains received snapshot and stops automatic logs tab requests; inactive metrics remain unmounted');
 
   payload = { status: 'ok', message: null, lines: [{ at, message: 'manual snapshot while paused' }] };
-  await inlineRefresh().click(); await inlineReady();
+  await refresh().click(); await logsReady();
   assert.equal(count, pauseCounts.logs + 1);
-  await inlineLogs.locator('pre').filter({ hasText: 'manual snapshot while paused' }).waitFor();
-  assert.equal(await resume(inlineLogs).getAttribute('aria-pressed'), 'true');
-  await page.clock.runFor(45000); await inlineReady();
+  await logs.locator('pre').filter({ hasText: 'manual snapshot while paused' }).waitFor();
+  assert.equal(await resume(logs).getAttribute('aria-pressed'), 'true');
+  await page.clock.runFor(45000); await logsReady();
   assert.equal(count, pauseCounts.logs + 1);
   results.push('manual refresh while paused performs one GET and leaves automatic log polling paused');
 
   payload = { status: 'ok', message: null, lines: [{ at, message: 'resume snapshot' }] };
-  await resume(inlineLogs).focus();
-  await page.keyboard.press('Enter'); await inlineReady();
+  await resume(logs).focus();
+  await page.keyboard.press('Enter'); await logsReady();
   const resumedCount = count;
   assert.equal(resumedCount, pauseCounts.logs + 2);
-  assert.equal(await pause(inlineLogs).getAttribute('aria-pressed'), 'false');
-  await inlineLogs.locator('pre').filter({ hasText: 'resume snapshot' }).waitFor();
+  assert.equal(await pause(logs).getAttribute('aria-pressed'), 'false');
+  await logs.locator('pre').filter({ hasText: 'resume snapshot' }).waitFor();
   await page.clock.runFor(14999); assert.equal(count, resumedCount);
-  await page.clock.runFor(1); await inlineReady();
+  await page.clock.runFor(1); await logsReady();
   assert.equal(count, resumedCount + 1);
   results.push('keyboard resume fetches immediately and then restores completion-based15s polling');
 
   payload = { status: 'ok', message: null, lines: [{ at, message: 'late cancelled snapshot' }] };
   held = true;
   const pendingPause = new Promise(resolve => started = resolve);
-  await inlineRefresh().click(); await pendingPause;
+  await refresh().click(); await pendingPause;
   const pauseRelease = release;
   const pauseAborts = await page.evaluate(() => window.logAborts);
-  await pause(inlineLogs).click();
-  await inlineReady();
+  await pause(logs).click();
+  await logsReady();
   assert.equal(await page.evaluate(() => window.logAborts), pauseAborts + 1);
-  assert.match(await inlineLogs.locator('pre').innerText(), /resume snapshot/);
+  assert.match(await logs.locator('pre').innerText(), /resume snapshot/);
   held = false;
   payload = { status: 'ok', message: null, lines: [{ at, message: 'fresh resumed snapshot' }] };
-  await resume(inlineLogs).click(); await inlineReady();
+  await resume(logs).click(); await logsReady();
   pauseRelease();
-  await inlineLogs.locator('pre').filter({ hasText: 'fresh resumed snapshot' }).waitFor();
-  assert.doesNotMatch(await inlineLogs.locator('pre').innerText(), /late cancelled snapshot/);
+  await logs.locator('pre').filter({ hasText: 'fresh resumed snapshot' }).waitFor();
+  assert.doesNotMatch(await logs.locator('pre').innerText(), /late cancelled snapshot/);
   results.push('pause aborts a pending fetch; immediate resume accepts new data and ignores late cancelled response');
 
-  await search(inlineLogs).fill('not present');
+  await search(logs).fill('not present');
   payload = { status: 'waiting', message: 'Search must not hide collecting state', lines: [] };
-  await inlineRefresh().click(); await inlineReady();
-  await inlineLogs.getByText('수집 대기', { exact: true }).waitFor();
-  assert.equal(await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
+  await refresh().click(); await logsReady();
+  await logs.getByText('수집 대기', { exact: true }).waitFor();
+  assert.equal(await logs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
   status = 500; payload = { message: 'Search must not hide HTTP failure' };
-  await inlineRefresh().click(); await inlineReady();
-  await inlineLogs.getByRole('alert').filter({ hasText: 'Search must not hide HTTP failure' }).waitFor();
-  assert.equal(await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
+  await refresh().click(); await logsReady();
+  await logs.getByRole('alert').filter({ hasText: 'Search must not hide HTTP failure' }).waitFor();
+  assert.equal(await logs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
   status = 200; payload = { status: 'ok', message: null, lines: [] };
-  await inlineRefresh().click(); await inlineReady();
-  assert.equal(await inlineLogs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
+  await refresh().click(); await logsReady();
+  assert.equal(await logs.getByText('검색 결과가 없습니다.', { exact: true }).count(), 0);
   results.push('active search never replaces waiting, HTTP error or genuinely empty log states with no-match copy');
   payload = { status: 'ok', message: null, lines: fetchedLines };
-  await search(inlineLogs).fill('한글 로그 001');
-  await inlineRefresh().click(); await inlineReady();
+  await search(logs).fill('한글 로그 001');
+  await refresh().click(); await logsReady();
   await page.screenshot({ path: 'artifacts/log-search-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await search(inlineLogs).focus();
-  assert.equal(await search(inlineLogs).evaluate(input => input === document.activeElement), true);
-  await pause(inlineLogs).click();
+  await search(logs).focus();
+  assert.equal(await search(logs).evaluate(input => input === document.activeElement), true);
+  await pause(logs).click();
   await page.screenshot({ path: 'artifacts/log-search-mobile.png', fullPage: true });
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -310,116 +315,61 @@ try {
   await pause(logs).click();
   await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
   await page.getByRole('button', { name: app.name + ' 상세 보기', exact: true }).click();
-  await inlineReady();
-  assert.equal(await search(inlineLogs).inputValue(), '');
-  assert.equal(await pause(inlineLogs).getAttribute('aria-pressed'), 'false');
-  assert.equal((await inlineLogs.locator('pre').innerText()).split('\n').length, 15);
+  await page.getByRole('tab', { name: '로그', exact: true }).click();
+  await logsReady();
+  assert.equal(await search(logs).inputValue(), '');
+  assert.equal(await pause(logs).getAttribute('aria-pressed'), 'false');
+  assert.equal((await logs.locator('pre').innerText()).split('\n').length, 100);
   results.push('app switch resets search/pause and never carries another app snapshot');
 
   const beforeTabs = { logs: count, metrics: metricCount };
-  await page.getByRole('tab', { name: '로그', exact: true }).click();
-  await logs.locator('pre').filter({ hasText: '한글 로그 001' }).waitFor();
-  assert.equal((await logs.locator('pre').innerText()).split('\n').length, 100);
-  assert.equal(count, beforeTabs.logs + 1);
-  assert.equal(metricCount, beforeTabs.metrics);
-  assert.ok(await downloadButton(logs).isEnabled());
   await page.getByRole('tab', { name: '개요', exact: true }).click();
-  await inlineReady();
-  assert.equal((await inlineLogs.locator('pre').innerText()).split('\n').length, 15);
-  assert.equal(count, beforeTabs.logs + 2);
-  assert.equal(metricCount, beforeTabs.metrics + 1);
-  results.push('existing logs tab retains all100 and download; overview remounts15-line preview with both independent reads');
-
-  const beforeInlinePoll = { logs: count, metrics: metricCount };
-  await page.clock.runFor(14999);
-  assert.deepEqual({ logs: count, metrics: metricCount }, beforeInlinePoll);
-  metricHeld = true;
-  const inlineMetricPending = new Promise(resolve => metricStarted = resolve);
-  await page.clock.runFor(1); await inlineMetricPending;
-  await page.waitForFunction(() => !document.querySelector('[aria-label="배포 후 운영 확인"] [aria-label="애플리케이션 로그"] button')?.disabled);
-  assert.equal(count, beforeInlinePoll.logs + 1);
-  assert.equal(metricCount, beforeInlinePoll.metrics + 1);
+  await assertOverviewHasNoMonitoring();
   await page.clock.runFor(45000);
-  assert.equal(metricCount, beforeInlinePoll.metrics + 1);
-  assert.ok(await inlineMetricRefresh().isDisabled());
-  metricHeld = false; metricRelease(); await inlineReady();
+  assert.deepEqual({ logs: count, metrics: metricCount }, beforeTabs);
+  await page.getByRole('tab', { name: '모니터링', exact: true }).click();
+  await metrics.getByText('120.68 ms', { exact: true }).waitFor();
+  await metricReady();
+  assert.equal(count, beforeTabs.logs);
+  assert.equal(metricCount, beforeTabs.metrics + 1);
+  assert.equal(await logs.count(), 0);
+  assert.equal(await pause(metrics).count(), 0);
+  results.push('leaving logs for overview stops reads; entering metrics fetches immediately without mounting logs');
+
+  const beforeMetricTabPoll = { logs: count, metrics: metricCount };
+  metricHeld = true;
+  const metricTabPending = new Promise(resolve => metricStarted = resolve);
+  await page.clock.runFor(14999);
+  assert.deepEqual({ logs: count, metrics: metricCount }, beforeMetricTabPoll);
+  await page.clock.runFor(1); await metricTabPending;
+  assert.equal(metricCount, beforeMetricTabPoll.metrics + 1);
+  assert.equal(count, beforeMetricTabPoll.logs);
+  assert.ok(await metricRefresh().isDisabled());
+  await page.clock.runFor(45000);
+  assert.equal(metricCount, beforeMetricTabPoll.metrics + 1);
+  metricHeld = false; metricRelease(); await metricReady();
   const metricsAfterCompletion = metricCount;
   await page.clock.runFor(14999); assert.equal(metricCount, metricsAfterCompletion);
-  await page.clock.runFor(1); await inlineReady();
+  await page.clock.runFor(1); await metricReady();
   assert.equal(metricCount, metricsAfterCompletion + 1);
-  results.push('inline views keep independent completion-based15s polling with no overlapping metrics request');
-
-  status = 500; payload = { message: 'inline log HTTP failure' };
-  await inlineRefresh().click();
-  await inlineLogs.getByRole('alert').filter({ hasText: 'inline log HTTP failure' }).waitFor();
-  await inlineMetrics.getByText('120.68 ms', { exact: true }).waitFor();
-  await exportUnavailable(inlineLogs);
-  assert.equal(await inlineLogs.locator('pre').count(), 0);
-  status = 200; payload = { status: 'ok', message: null, lines: [{ at, message: 'independent recovered Korean 로그' }] };
-  await inlineRefresh().click();
-  await inlineLogs.locator('pre').filter({ hasText: 'independent recovered Korean 로그' }).waitFor();
-  metricStatus = 500; metricPayload = { message: 'inline metric HTTP failure' };
-  await inlineMetricRefresh().click();
-  await inlineMetrics.getByRole('alert').filter({ hasText: 'inline metric HTTP failure' }).waitFor();
-  assert.equal(await inlineMetrics.locator('.metrics > div').count(), 0);
-  assert.ok(await downloadButton(inlineLogs).isEnabled());
-  metricStatus = 200; metricPayload = { ...metricFixture, status: 'waiting', message: 'inline metrics collecting' };
-  await inlineMetricRefresh().click(); await inlineMetrics.getByText('수집 대기', { exact: true }).waitFor();
-  await inlineLogs.locator('pre').filter({ hasText: 'independent recovered Korean 로그' }).waitFor();
-  assert.equal(await inlineMetrics.locator('.metrics > div').count(), 0);
-  assert.ok(await downloadButton(inlineLogs).isEnabled());
-  payload = { status: 'waiting', message: 'inline logs collecting', lines: [] };
-  await inlineRefresh().click(); await inlineLogs.getByText('수집 대기', { exact: true }).waitFor();
-  await exportUnavailable(inlineLogs);
-  metricStatus = 200; metricPayload = { ...metricFixture, cpu_percent: null };
-  await inlineMetricRefresh().click(); await inlineMetrics.getByText('측정값 없음', { exact: true }).first().waitFor();
-  assert.equal(await inlineMetrics.locator('.metrics > div').first().locator('strong').innerText(), '—');
-  assert.equal(await inlineMetrics.getByRole('alert').count(), 0);
-  payload = { status: 'ok', message: null, lines: fetchedLines };
-  metricPayload = { ...metricFixture };
-  await inlineRefresh().click(); await inlineMetricRefresh().click(); await inlineReady();
-  results.push('inline log/metric HTTP failures, waiting and recovery are independent; missing readings stay unknown and export unavailable without actual logs');
-
-  held = true; metricHeld = true;
-  const previousLogPending = new Promise(resolve => started = resolve);
-  const previousMetricPending = new Promise(resolve => metricStarted = resolve);
-  await inlineRefresh().click(); await inlineMetricRefresh().click();
-  await previousLogPending; await previousMetricPending;
-  await exportUnavailable(inlineLogs);
-  const previousReleases = { logs: release, metrics: metricRelease };
-  const generationAborts = await page.evaluate(() => ({ logs: window.logAborts, metrics: window.metricAborts }));
-  await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
-  assert.deepEqual(await page.evaluate(() => ({ logs: window.logAborts, metrics: window.metricAborts })), { logs: generationAborts.logs + 1, metrics: generationAborts.metrics + 1 });
-  assert.equal(await observation.count(), 0);
-  app.latest_deployment_id = 'inline-new-success';
-  titleDeployment = { ...titleDeployment, id: app.latest_deployment_id, created_at: '2026-10-02T09:05:00Z' };
-  payload = { status: 'ok', message: null, lines: [{ at, message: 'new deployment fresh 로그' }] };
-  metricPayload = { ...metricFixture, cpu_percent: 33 };
-  held = false; metricHeld = false;
-  await page.getByRole('button', { name: app.name + ' 상세 보기', exact: true }).click();
-  await inlineLogs.locator('pre').filter({ hasText: 'new deployment fresh 로그' }).waitFor();
-  await inlineMetrics.getByText('33%', { exact: true }).waitFor();
-  previousReleases.logs(); previousReleases.metrics(); await page.clock.runFor(1);
-  assert.doesNotMatch(await inlineLogs.locator('pre').innerText(), /한글 로그 100/);
-  assert.equal(await inlineMetrics.getByText('0%', { exact: true }).count(), 0);
-  results.push('inline app navigation aborts both requests; new deployment remount ignores late logs and metrics from previous success');
-  await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
-  const undeployedAppReads = { logs: count, metrics: metricCount };
-  await page.getByRole('button', { name: second.name + ' 상세 보기', exact: true }).click();
-  await page.locator('.page-heading h1').filter({ hasText: second.name }).waitFor();
-  assert.equal(await observation.count(), 0);
-  assert.deepEqual({ logs: count, metrics: metricCount }, undeployedAppReads);
+  await page.screenshot({ path: 'artifacts/monitoring-tabs-metrics-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'artifacts/monitoring-tabs-metrics-mobile.png', fullPage: true });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  results.push('metrics tab preserves completion-based15s polling without overlap, log requests or mobile overflow');
 
   for (const deploymentStatus of ['failed', 'building', 'deploying']) {
     titleDeployment.status = deploymentStatus;
     const reads = { logs: count, metrics: metricCount };
     await overview();
     await page.getByText('배포 상태 · ' + deploymentStatus, { exact: true }).waitFor();
-    assert.equal(await observation.count(), 0);
+    await assertOverviewHasNoMonitoring();
+    await page.clock.runFor(45000);
     assert.deepEqual({ logs: count, metrics: metricCount }, reads);
   }
   titleDeployment.status = 'success'; titleDeployment.app_space_id = second.id;
-  await overview(); assert.equal(await observation.count(), 0);
+  await overview(); await assertOverviewHasNoMonitoring();
   titleDeployment.app_space_id = app.id;
   for (const teardownStatus of ['requested', 'success']) {
     app.teardown_status = teardownStatus; app.teardown_requested_at = '2026-10-02T09:10:00Z';
@@ -427,40 +377,39 @@ try {
     const reads = { logs: count, metrics: metricCount };
     await overview();
     await page.getByText(teardownStatus === 'requested' ? /앱을 내리는 중입니다/ : /내림 완료/).waitFor();
-    assert.equal(await observation.count(), 0);
+    await assertOverviewHasNoMonitoring();
+    await page.clock.runFor(45000);
     assert.deepEqual({ logs: count, metrics: metricCount }, reads);
   }
   delete app.teardown_status; delete app.teardown_requested_at; delete app.teardown_finished_at;
-  results.push('failed/running/latest-new-attempt/mismatched-app/requested-or-completed-teardown states never expose old successful inline monitoring');
-
-  await overview(); await inlineReady();
-  held = true; metricHeld = true;
-  const sourceLogPending = new Promise(resolve => started = resolve);
-  const sourceMetricPending = new Promise(resolve => metricStarted = resolve);
-  await inlineRefresh().click(); await inlineMetricRefresh().click();
-  await sourceLogPending; await sourceMetricPending;
-  const sourceReleases = { logs: release, metrics: metricRelease };
-  await page.goto(base + '/?source=demo&page=apps');
-  held = false; metricHeld = false; sourceReleases.logs(); sourceReleases.metrics();
-  const sourceReads = { logs: count, metrics: metricCount };
-  await page.clock.runFor(45000);
-  assert.deepEqual({ logs: count, metrics: metricCount }, sourceReads);
-  await page.getByRole('button', { name: 'Demo monitoring 상세 보기', exact: true }).click();
-  await observation.waitFor();
-  await inlineLogs.getByText('샘플', { exact: true }).waitFor();
-  await inlineMetrics.getByText('샘플 수치', { exact: true }).waitFor();
-  assert.equal(await downloadButton(inlineLogs).count(), 0);
-  await page.clock.runFor(45000);
-  assert.deepEqual({ logs: count, metrics: metricCount }, sourceReads);
-  results.push('source change stops both inline reads; demo successful result labels sample logs/metrics and makes zero monitoring HTTP calls');
-
-  // Existing tab-focused lifecycle checks use an undeployed result so switching to
-  // overview unmounts monitoring rather than deliberately starting inline reads.
+  results.push('failed/running/mismatched/teardown overview contexts never mount or request log and metric data');
+  // Keep the existing tab contract, lifecycle, source and deployment-generation checks.
   app.name = originalName; app.latest_deployment_id = null; titleDeployment = null;
   payload = originalPayload; metricPayload = { ...metricFixture };
   await open();
   await logs.locator('pre').filter({ hasText: 'first log' }).waitFor();
-  await logs.getByText('최근 애플리케이션 로그 · 최대 100줄 · 약 15초마다 새로고침 · 시간은 브라우저 현지 시간 기준입니다.', { exact: true }).waitFor();
+  const logHelp = logs.getByRole('button', { name: '애플리케이션 로그 안내', exact: true });
+  const helpNote = logs.getByRole('note', { name: '애플리케이션 로그 안내', exact: true });
+  assert.equal(await helpNote.isVisible(), false, 'log guidance is hidden until requested');
+  assert.doesNotMatch(await logs.innerText(), /최근 애플리케이션 로그|수신 \d+줄|TXT:/);
+  const beforeHelpReads = count;
+  await logHelp.focus();
+  await page.keyboard.press('Enter');
+  await helpNote.waitFor();
+  await helpNote.getByText('최근 애플리케이션 로그 · 최대 100줄 · 약 15초마다 새로고침 · 시간은 브라우저 현지 시간 기준입니다.', { exact: true }).waitFor();
+  await helpNote.getByText('TXT에는 검색 결과와 관계없이 수신된 모든 로그를 저장하며, 시간은 UTC 기준입니다.', { exact: true }).waitFor();
+  await page.screenshot({ path: 'artifacts/log-help-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
+  const helpBox = await helpNote.boundingBox();
+  assert.ok(helpBox && helpBox.x >= -1 && helpBox.x + helpBox.width <= 391, 'mobile help fits the viewport');
+  await page.screenshot({ path: 'artifacts/log-help-mobile.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  assert.equal(await helpNote.isVisible(), false);
+  assert.equal(await logHelp.evaluate(button => button === document.activeElement), true, 'Escape restores help trigger focus');
+  assert.equal(count, beforeHelpReads, 'opening help never requests more logs');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  results.push('log guidance uses keyboard-accessible help; timestamp/export contract retained; received TXT summary absent; mobile help stays within viewport without extra GET');
   assert.equal(await logs.locator('img').count(), 0);
   assert.equal(await page.evaluate(() => window.logExecuted), undefined);
   assert.match(await logs.locator('pre').innerText(), /2026/);
@@ -591,8 +540,6 @@ try {
   assert.equal(count, demoCount);
   results.push('demo keeps sample label, supports local search, has no polling pause or TXT action and sends zero monitoring requests');
   app.latest_deployment_id = null; titleDeployment = null;
-  const metrics = page.getByRole('region', { name: '모니터링', exact: true });
-  const metricRefresh = () => metrics.getByRole('button', { name: '지표 새로고침', exact: true });
   const card = label => metrics.locator('.metrics > div').filter({ has: page.getByText(label, { exact: true }) });
   const ready = () => page.waitForFunction(() => !document.querySelector('[aria-label="모니터링"] button')?.disabled);
   await open('모니터링');
@@ -714,14 +661,13 @@ try {
   const openDeployedTitle = async () => {
     await open('개요');
     if (titleDeployment.app_space_id === app.id) {
+      await page.getByRole('navigation', { name: '배포 단계', exact: true }).getByRole('button', { name: '배포 진행', exact: true }).click();
       await page.getByText('실행 환경: ' + titleDeployment.compute, { exact: true }).waitFor();
     } else {
-      // A deployment belonging to another app must not render this app's result body.
-      await page.getByRole('button', { name: '배포 관리', exact: true }).click();
-      await page.getByRole('dialog', { name: '배포 관리', exact: true }).getByRole('button', { name: /^새 버전 재배포/ }).click();
-      const dialog = page.getByRole('dialog', { name: '새 버전 재배포', exact: true });
-      await dialog.getByText(titleDeployment.id + ' · ' + titleDeployment.status, { exact: true }).waitFor();
-      await dialog.getByRole('button', { name: '취소', exact: true }).click();
+      // A mismatched deployment is rejected before any result or resource state is set.
+      await page.getByRole('alert').filter({ hasText: '배포 응답이 현재 앱 또는 요청한 배포와 다릅니다.' }).waitFor();
+      assert.equal(await page.locator('.deployment-progress-body').count(), 0);
+      assert.equal(await page.locator('.resource-tree').count(), 0);
       assert.equal(await page.getByText('실행 환경: ' + titleDeployment.compute, { exact: true }).count(), 0);
     }
   };

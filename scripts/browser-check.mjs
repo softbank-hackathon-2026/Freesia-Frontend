@@ -432,7 +432,9 @@ async function checkAppProviders(browser) {
     assert.equal(await current.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
     const label = current.getByLabel(`배포 환경: ${item.label}`, { exact: true });
     await label.waitFor();
-    assert.equal(await label.getByText(item.label, { exact: true }).count(), 1);
+    assert.equal(await label.innerText(), item.icon ? "" : item.label, "known providers show only their icon; unknown providers retain a text fallback");
+    assert.equal(await label.getAttribute("title"), item.label);
+    if (item.icon) assert.equal(await label.getAttribute("role"), "img");
     await page.mouse.move(0, 0);
     const normal = await current.evaluate(element => ({ background: window.getComputedStyle(element).backgroundColor, shadow: window.getComputedStyle(element).boxShadow }));
     backgrounds.push(normal.background);
@@ -486,7 +488,9 @@ async function checkAppProviders(browser) {
     await page.getByRole("heading", { name: fixtureApps[index].name, exact: true }).waitFor();
     const heading = page.locator(".app-detail-heading");
     assert.equal(await heading.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
-    await heading.getByLabel(`배포 환경: ${item.label}`, { exact: true }).waitFor();
+    const headingBadge = heading.getByLabel(`배포 환경: ${item.label}`, { exact: true });
+    await headingBadge.waitFor();
+    assert.equal(await headingBadge.innerText(), item.icon ? "" : item.label);
     await back();
   }
   for (const entry of fixtureApps.slice(9)) {
@@ -890,6 +894,8 @@ try {
   assert.equal(await singleReview.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
   await singleReview.getByLabel("설정값을 확인했습니다",{exact:true}).check();
   await singleReview.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).click();
+  await readinessPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(readinessPage, "배포 진행");
   await readinessPage.getByText("기존 배포 완료",{exact:true}).waitFor();
   assert.equal(await readinessPage.getByRole("link",{name:"배포된 애플리케이션 접속",exact:true}).count(),1,"successful API deployment exposes the access link");
   assert.match(await readinessPage.getByRole("alert").innerText(),/이미 배포가 진행 중/);
@@ -929,6 +935,10 @@ try {
   for (const [status, reportedUrl, teardown] of [["success", "http://deployed.freesia.test/", undefined], ["failed", "https://deployed.freesia.test/", undefined], ["building", "https://deployed.freesia.test/", undefined], ["success", null, undefined], ["success", "javascript:alert(1)", undefined], ["success", "not a URL", undefined], ["success", "https://deployed.freesia.test/", "requested"], ["success", "https://deployed.freesia.test/", "success"]]) {
     accessStatus = status; accessUrl = reportedUrl; accessTeardown = teardown;
     await readinessPage.reload();
+    if (status === "success") {
+      await readinessPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+      await reviewDeploymentStep(readinessPage, "배포 진행");
+    }
     await readinessPage.getByRole("heading", { name: new RegExp(`^배포 상태.*${status}$`) }).waitFor();
     const expected = status === "success" && reportedUrl === "http://deployed.freesia.test/" ? 1 : 0;
     assert.equal(await accessLink.count(), expected, `access link respects status=${status}, url=${reportedUrl}, teardown=${teardown}`);
@@ -1194,6 +1204,8 @@ try {
     await appCard.focus();
     await appCard.press("Enter");
     await page.getByRole("heading", { name: "demo-web", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+    await reviewDeploymentStep(page, "배포 진행");
     await page.getByRole("heading", { name: /^배포 상태.*success$/ }).waitFor();
     assert.equal(await page.getByRole("link", { name: "배포된 애플리케이션 접속", exact: true }).count(), 0, "demo deployment never exposes an active deployment access link");
     await page.screenshot({path:`artifacts/day3-pipeline-result-${name}.png`,fullPage:true});
@@ -1235,13 +1247,8 @@ try {
       await page.getByRole("button", { name: "AI로 인프라 설계" }).count(),
       0,
     );
-    const infraInstructions = page.locator("#infra-context-help");
-    await infraInstructions.waitFor({ state: "hidden" });
-    await page.getByRole("button", { name: "인프라 조회 안내", exact: true }).click();
-    await infraInstructions.waitFor({ state: "visible" });
-    assert.match(await infraInstructions.innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
-    await page.keyboard.press("Escape");
-    await infraInstructions.waitFor({ state: "hidden" });
+    assert.equal(await page.getByRole("button", { name: "인프라 조회 안내", exact: true }).count(), 0);
+    assert.equal(await page.locator("#infra-context-help").count(), 0);
     await switchSource(page, "demo");
     assert.equal(
       await page.evaluate(
@@ -1352,13 +1359,8 @@ try {
   await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
   const apiInfraPanel = apiPage.locator(".infra-list");
   await assertReadOnlyInfra(apiPage);
-  const apiInfraInstructions = apiPage.locator("#infra-context-help");
-  await apiInfraInstructions.waitFor({ state: "hidden" });
-  await apiPage.getByRole("button", { name: "인프라 조회 안내", exact: true }).click();
-  await apiInfraInstructions.waitFor({ state: "visible" });
-  assert.match(await apiInfraInstructions.innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
-  await apiPage.keyboard.press("Escape");
-  await apiInfraInstructions.waitFor({ state: "hidden" });
+  assert.equal(await apiPage.getByRole("button", { name: "인프라 조회 안내", exact: true }).count(), 0);
+  assert.equal(await apiPage.locator("#infra-context-help").count(), 0);
   assert.deepEqual(calls.filter(call => call.path.startsWith("/infra-spaces") && call.method !== "GET"), []);
   const apiInfraRow = apiInfraPanel.getByRole("row").filter({ has: apiPage.getByRole("button", { name: "API 기반", exact: true }) });
   assert.equal(await apiInfraRow.getByRole("cell").nth(2).innerText(), "0", "keep server app_count even when the app list contains a linked app");
@@ -1468,6 +1470,8 @@ try {
   serverStatus="building";
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button",{name:/api-web/}).click();
+  await apiPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(apiPage, "배포 진행");
   await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   assert.equal(await apiPage.locator(".pipeline-steps li").count(),6);
   assert.equal(await apiPage.locator(".pipeline-steps .complete").count(),6);
@@ -1485,12 +1489,17 @@ try {
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,1,"existing active deployment resumes SSE");
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button",{name:/api-web/}).click();
+  await apiPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(apiPage, "배포 진행");
   await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,2,"terminal deployment receives current snapshot after reentry");
+  await reviewDeploymentStep(apiPage, "전체 구성");
   await apiPage.locator("details").filter({hasText:"aws_ecs_service.web"}).locator("summary").click();
   await apiPage.getByText("aws_ecs_service.web",{exact:true}).waitFor();
   await apiPage.reload();
+  await apiPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(apiPage, "배포 진행");
   await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,3,"refresh restores app and terminal snapshot");
@@ -2463,6 +2472,8 @@ try {
   await legacyProgress.evaluate(({oldApp,oldDeployment,state})=>{state.apps=[oldApp];state.deployments=[oldDeployment];localStorage.setItem("freesia.demo.v1",JSON.stringify(state));},{oldApp,oldDeployment,state:initialDemo()});
   await legacyProgress.goto(url+"/?source=demo&app=demo-old-app");
   await legacyProgress.getByRole("heading",{name:"이전 배포 (Lambda)",exact:true}).waitFor();
+  await legacyProgress.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(legacyProgress, "배포 진행");
   await legacyProgress.getByText("현재 진행률 확인 중…",{exact:true}).waitFor();
   assert.equal(await legacyProgress.getByLabel("배포 진행률",{exact:true}).getAttribute("value"),null);
   await legacyProgress.close();
@@ -2530,6 +2541,7 @@ try {
   await plansPage.getByText("컨테이너 빌드 실패 이유",{exact:true}).waitFor();
   assert.deepEqual(deployBodies,[{compute:"lambda",plan_id:"plan-one"}]);
   assert.equal(await plansPage.locator(".pipeline-steps li").nth(2).locator("span").innerText(),"실패");
+  await reviewDeploymentStep(plansPage, "전체 구성");
   await plansPage.getByText(/아직 보고된 자원이 없습니다/).waitFor();
   resourceMode="error";
   await plansPage.getByRole("button",{name:"자원 상태 다시 조회",exact:true}).click();

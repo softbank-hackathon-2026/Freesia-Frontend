@@ -27,6 +27,8 @@ try {
   const confirm = dialog.getByRole('button',{name:'이 설정으로 재배포 · 데모',exact:true});
   const saved = ()=>page.evaluate(()=>JSON.parse(localStorage.getItem('freesia.demo.v1')));
   const showDeploymentDetails = async () => {
+    await page.getByRole('heading',{name:'전체 구성',exact:true}).waitFor();
+    await page.getByRole('navigation',{name:'배포 단계',exact:true}).getByRole('button',{name:'배포 진행',exact:true}).click();
     const details = page.locator('details[aria-label="배포 버전과 설정"]');
     await details.waitFor();
     if (await details.getAttribute('open') === null) await details.locator('summary').click();
@@ -114,7 +116,7 @@ try {
     if(path.endsWith('/analysis'))return json({status:req.method()==='POST'?'running':'done',requirements:[],evidence:[],candidates:[],mascot_message:null});
     return json({error:'not_found'},404);
   });
-  const openApi=async()=>{await page.goto(`${base}/?source=api&app=${app.id}`);await page.getByRole('heading',{name:/^배포 상태/}).waitFor();await opener.waitFor();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(el=>el.textContent==='배포 관리');return b&&!b.disabled;});};
+  const openApi=async()=>{await page.goto(`${base}/?source=api&app=${app.id}`);await page.getByRole('heading',{name:'전체 구성',exact:true}).waitFor();await opener.waitFor();await page.waitForFunction(()=>{const b=[...document.querySelectorAll('button')].find(el=>el.textContent==='배포 관리');return b&&!b.disabled;});};
   const apiConfirm=dialog.getByRole('button',{name:'이 설정으로 재배포',exact:true});
   const beforeApi=await saved();
   for(const width of [1280,390]){

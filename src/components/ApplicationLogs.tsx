@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { ApiError, createApi } from "../lib/api.ts";
 import type { AppLogs, DataMode } from "../lib/types.ts";
 import { buildLogExport } from "../lib/logExport.ts";
+import ContextHelp from "./ContextHelp.tsx";
 
 const api = createApi(import.meta.env.VITE_API_BASE_URL || "/api");
 const labels = { ok: "로그 수신", waiting: "수집 대기", not_deployed: "미배포", unsupported: "지원 안 됨", error: "수집 오류" };
@@ -108,12 +109,17 @@ function LogPanel({ id, mode, appName, previewLines }: LogProps) {
   const status = error ? "조회 실패" : logs ? labels[logs.status] : paused ? "일시정지" : "조회 중";
   return <section className="panel application-logs" aria-label="애플리케이션 로그">
     <div className="section-heading">
-      <h2>애플리케이션 로그</h2>
+      <div className="title-with-help">
+        <h2>애플리케이션 로그</h2>
+        {mode === "api" && <ContextHelp id="app-logs-context-help" label="애플리케이션 로그 안내">
+          <p>최근 애플리케이션 로그 · 최대 100줄 · {paused ? "자동 갱신 일시정지" : "약 15초마다 새로고침"} · 시간은 브라우저 현지 시간 기준입니다.</p>
+          <p>TXT에는 검색 결과와 관계없이 수신된 모든 로그를 저장하며, 시간은 UTC 기준입니다.</p>
+        </ContextHelp>}
+      </div>
       <span className="badge">{mode === "demo" ? "샘플" : status}</span>
     </div>
     <div className="panel-body">
-      <p className="muted">{mode === "demo" ? "샘플 로그 · 실제 앱에 연결되지 않은 고정 데이터입니다." :
-        <>최근 애플리케이션 로그 · 최대 100줄 · {paused ? "자동 갱신 일시정지" : "약 15초마다 새로고침"} · 시간은 브라우저 현지 시간 기준입니다.</>}</p>
+      {mode === "demo" && <p className="muted">샘플 로그 · 실제 앱에 연결되지 않은 고정 데이터입니다.</p>}
       <div className="log-toolbar">
         <label className="log-search">로그 메시지 검색
           <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="메시지에서 찾을 문자열"/>
@@ -124,10 +130,8 @@ function LogPanel({ id, mode, appName, previewLines }: LogProps) {
           <button disabled={!canDownload} onClick={download}>전체 로그 .txt 다운로드</button>
         </div>}
       </div>
-      {!error && sourceLines.length > 0 && <p className="muted log-summary" aria-live="polite">
-        {query && <><span>검색 결과 {matchingLines.length}줄</span> · </>}
-        {previewLines !== undefined && <>미리보기 최근 {visibleLines.length}줄 · </>}수신 {sourceLines.length}줄
-        {mode === "api" && <> · TXT: 전체 수신 로그 · UTC</>}
+      {!error && sourceLines.length > 0 && query && <p className="muted log-summary" aria-live="polite">
+        검색 결과 {matchingLines.length}줄
       </p>}
       {loading && <p role="status">{logs ? "로그 갱신 중…" : "로그 조회 중…"}</p>}
       {error && <p role="alert">{error}</p>}
