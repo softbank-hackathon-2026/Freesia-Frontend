@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import DeploymentResources from "./DeploymentResources.tsx";
 import ApplicationLogs from "./ApplicationLogs.tsx";
 import ApplicationMetrics from "./ApplicationMetrics.tsx";
+import ContextHelp from "./ContextHelp.tsx";
 import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
 import {
   availableCandidates,
@@ -96,15 +97,6 @@ export default function Applications({
   const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const workflowRequest = useRef<AbortController | null>(null);
   const stageHeading = useRef<HTMLHeadingElement>(null);
-  const managementHeading = useRef<HTMLHeadingElement>(null);
-  const managementNavigation = useRef<string | null>(null);
-  useEffect(() => {
-    if (managementNavigation.current !== appId) managementNavigation.current = null;
-    else if (tab === "overview") {
-      managementNavigation.current = null;
-      managementHeading.current?.focus();
-    }
-  }, [appId, tab]);
   const previousStage = useRef<DeploymentStage>(0);
   const [deploymentFlow, setDeploymentFlow] = useState<{ step: DeploymentStage; deploymentId: string | null }>({ step: 0, deploymentId: null });
   const viewStep = deploymentFlow.step;
@@ -118,6 +110,7 @@ export default function Applications({
   const redeployTarget = useRef<{ appId: string; deploymentId: string | undefined; session: number } | null>(null);
   const redeployRequest = useRef<AbortController | null>(null);
   const redeploySubmitting = useRef(false);
+  const [managementView, setManagementView] = useState<"actions" | "redeploy">("actions");
   const [redeployContext, setRedeployContext] = useState<RedeployContext | null>(null);
   const [redeployLoading, setRedeployLoading] = useState(false);
   const [redeployPending, setRedeployPending] = useState(false);
@@ -211,6 +204,13 @@ export default function Applications({
     || (mode === "demo" ? storageBlocked || appHistory.some(entry => !["success", "failed"].includes(entry.status))
       : !!selected?.latest_deployment_id && !deployment);
   const matchingDeployment = !!deployment && deployment.app_space_id === selected?.id && deployment.id === deploymentFlow.deploymentId;
+  let deployedAppUrl: string | undefined;
+  if (deployment?.url) {
+    try {
+      const url = new URL(deployment.url);
+      if (url.protocol === "http:" || url.protocol === "https:") deployedAppUrl = deployment.url;
+    } catch { /* Invalid reported URLs are not actionable. */ }
+  }
   const monitoringKey = `${mode}:${selected?.id ?? "none"}:${deployment?.id ?? selected?.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected?.teardown_status ?? "none"}:${selected?.teardown_requested_at ?? ""}:${selected?.teardown_finished_at ?? ""}`;
   const showDeploymentObservation = viewStep === 4 && matchingDeployment && deployment?.status === "success" && !teardownComplete && !teardownUnconfirmed;
   const resourceDeployment = mode === "api" && (viewStep === 3 || viewStep === 4) && deployment?.app_space_id === selected?.id ? deployment : null;
@@ -441,6 +441,7 @@ export default function Applications({
     redeployTarget.current = null; redeploySubmitting.current = false;
     setRedeployContext(null); setRedeployLoading(false); setRedeployPending(false);
     setRedeployReviewed(false); setRedeployError("");
+    setManagementView("actions");
   }
   async function refreshRedeployState(appId: string, controller: AbortController, token: number) {
     const fresh = await api.app(appId, controller.signal);
@@ -491,12 +492,18 @@ export default function Applications({
       if (redeployRequest.current === controller) redeployRequest.current = null;
     }
   }
+  function openManagement() {
+    if (!selected || !hasDeploymentHistory || discarding) return;
+    setManagementView("actions");
+    redeployDialog.current?.showModal();
+    redeployDialog.current?.querySelector("h2")?.focus({ preventScroll: true });
+  }
   function openRedeploy() {
     if (!selected || !hasDeploymentHistory || redeployBlocked || redeploySubmitting.current) return;
     redeployTarget.current = { appId: selected.id, deploymentId: lastSuccess?.id, session: session.current };
     setRedeployReviewed(false); setRedeployError(""); setRedeployContext(null);
-    redeployDialog.current?.showModal();
-    redeployDialog.current?.querySelector("h2")?.focus();
+    setManagementView("redeploy");
+    redeployDialog.current?.querySelector("h2")?.focus({ preventScroll: true });
     if (mode === "api") void loadRedeployContext();
   }
   async function redeploy() {
@@ -849,39 +856,39 @@ export default function Applications({
   }
   return (
     <>
-      <div className="page-heading">
-        <div>
+      <div className={"page-heading" + (appId || selected || creating ? " app-detail-heading" : "")}>
+        <div className="app-heading-copy">
+          {(appId || selected || creating) && <button className="app-back-link" disabled={discarding} onClick={() => backToList()}>
+            <span aria-hidden="true">← </span>앱 목록으로
+          </button>}
           <div className="eyebrow">APPLICATION</div>
-          <h1>
-            {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
-            {deployedCompute && ` (${deployedCompute})`}
-          </h1>
+          <div className="title-with-help">
+            <h1>
+              {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
+              {deployedCompute && ` (${deployedCompute})`}
+            </h1>
+            {mode === "api" && !selected && <ContextHelp id="application-context-help" label="앱 생성 안내">
+              통합에 등록한 Repository와 Infra Space 또는 기본 샌드박스로 앱을 만듭니다. 분석·배포는 서버 설정에 따라 실행됩니다.
+            </ContextHelp>}
+          </div>
           <p>
             {selected
               ? "기반·분석 근거·배포 상태를 확인하세요."
               : mode === "api" ? "등록한 Repository와 Infra Space 또는 샌드박스를 선택하세요." : "통합에 등록한 Repository와 준비된 Infra Space를 선택하세요."}
           </p>
         </div>
-        {(appId || selected || creating) && (
-          <div className="heading-actions">
-            {selected && hasDeploymentHistory && <button className="primary" disabled={discarding}
-              onClick={() => {
-                if (tab === "overview") managementHeading.current?.focus();
-                else {
-                  managementNavigation.current = selected.id;
-                  onNavigate(selected.id, "overview");
-                }
-              }}>배포 관리</button>}
+        {selected && (
+          <div className="heading-actions app-detail-actions">
+            {hasDeploymentHistory && <button className="primary" disabled={discarding} onClick={openManagement}>배포 관리</button>}
             {selected && mode === "api" && deployment && <button className="secondary"
               disabled={(teardownStatus === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || busy || discarding || !!streamId || !["success", "failed"].includes(deployment.status)}
               onClick={teardown}>앱 내리기</button>}
-            {selected && <button className="danger"
+            {selected && <button className="danger app-delete-outline"
               disabled={discarding || busy || teardownUnconfirmed || !!deployment && !["success", "failed"].includes(deployment.status) || (mode === "demo" && storageBlocked) || !discardableApps.some(app => app.id === selected.id)}
               title={mode === "demo" ? "배포 이력 없는 DEMO 애플리케이션 삭제" : "배포·내리기 중에는 삭제할 수 없습니다."}
               onClick={() => { setDiscardId(selected.id); setDiscardError(""); discardDialog.current?.showModal(); }}>
               애플리케이션 삭제
             </button>}
-            <button disabled={discarding} onClick={() => backToList()}>앱 목록으로</button>
           </div>
         )}
       </div>
@@ -910,11 +917,6 @@ export default function Applications({
         <button disabled={busy || discarding || analysisPending} onClick={refreshAnalysis}>분석 상태 다시 확인</button>
       </div>}
       {selected && analysisPending && viewStep !== 0 && <p className="notice" role="status">코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
-      {mode === "api" && !selected && (
-        <p className="notice">
-          등록한 Repository와 선택한 Infra Space 또는 서버의 기본 샌드박스로 앱을 생성합니다. 분석·배포 결과는 서버가 제공하며 실제 실행 여부는 서버 설정과 상태를 확인하세요.
-        </p>
-      )}
       {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefresh}>Repository 다시 조회</button></div>}
       {creating && mode === "api" && repositoryLoading ? <p role="status">Repository 불러오는 중…</p> : creating && !registered.length ? (
         <section className="panel detail">
@@ -1067,8 +1069,20 @@ export default function Applications({
                 <div className="deployment-workspace">
                 <section className="panel deployment-stage" aria-labelledby="deployment-step-heading">
                   <div className="section-heading">
-                    <h2 id="deployment-step-heading" ref={stageHeading} tabIndex={-1}>{deploymentStages[viewStep]}</h2>
-                    <span className="badge">{viewStep + 1} / 5</span>
+                    <div className="title-with-help">
+                      <h2 id="deployment-step-heading" ref={stageHeading} tabIndex={-1}>{deploymentStages[viewStep]}</h2>
+                      {mode === "api" && (viewStep === 3 || viewStep === 4) && matchingDeployment && <ContextHelp id="app-access-context-help" label="앱 접속 안내">
+                        서버가 보고한 주소입니다. URL 접속·앱 정상 여부는 별도로 확인하세요. 플랫폼 /health는 고객 앱 상태가 아닙니다.
+                      </ContextHelp>}
+                    </div>
+                    <div className="deployment-result-actions">
+                      {viewStep === 4 && matchingDeployment && mode === "api" && deployment?.status === "success" && deployedAppUrl && !teardownComplete && !teardownUnconfirmed && (
+                        <a className="deployed-app-link" href={deployedAppUrl} target="_blank" rel="noopener noreferrer">
+                          배포된 애플리케이션 접속
+                        </a>
+                      )}
+                      <span className="badge">{viewStep + 1} / 5</span>
+                    </div>
                   </div>
                   <div className="panel-body">
                     {viewStep === 0 && <>
@@ -1293,15 +1307,9 @@ export default function Applications({
                         <p>구성안: {deployment.plan_id ?? "서버 미제공"}</p>
                         <p>기준 성공 배포: {deployment.source_deployment_id ?? "서버 미제공"}</p>
                       </div>}
-                      {deployment.url && !teardownComplete && (
-                        <p className="break-word">
-                          {mode === "demo" ? "샘플 URL" : "서버 보고 URL"}: <code>{deployment.url}</code>
-                        </p>
+                      {mode === "demo" && deployment.url && (
+                        <p className="break-word">샘플 URL: <code>{deployment.url}</code></p>
                       )}
-                      <p className="notice">
-                        URL 연결·고객 앱 헬스체크는 검증되지 않았습니다. 플랫폼
-                        /health는 고객 앱 상태가 아닙니다.
-                      </p>
                       {deployment.reason && (
                         <p role="alert">{deployment.reason}</p>
                       )}
@@ -1319,18 +1327,7 @@ export default function Applications({
                 </section>}
                 {resourceDeployment && <DeploymentResources key={resourceDeployment.id} id={resourceDeployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
                 </div>
-                {hasDeploymentHistory && <section className="panel detail" aria-label="새 버전 재배포">
-                  <div className="section-heading">
-                    <h2 ref={managementHeading} tabIndex={-1}>배포 관리</h2>
-                    <div className="deployment-management-actions">
-                    {viewStep !== 0 && <button className="secondary" disabled={busy || analysisRunning || discarding || !!streamId || teardownUnconfirmed} onClick={analyze}>설정 변경 · 재분석</button>}
-                    <button className="primary" disabled={redeployBlocked} onClick={openRedeploy}>새 버전 재배포</button>
-                    </div>
-                  </div>
-                  <p>이전 성공 설정을 유지하는 재배포입니다. 설정을 바꾸려면 설정 변경 · 재분석을 선택하세요.</p>
-                  <p className="muted">{mode === "demo" ? "DEMO · 저장된 설정으로 로컬 배포 과정을 시연합니다." : "서버에서 최신 커밋과 이전 성공 설정을 조회한 뒤 직접 검토하여 실행합니다."}</p>
-                  {redeployBlocked && <p role="status">진행 중인 작업이나 상태 조회가 끝난 뒤 다시 확인하세요. 저장 오류가 있다면 먼저 해결하세요.</p>}
-                </section>}
+
 
               </>
             ) : tab === "logs" ? (
@@ -1421,9 +1418,28 @@ export default function Applications({
 
         </>
       )}
-      {selected && <dialog ref={redeployDialog} className="discard-dialog detail" aria-labelledby="app-redeploy-heading" aria-describedby="app-redeploy-description"
+      {selected && <dialog ref={redeployDialog} className="discard-dialog detail deployment-management-dialog" aria-labelledby="app-redeploy-heading" aria-describedby="app-redeploy-description"
         aria-busy={redeployLoading || redeployPending} onCancel={event => { if (redeploySubmitting.current) event.preventDefault(); }} onClose={closeRedeploy}>
-        <h2 id="app-redeploy-heading" tabIndex={-1}>새 버전 재배포</h2>
+        <h2 id="app-redeploy-heading" tabIndex={-1}>{managementView === "actions" ? "배포 관리" : "새 버전 재배포"}</h2>
+        {managementView === "actions" ? <>
+          <p id="app-redeploy-description">어떤 작업을 진행할까요? 앱에 맞는 배포 방식을 선택하세요.</p>
+          <div className="deployment-management-options">
+            <button disabled={redeployBlocked} onClick={openRedeploy}>
+              <strong>새 버전 재배포</strong>
+              <span>{mode === "demo" ? "DEMO · 저장된 설정으로 로컬 배포 과정을 시연합니다." : "이전 성공 설정을 유지하고 코드를 업데이트합니다. 대상 버전과 설정을 검토한 뒤 실행합니다."}</span>
+            </button>
+            <button disabled={busy || analysisRunning || discarding || !!streamId || teardownUnconfirmed} onClick={() => {
+              redeployDialog.current?.close();
+              onNavigate(selected.id, "overview");
+              void analyze();
+            }}>
+              <strong>설정 변경 · 재분석</strong>
+              <span>코드를 다시 분석하고 실행 환경과 구성을 새로 선택합니다.</span>
+            </button>
+          </div>
+          {redeployBlocked && <p className="notice" role="status">진행 중인 작업이나 상태 조회가 끝난 뒤 다시 확인하세요. 저장 오류가 있다면 먼저 해결하세요.</p>}
+          <div className="form-actions"><button className="secondary" onClick={() => redeployDialog.current?.close()}>취소</button></div>
+        </> : <>
         <p id="app-redeploy-description">{mode === "demo" ? "DEMO · 최신 커밋을 확인하지 않는 로컬 시연입니다. 실제 코드 갱신·AI 분석·클라우드 배포는 실행하지 않습니다." : "이전 성공 배포의 템플릿·설정값을 재사용합니다. 대상 커밋과 설정을 확인한 뒤 실행하세요. 현재 인프라와 워크플로 템플릿은 달라질 수 있으며 URL 유지나 롤백을 보장하지 않습니다."}</p>
         <dl>
           <dt>애플리케이션</dt><dd className="break-word">{selected.name}</dd>
@@ -1455,8 +1471,13 @@ export default function Applications({
         <div className="form-actions">
           <button className="primary" disabled={redeployBlocked || (mode === "demo" ? !canReusePlan : !redeployContext) || !redeployReviewed} onClick={redeploy}>{mode === "demo" ? "이 설정으로 재배포 · 데모" : "이 설정으로 재배포"}</button>
                     {mode === "api" && !redeployContext && !redeployLoading && <button className="secondary" disabled={redeployBlocked} onClick={() => void loadRedeployContext()}>설정 다시 조회</button>}
+          <button className="secondary" disabled={redeployPending} onClick={() => {
+            closeRedeploy();
+            redeployDialog.current?.querySelector("h2")?.focus({ preventScroll: true });
+          }}>배포 관리로</button>
           <button className="secondary" disabled={redeployPending} onClick={() => redeployDialog.current?.close()}>취소</button>
         </div>
+        </>}
       </dialog>}
       {!creating && (
         <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="app-discard-heading" aria-describedby="app-discard-description" aria-busy={discarding} onCancel={event => { if (discarding) event.preventDefault(); }}>

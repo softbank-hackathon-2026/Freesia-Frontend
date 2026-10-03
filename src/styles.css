@@ -270,6 +270,19 @@ main {
 .primary:hover:not(:disabled) {
   background: var(--accent-hover);
 }
+a.deployed-app-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 9px 14px;
+  border-radius: 6px;
+  background: #166534;
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: none;
+}
+a.deployed-app-link:hover { background: #14532d; }
 button.danger {
   background: var(--danger);
   color: #ffffff;
@@ -1306,7 +1319,6 @@ progress {
 .deployment-stage .panel-body > p { font-size: inherit; }
 .deployment-stage-actions, .deployment-review-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .deployment-stage-actions > p { margin: 0; }
-.deployment-management-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .deployment-stage .deployment-progress-body { padding: 0; }
 @media (max-width: 690px) {
   .deployment-app-summary { padding: 16px; }
@@ -1318,7 +1330,6 @@ progress {
   .deployment-stepper button > span:last-child { overflow-wrap: anywhere; }
   .deployment-stage h2 { scroll-margin-top: 170px; }
   .deployment-stage-actions > button { width: 100%; }
-  .deployment-management-actions { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .deployment-stepper *, .deployment-stage * { scroll-behavior: auto; }
@@ -1332,3 +1343,85 @@ progress {
 .deployment-observation-heading h2 { margin: 0 0 8px; }
 .deployment-observation-heading p { margin: 0; }
 .deployment-observation > .panel { min-width: 0; margin-bottom: 0; }
+
+/* Keep detail navigation beside the title and operational actions together. */
+.app-heading-copy { min-width: 0; }
+.app-detail-heading h1 { overflow-wrap: anywhere; }
+.app-detail-heading .app-back-link { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-bottom: 10px; padding: 4px 8px; background: #ffffff80; color: var(--ink); font-size: 12px; }
+.app-detail-actions { flex: 0 0 auto; align-items: center; gap: 8px; }
+.app-detail-actions button { font-size: 13px; white-space: nowrap; }
+button.app-delete-outline { color: var(--danger); border: 1px solid var(--danger); background: var(--paper); font-weight: 500; }
+button.app-delete-outline:hover:not(:disabled) { background: var(--danger-paper); }
+.deployment-management-dialog { width: min(620px, calc(100vw - 32px)); }
+.deployment-management-dialog h2 { font-size: 20px; }
+.deployment-management-options { display: grid; gap: 12px; }
+.deployment-management-options button { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--line); background: var(--surface); text-align: start; }
+.deployment-management-options strong { color: var(--accent); font-size: 15px; }
+.deployment-management-options span { color: var(--muted); font-size: 13px; }
+.deployment-management-options button:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.deployment-management-dialog .form-actions { justify-content: flex-end; }
+@media (max-width: 1100px) {
+  .app-detail-heading { flex-wrap: wrap; gap: 16px; }
+  .app-detail-actions { width: 100%; justify-content: flex-start; }
+}
+@media (max-width: 690px) {
+  .app-detail-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-detail-actions .app-delete-outline { grid-column: 1 / -1; }
+  .deployment-management-dialog { padding: 20px; }
+  .deployment-management-dialog .form-actions button { flex: 1 1 auto; }
+}
+
+.title-with-help {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+button.context-help {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  font-size: 14px;
+  color: var(--muted);
+  background: var(--paper);
+}
+.context-help-popover {
+  inset: 0;
+  margin: auto;
+  width: min(320px, calc(100vw - 32px));
+  height: fit-content;
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+  box-shadow: 0 4px 20px #2b2e4624;
+  overflow-wrap: anywhere;
+}
+@supports (position-area: bottom) {
+  .context-help-popover {
+    inset: auto;
+    margin: 8px 16px;
+    position-area: bottom span-all;
+    justify-self: anchor-center;
+    position-try-fallbacks: flip-block;
+  }
+}
+.deployment-result-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.deployment-stage > .section-heading {
+  flex-wrap: wrap;
+}

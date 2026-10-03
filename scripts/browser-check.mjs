@@ -649,7 +649,9 @@ try {
   await providerPage.close();
   record({ name: "infra-provider-icons", checks: "four loaded provider icons, preserved columns/IDs, cloud/on-premise/unknown backgrounds, null/missing/unknown safety, keyboard detail navigation and mobile internal scroll" });
   const readinessPage=await browser.newPage();
+  await readinessPage.emulateMedia({ reducedMotion: "reduce" });
   let readinessKnown=false, readinessPlanReject=false, readinessExisting=false, readinessPlanPosts=0, readinessDeployPosts=0;
+  let accessStatus = "success", accessUrl = "https://deployed.freesia.test/", accessTeardown;
   const readinessAnalyses = new Map();
   await readinessPage.route("**/api/**",async route=>{
     const req=route.request(),path=new URL(req.url()).pathname;
@@ -657,7 +659,7 @@ try {
     if(path.endsWith("/infra-spaces")){const {deployable_computes:ignored,...base}=infra;void ignored;return json([{...base,...(readinessKnown?{deployable_computes:["ecs-fargate"]}:{})}]);}
     if(path.endsWith("/repositories"))return json([repository]);
     if(path.endsWith("/app-spaces"))return json([app]);
-    if(path.endsWith("/app-api"))return json({...app,latest_deployment_id:readinessExisting?"dep-api":null});
+    if(path.endsWith("/app-api"))return json({...app,latest_deployment_id:readinessExisting?"dep-api":null,...(accessTeardown?{teardown_status:accessTeardown,teardown_requested_at:"2026-10-03T00:00:00Z",teardown_finished_at:accessTeardown==="success"?"2026-10-03T00:01:00Z":null}: {})});
     if(path.endsWith("/analysis")) {
       if(req.method()==="POST") readinessAnalyses.set(path,analysis);
       return readinessAnalyses.has(path) ? json(readinessAnalyses.get(path)) : json({message:"Analysis has not started"},404);
@@ -671,8 +673,8 @@ try {
     if(req.method()==="GET" && path.endsWith("/logs"))return json({status:"waiting",message:null,lines:[]});
     if(req.method()==="GET" && path.endsWith("/metrics"))return json({status:"waiting",message:null,compute:"ecs-fargate",cpu_percent:null,memory_percent:null,response_time_ms:null,request_count:null,error_count:null,measured_at:null});
     if(path.endsWith("/resources"))return json([]);
-    if(path.endsWith("/events"))return route.fulfill({contentType:"text/event-stream",body:'event: progress\ndata: '+JSON.stringify({status:"success",step:"done",progress:100,message:"기존 배포 완료",url:null,at:"now"})+'\n\n'});
-    return json({...deployment,compute:"ecs-fargate",status:"success"});
+    if(path.endsWith("/events"))return route.fulfill({contentType:"text/event-stream",body:'event: progress\ndata: '+JSON.stringify({status:accessStatus,step:accessStatus==="building"?"build":"done",progress:accessStatus==="building"?50:100,message:"기존 배포 완료",url:accessUrl,at:"now"})+'\n\n'});
+    return json({...deployment,compute:"ecs-fargate",status:accessStatus,url:accessUrl});
   });
   await readinessPage.goto(url+"/?source=api&app=app-api");
   await readinessPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
@@ -701,8 +703,49 @@ try {
   await singleReview.getByLabel("설정값을 확인했습니다",{exact:true}).check();
   await singleReview.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).click();
   await readinessPage.getByText("기존 배포 완료",{exact:true}).waitFor();
+  assert.equal(await readinessPage.getByRole("link",{name:"배포된 애플리케이션 접속",exact:true}).count(),1,"successful API deployment exposes the access link");
   assert.match(await readinessPage.getByRole("alert").innerText(),/이미 배포가 진행 중/);
   assert.equal(readinessDeployPosts,1,"409 restores existing deployment and never retries POST");
+  await readinessPage.waitForFunction(() => document.activeElement?.id === "deployment-step-heading");
+  await readinessPage.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  const managementScroll = await readinessPage.evaluate(() => window.scrollY);
+  await readinessPage.getByRole("button", { name: "배포 관리", exact: true }).click();
+  const managementChooser = readinessPage.getByRole("dialog", { name: "배포 관리", exact: true });
+  assert.equal(await managementChooser.count(), 1, "header deployment management opens a modal chooser");
+  assert.equal(await readinessPage.locator("dialog[open]").count(), 1);
+  assert.equal(await readinessPage.evaluate(() => window.scrollY), managementScroll, "management opens without scrolling the page");
+  assert.equal(await readinessPage.getByRole("heading", { name: "배포 관리", exact: true }).count(), 1, "only the dialog heading remains");
+  await managementChooser.getByRole("button", { name: "취소", exact: true }).click();
+  const accessLink = readinessPage.getByRole("link", { name: "배포된 애플리케이션 접속", exact: true });
+  assert.equal(await accessLink.getAttribute("href"), accessUrl);
+  assert.equal(await accessLink.getAttribute("target"), "_blank");
+  assert.deepEqual((await accessLink.getAttribute("rel")).split(/\s+/).sort(), ["noopener", "noreferrer"]);
+  await readinessPage.context().route("https://deployed.freesia.test/**", route => route.fulfill({ contentType: "text/html", body: "<title>Controlled deployment</title>" }));
+  for (const [size, viewport] of [["desktop", { width: 1440, height: 1000 }], ["mobile", { width: 390, height: 844 }]]) {
+    await readinessPage.setViewportSize(viewport);
+    await accessLink.focus();
+    assert.equal(await accessLink.evaluate(link => document.activeElement === link), true);
+    const colors = await accessLink.evaluate(link => { const style = window.getComputedStyle(link); return { foreground: style.color, background: style.backgroundColor }; });
+    assert.ok(contrastRatio(colors.foreground, colors.background) >= 4.5, "access link text meets normal-text contrast");
+    const channels = colors.background.match(/[\d.]+/g).slice(0, 3).map(Number);
+    assert.ok(channels[1] > channels[0] && channels[1] > channels[2], "access action is green");
+    assert.equal(await readinessPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false);
+    await readinessPage.screenshot({ path: `artifacts/deployed-app-access-${size}.png`, fullPage: true });
+  }
+  const opened = readinessPage.waitForEvent("popup");
+  await accessLink.press("Enter");
+  const popup = await opened;
+  await popup.waitForLoadState();
+  assert.equal(popup.url(), accessUrl, "keyboard activation opens the real reported URL in a new tab");
+  await popup.close();
+  for (const [status, reportedUrl, teardown] of [["success", "http://deployed.freesia.test/", undefined], ["failed", "https://deployed.freesia.test/", undefined], ["building", "https://deployed.freesia.test/", undefined], ["success", null, undefined], ["success", "javascript:alert(1)", undefined], ["success", "not a URL", undefined], ["success", "https://deployed.freesia.test/", "requested"], ["success", "https://deployed.freesia.test/", "success"]]) {
+    accessStatus = status; accessUrl = reportedUrl; accessTeardown = teardown;
+    await readinessPage.reload();
+    await readinessPage.getByRole("heading", { name: new RegExp(`^배포 상태.*${status}$`) }).waitFor();
+    const expected = status === "success" && reportedUrl === "http://deployed.freesia.test/" ? 1 : 0;
+    assert.equal(await accessLink.count(), expected, `access link respects status=${status}, url=${reportedUrl}, teardown=${teardown}`);
+    if (expected) assert.equal(await accessLink.getAttribute("href"), reportedUrl);
+  }
   await readinessPage.close();
   record({name:"deployment-readiness",checks:"unknown readiness blocked; unready recommendations retained; compute400 shown; single plan directly reviewed; deployment409 resumes existing SSE without duplicate POST"});
   for (const [name, width, height] of [
@@ -964,6 +1007,7 @@ try {
     await appCard.press("Enter");
     await page.getByRole("heading", { name: "demo-web", exact: true }).waitFor();
     await page.getByRole("heading", { name: /^배포 상태.*success$/ }).waitFor();
+    assert.equal(await page.getByRole("link", { name: "배포된 애플리케이션 접속", exact: true }).count(), 0, "demo deployment never exposes an active deployment access link");
     await page.screenshot({path:`artifacts/day3-pipeline-result-${name}.png`,fullPage:true});
     await page.getByRole("tab", { name: "로그", exact: true }).click();
     assert.match(await page.locator(".log-output").innerText(), /DEMO/);
@@ -1003,10 +1047,13 @@ try {
       await page.getByRole("button", { name: "AI로 인프라 설계" }).count(),
       0,
     );
-    assert.match(
-      await page.locator("main").innerText(),
-      /애플리케이션 담당자는 준비된 인프라를 조회/,
-    );
+    const infraInstructions = page.locator("#infra-context-help");
+    await infraInstructions.waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "인프라 조회 안내", exact: true }).click();
+    await infraInstructions.waitFor({ state: "visible" });
+    assert.match(await infraInstructions.innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
+    await page.keyboard.press("Escape");
+    await infraInstructions.waitFor({ state: "hidden" });
     await switchSource(page, "demo");
     assert.equal(
       await page.evaluate(
@@ -1117,7 +1164,13 @@ try {
   await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
   const apiInfraPanel = apiPage.locator(".infra-list");
   await assertReadOnlyInfra(apiPage);
-  assert.match(await apiPage.locator("main").innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
+  const apiInfraInstructions = apiPage.locator("#infra-context-help");
+  await apiInfraInstructions.waitFor({ state: "hidden" });
+  await apiPage.getByRole("button", { name: "인프라 조회 안내", exact: true }).click();
+  await apiInfraInstructions.waitFor({ state: "visible" });
+  assert.match(await apiInfraInstructions.innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
+  await apiPage.keyboard.press("Escape");
+  await apiInfraInstructions.waitFor({ state: "hidden" });
   assert.deepEqual(calls.filter(call => call.path.startsWith("/infra-spaces") && call.method !== "GET"), []);
   const apiInfraRow = apiInfraPanel.getByRole("row").filter({ has: apiPage.getByRole("button", { name: "API 기반", exact: true }) });
   assert.equal(await apiInfraRow.getByRole("cell").nth(2).innerText(), "0", "keep server app_count even when the app list contains a linked app");
