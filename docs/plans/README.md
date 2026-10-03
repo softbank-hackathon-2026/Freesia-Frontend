@@ -449,3 +449,35 @@ User explicitly requested commit and push for the current codex/contextual-help 
 User-approved production bugfix active on codex/fix-onprem-network. Backend now returns network=vm; add contract acceptance and 온프레미스 내부망 label. See latest Day3 spec/plan and infra-ai-flow contract; verification pending. No Git publication or deployment authorization.
 
 VM network follow-up complete locally: check62/E2E27 and source review PASS. See latest infra-ai-flow-eval; uncommitted/unpushed, not deployed.
+
+
+## App card hover and provider placement — 2026-10-04
+User requests preserving environment color on pointer hover and moving the provider badge to the top-right of each application card. Bounded fix: keep the original environment background on hover, use border/shadow feedback, put the existing provider badge beside the small name label with the application title on its own full-width row. Preserve accessible card name/description, keyboard focus, actual provider values and API behavior. Branch codex/app-card-provider-layout from main3050fda; root owns Applications.tsx/styles.css and these reused records, browser worker owns the existing provider scenario assertions/screens. Verify hover color, alignment/non-overlap, desktop/mobile and required check/E2E. No Git publication requested for this new diff.
+
+
+## App card hover and provider placement — completed locally 2026-10-04
+The card-specific hover now keeps its provider surface color and changes only a neutral outline/shadow. Provider badge moved to the top-right alongside the small name label, with the app name using a full-width row below. Shared label/IDs and keyboard focus remain intact. Existing provider scenario reproduced the blue hover before the fix (RED), then passed all seven provider variants for retained background/changed shadow and desktop1280/mobile390 badge alignment, long title wrapping, no overlap/overflow (GREEN). Node24 scripts/check.mjs PASS62/types/lint/build; full BROWSER_CHECK_PORT5186 scripts/browser-check.mjs PASS28, exit0/statuspassed. Root source review and root/independent browser worker desktop/mobile image inspection complete. Evidence artifacts/app-card-layout-{red,focused,check,e2e}.log and app-card-layout-{desktop,mobile}.png. No API behavior change. Local branch codex/app-card-provider-layout from main3050fda, uncommitted/unpushed; publication not requested.
+
+
+## Application heading help removal — 2026-10-04
+User explicitly requested removing the question-mark help beside the Application heading. Remove only application-context-help in Applications.tsx; retain other contextual help and existing card edits. No API or publication changes. Verification pending.
+
+
+## Application heading help removal completed - 2026-10-04
+Removed only application-context-help from Applications.tsx. Other help and existing card layout retained. check PASS:62 tests/types/lint/build. Browser first run timed out at API-to-demo empty-list transition; fresh full rerun PASS28 exit0. No API, backend, deployment or Git publication changes. Evidence: artifacts/application-heading-help-check.log and application-heading-help-e2e-retry.log.
+
+
+## On-premises environment label - 2026-10-04
+User requested English provider name in the Infra Space row. Change the shared provider label from Korean to On-premises so Infra/App provider badges and choices stay consistent; preserve API onprem value, icons, colors and Korean network explanation. Existing browser assertions updated to the requested label. No Git publication requested. Required checks pending.
+
+
+## On-premises label completed - 2026-10-04
+Shared provider label changed to On-premises; API value onprem and Korean network explanation retained. Existing browser expectations updated. Node24 check PASS62 (types/lint/build) and full browser PASS28, exit0. Logs artifacts/onprem-label-check.log and onprem-label-e2e.log. Local codex/app-card-provider-layout, unpublished; earlier card and help removal edits preserved.
+
+
+## Deployment metadata disclosure and UI publication - 2026-10-04
+User approved finishing the proposed deployment detail disclosure, committing/pushing the accumulated card/provider/help UI changes on codex/app-card-provider-layout, creating a PR and merging main, and running frontend Deploy if available. Native details/summary hides technical IDs by default; progress, runtime, app access and failures remain visible. Maintain existing API and AWS workflow. Browser regression verifies collapse/expand. Latest main equals branch base3050fda. Required check and full browser validation before publication; verify PR CI and exact merged SHA before dispatching existing manual deploy.yml on main. No backend or resource provisioning changes.
+
+
+## UI polish release verification - 2026-10-04
+Node24 scripts/check.mjs PASS62/types/lint/build; full browser suite PASS28 including deployment metadata collapse/expand and provider desktop/mobile layout. Separate redeploy-check.mjs updated to open metadata before existing assertions and PASS with mocked API on desktop/mobile. Targeted script ESLint and git diff --check PASS. Independent read-only source/card review PASS after adapting redeploy regression; no blockers. Existing manual frontend Deploy user-approved after PR/main merge. Evidence artifacts/ui-polish-final-{check,e2e}.log and ui-polish-redeploy-check.log. Production deployment is pending, not yet claimed complete.

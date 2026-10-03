@@ -26,6 +26,11 @@ try {
   const expectBlocked = async()=>{await opener.click();assert.ok(await chooser.getByRole('button',{name:/^새 버전 재배포/}).isDisabled());await chooser.getByRole('button',{name:'취소',exact:true}).click();};
   const confirm = dialog.getByRole('button',{name:'이 설정으로 재배포 · 데모',exact:true});
   const saved = ()=>page.evaluate(()=>JSON.parse(localStorage.getItem('freesia.demo.v1')));
+  const showDeploymentDetails = async () => {
+    const details = page.locator('details[aria-label="배포 버전과 설정"]');
+    await details.waitFor();
+    if (await details.getAttribute('open') === null) await details.locator('summary').click();
+  };
   await page.route('**/api/**',route=>{requests.push(route.request().url());return route.abort();});
   await page.goto(base + "/?source=demo");
   const seed = async (value=state)=>{
@@ -155,10 +160,10 @@ try {
   await page.keyboard.press('Escape');assert.ok(await dialog.isVisible());assert.ok(await dialog.getByRole('button',{name:'취소',exact:true}).isDisabled());assert.equal(mutations.length,initialMutations+1,'synchronous duplicate guard');
   holdPost=false;pendingPost();await dialog.waitFor({state:'hidden'});
   assert.deepEqual(mutations.at(-1),{path:`/api/app-spaces/${app.id}/redeployments`,body:{source_deployment_id:previous.id,target_commit_sha:'b'.repeat(40)}});
-  await page.getByText('구성안: saved-plan',{exact:true}).waitFor();
+  await showDeploymentDetails();await page.getByText('구성안: saved-plan',{exact:true}).waitFor();
   assert.ok(await page.evaluate(()=>window.streamUrls.some(url=>url.includes('/api-new-deployment/events'))));
   assert.ok(requests.some(path=>path.includes('/api-new-deployment/resources')));
-  await page.reload();await page.getByText('구성안: saved-plan',{exact:true}).waitFor();assert.match(await page.locator('main').innerText(),/bbbbbbbb/);
+  await page.reload();await showDeploymentDetails();await page.getByText('구성안: saved-plan',{exact:true}).waitFor();assert.match(await page.locator('main').innerText(),/bbbbbbbb/);
   assert.deepEqual(await saved(),beforeApi,'API must not alter DEMO storage');
   assert.ok(mutations.every(entry=>entry.path.endsWith('/redeployments')),'redeploy never analyzes or creates plans');
   apiApp={...apiApp,latest_deployment_id:previous.id};
@@ -167,7 +172,7 @@ try {
     postError={status:409,body:{error:code,message:code}};
     if(code==='deployment_in_progress')apiApp={...apiApp,latest_deployment_id:createdApi.id};else apiApp={...apiApp,teardown_status:'requested',teardown_requested_at:stamp};
     await apiConfirm.click();await dialog.waitFor({state:'hidden'});
-    if(code==='deployment_in_progress')await page.getByText('구성안: saved-plan',{exact:true}).waitFor();else await expectBlocked();
+    if(code==='deployment_in_progress'){await showDeploymentDetails();await page.getByText('구성안: saved-plan',{exact:true}).waitFor();}else await expectBlocked();
   }
   apiApp={...apiApp,teardown_status:null,teardown_requested_at:null};postError=null;await openApi();holdPreview=true;await openRedeploy();await dialog.getByText('재배포 설정 조회 중…',{exact:true}).waitFor();
   await page.getByRole('button',{name:'앱 목록으로',exact:true}).evaluate(el=>el.click());holdPreview=false;pendingPreview();assert.equal(await dialog.isVisible(),false);

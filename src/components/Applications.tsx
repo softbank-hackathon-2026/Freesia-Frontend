@@ -892,9 +892,6 @@ export default function Applications({
                 {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
                 {deployedCompute && ` (${deployedCompute})`}
               </h1>
-              {mode === "api" && !selected && <ContextHelp id="application-context-help" label="앱 생성 안내">
-                통합에 등록한 Repository와 Infra Space 또는 기본 샌드박스로 앱을 만듭니다. 분석·배포는 서버 설정에 따라 실행됩니다.
-              </ContextHelp>}
             </div>
             {selected && <AppProviderLabel value={infra?.provider} />}
           </div>
@@ -1331,12 +1328,13 @@ export default function Applications({
                       <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
                       <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
                       <p>실행 환경: {deployment.compute}</p>
-                      {mode === "api" && <div className="break-word" aria-label="배포 버전과 설정">
+                      {mode === "api" && <details className="break-word" aria-label="배포 버전과 설정">
+                        <summary>배포 상세 정보</summary>
                         <p>배포 ID: {deployment.id}</p>
                         <p>커밋 SHA: {deployment.commit_sha ?? "서버 미제공"}</p>
                         <p>구성안: {deployment.plan_id ?? "서버 미제공"}</p>
                         <p>기준 성공 배포: {deployment.source_deployment_id ?? "서버 미제공"}</p>
-                      </div>}
+                      </details>}
                       {mode === "demo" && deployment.url && (
                         <p className="break-word">샘플 URL: <code>{deployment.url}</code></p>
                       )}
@@ -1419,9 +1417,11 @@ export default function Applications({
                 return (
                   <button className="app-space-card" data-provider={provider.key} key={app.id} aria-label={`${app.name} 상세 보기`} aria-describedby={`${cardId}-provider ${cardId}-integration ${cardId}-infra ${cardId}-branch`} onClick={() => onNavigate(app.id)}>
                     <span className="app-card-field">
-                      <span className="app-card-label">애플리케이션 이름</span>
+                      <span className="app-card-heading">
+                        <span className="app-card-label">애플리케이션 이름</span>
+                        <span id={`${cardId}-provider`}><AppProviderLabel value={linkedInfra?.provider} /></span>
+                      </span>
                       <strong className="app-card-name">{app.name}</strong>
-                      <span id={`${cardId}-provider`}><AppProviderLabel value={linkedInfra?.provider} /></span>
                     </span>
                     <span className="app-card-field" id={`${cardId}-integration`}>
                       <span className="app-card-label">연결된 통합</span>
