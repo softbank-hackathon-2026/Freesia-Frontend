@@ -724,6 +724,36 @@ form button {
   gap: 8px;
   flex-wrap: wrap;
 }
+.candidate-compute {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.compute-icon {
+  position: relative;
+  width: 1em;
+  height: 1em;
+  flex: 0 0 1em;
+  overflow: hidden;
+}
+.compute-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.compute-icon-ecs-fargate img {
+  /* Frame the supplied icon's visible mark without altering its padded PNG. */
+  position: absolute;
+  max-width: none;
+  width: 2.278em;
+  height: 1.718em;
+  left: -0.639em;
+  top: -0.359em;
+}
+.compute-icon-lambda img {
+  mix-blend-mode: multiply;
+}
 .candidate ul {
   margin: 0;
 }

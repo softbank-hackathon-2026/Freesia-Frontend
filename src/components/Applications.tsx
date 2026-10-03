@@ -42,6 +42,11 @@ const appTabs = [
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const api = createApi(apiBase);
 const computeLabels: Record<string, string> = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2" };
+const computeIcons: Record<string, string> = {
+  "ecs-fargate": "/compute/ecs-fargate.png",
+  lambda: "/compute/lambda.png",
+  ec2: "/compute/ec2.png",
+};
 const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "배포 결과"] as const;
 type DeploymentStage = 0 | 1 | 2 | 3 | 4;
 export default function Applications({
@@ -1168,7 +1173,14 @@ export default function Applications({
                               }
                             >
                               <div className="candidate-title">
-                                <strong>{c.compute}</strong>
+                                <strong className="candidate-compute">
+                                  {Object.hasOwn(computeIcons, c.compute) && (
+                                    <span className={`compute-icon compute-icon-${c.compute}`} aria-hidden="true">
+                                      <img src={computeIcons[c.compute]} alt="" />
+                                    </span>
+                                  )}
+                                  {c.compute}
+                                </strong>
                                 <span className="badge">
                                   {c.state === "selected"
                                     ? "추천"
