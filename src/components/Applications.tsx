@@ -425,9 +425,7 @@ export default function Applications({
         if (uncertain) setCreating(false);
         setError(uncertain
           ? "생성 결과를 확인하지 못했습니다. 목록을 다시 조회합니다. 같은 앱이 있는지 확인한 뒤 다시 시도하세요."
-          : e instanceof ApiError && e.code === "no_default_infra"
-            ? "샌드박스 인프라가 준비되지 않았습니다. Infra Space를 선택하거나 관리자에게 기본 인프라 설정을 요청하세요."
-            : e instanceof Error ? e.message : "앱 생성 실패");
+          : e instanceof Error ? e.message : "앱 생성 실패");
       }
     } finally {
       if (token === session.current) setBusy(false);

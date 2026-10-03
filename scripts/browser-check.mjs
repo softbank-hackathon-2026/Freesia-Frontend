@@ -373,6 +373,7 @@ async function checkSandboxCreation(browser) {
   const posts = [];
   const detailReads = [];
   const analyzed = new Set();
+  const defaultInfraError = "서버 계약 오류: DefaultInfra가 설정되지 않았습니다.";
   let rejectDefault = false;
   let defaultDetailHold;
   let defaultDetailRequested;
@@ -395,7 +396,7 @@ async function checkSandboxCreation(browser) {
       const body = request.postDataJSON();
       posts.push(body);
       if (rejectDefault && !Object.hasOwn(body, "infra_id"))
-        return json({ error: "no_default_infra", message: "No DefaultInfra exists" }, 400);
+        return json({ error: "no_default_infra", message: defaultInfraError }, 400);
       const created = { ...app, ...body, id: `sandbox-app-${posts.length}`, infra_id: body.infra_id ?? defaultInfra.id };
       createdApps.push(created);
       return json(created, 201);
@@ -506,7 +507,8 @@ async function checkSandboxCreation(browser) {
   await sandbox.check();
   rejectDefault = true;
   await submit.click();
-  await page.getByRole("alert").filter({ hasText: /샌드박스/ }).waitFor();
+  await page.getByRole("alert").waitFor();
+  assert.equal(await page.getByRole("alert").innerText(), defaultInfraError, "server no_default_infra message is displayed verbatim");
   assert.equal(await name.inputValue(), "retained-on-no-default");
   assert.equal(await repositorySelect.inputValue(), repository.id);
   assert.equal(await infraSelect.inputValue(), infra.id);

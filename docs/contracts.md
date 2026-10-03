@@ -189,3 +189,6 @@ The inline log preview shows latest15 received entries; the log tab shows all. T
 
 ## Sandbox default foundation — backend main ff7d8ab, PR36 merged
 POST /api/app-spaces accepts omitted/null infra_id and picks its sole ready DefaultInfra-tagged foundation; empty string is invalid. Response infra_id is concrete required string. No separate sandbox field. GET /infra-spaces hides default; GET /infra-spaces/{id} permits its detail. No default produces400 no_default_infra. Frontend sends omitted key for sandbox/no-selection; preserves other validation. Operating API/CD/default AWS tags not verified by code review.
+
+
+Sandbox API follow-up (2026-10-03): no_default_infra displays the server message verbatim. UI layout/labels unchanged; default requests omit infra_id, creation retains the returned concrete ID and resolves hidden infrastructure with GET detail. Verified against latest backend main f24109c and merged PR36; operating AWS tag setup is a separate runtime prerequisite.

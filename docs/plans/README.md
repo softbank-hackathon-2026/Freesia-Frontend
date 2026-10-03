@@ -363,3 +363,15 @@ Handoff: user can review local preview or sandbox-create-desktop/mobile artifact
 
 ## Sandbox publication approval - 2026-10-03
 User explicitly approved committing and pushing the current sandbox-selection implementation and its tests/docs to codex/sandbox-selection. Fresh check55 native/types/lint/build PASS; full browser26 PASS with the final test-file qualifiers. No PR/main merge or deployment requested. Earlier unpublished statements describe the pre-approval state.
+
+
+## Sandbox API-only follow-up — approved 2026-10-03
+User explicitly requests API wiring with the existing UI unchanged. Preserve checkbox/dropdown layout, omission of infra_id for default selection, concrete returned infra_id, and hidden-foundation detail lookup. Show no_default_infra server message verbatim instead of replacing it. Verification: reproduce exact-message browser RED, add omitted-body/returned-ID/detail and error preservation API tests, then required check/full E2E and isolated latest-main FastAPI HTTP contract tests without AWS or existing DB access. No backend product edits, production mutations or Git publication authorized for this follow-up.
+
+
+## Sandbox API-only follow-up completion — 2026-10-03
+No UI markup/style/label changes. Default selection already omitted infra_id and preserved the backend concrete ID for hidden-infra detail GET; removed only no_default_infra custom-copy replacement so server message is displayed verbatim. Browser RED reproduced the previous replacement; GREEN now asserts exact text and retained inputs. Fresh Node24 scripts/check.mjs PASS: TypeScript, ESLint,57 native tests, production build. BROWSER_CHECK_PORT=5186 scripts/browser-check.mjs PASS26. Independent read-only source review PASS; diff whitespace PASS. Latest backend main f24109c isolated FastAPI on8006 with memory SQLite passed9 real-HTTP checks: hidden list/detail, omitted/null/explicit/empty IDs, no-default message, AWS boundary0calls; server stopped and temporary source/runner cleaned. Evidence artifacts/sandbox-api-followup-{check,e2e}.log, browser-results.json and workspace .Codex/scratch/sandbox-api-integration/result.json. Operating API/AWS app creation and default tag setup not exercised. Current follow-up is uncommitted/unpublished on codex/sandbox-selection; previous489637b remains published. No backend product/Notion/cloud mutations.
+
+
+## Sandbox API follow-up publication approval — 2026-10-03
+User explicitly requested commit and push of the current API-only follow-up diff to codex/sandbox-selection. Product delta preserves server no_default_infra message with unchanged UI; related API/browser tests and existing contract/plan/evaluation records are included. Prior implementation verification: check57/fullE2E26/isolated latest-backend HTTP9/read-only review PASS. No product/test change since those runs. Commit/push approved; PR/main merge/cloud deployment not requested.
