@@ -12,11 +12,15 @@ server.stdout.on("data", chunk => serverLog += chunk);
 server.stderr.on("data", chunk => serverLog += chunk);
 const labels = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "배포 결과"];
 const results = [];
+const record = result => { results.push(result); console.log("PASS " + result); };
 const app = { id: "flow-app", name: "배포 단계 검증 앱", repo_url: "https://github.com/fixture/flow", branch: "main", infra_id: "flow-infra", created_at: "2026-10-03T00:00:00Z", latest_deployment_id: null, teardown_requested_at: null, teardown_status: null };
 const infra = { id: "flow-infra", name: "Controlled Infra", description: "Test fixture", network: "public", computes: ["ecs-fargate", "lambda"], deployable_computes: ["ecs-fargate", "lambda"], app_count: 1 };
 const analysis = { status: "done", requirements: ["Node.js20"], evidence: [{ file: "package.json", finding: "Controlled fixture", certain: true }], candidates: [{ compute: "ecs-fargate", state: "selected", reason: "Controlled server recommendation", cons: [] }, { compute: "lambda", state: "alternative", reason: "Controlled alternate", cons: [] }], mascot_message: null };
 const plan = { id: "flow-plan", name: "Controlled configuration", summary: "Fixture values", pros: [], cons: [], template: "lambda/basic", values: { memory: 512, timeout: 30 } };
 const dep = { id: "flow-deployment", app_space_id: app.id, compute: "lambda", status: "pending", url: null, reason: null, created_at: "2026-10-03T00:00:00Z" };
+const otherApp = { ...app, id: "other-app", name: "다른 검증 앱" };
+const fallback = "분석에 실패했습니다. 코드 분석을 다시 시작하세요.";
+const runningAnalysis = status => ({ ...analysis, status, candidates: [], mascot_message: null });
 const progress = (status = "deploying", percentage = 63) => ({ status, step: status === "success" ? "done" : "deploy", message: "Controlled event " + status, progress: percentage, url: null, at: "2026-10-03T01:00:00Z" });
 const navigation = page => page.getByRole("navigation", { name: "배포 단계", exact: true });
 const button = (page, index) => navigation(page).getByRole("button", { name: labels[index - 1], exact: true });
@@ -38,7 +42,11 @@ async function visitStep(page, index) {
 async function scenario(options = {}) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(9000);
-  const state = { calls: [], unexpected: [], errors: [], latest: null, deployment: { ...dep }, event: progress(), eventReads: 0, dropFirstEvent: false, analysisFailures: 0, planFailures: 0, deployFailures: 0, holdAnalysis: false, releaseAnalysis: null, appExtra: {}, ...options };
+  const state = { calls: [], unexpected: [], errors: [], latest: null, deployment: { ...dep }, event: progress(), eventReads: 0, dropFirstEvent: false, analysisFailures: 0, planFailures: 0, deployFailures: 0, holdAnalysis: false, releaseAnalysis: null, appExtra: {}, analysisSnapshot: null, failedMessage: null, analysisHttpError: false, postAnalysis: analysis, holdAnalysisGet: false, releaseAnalysisGet: null, analysisReads: 0, otherApp: false, clock: false, ...options };
+  if (state.clock) {
+    const instant = new Date("2026-10-03T00:00:00Z");
+    await page.clock.install({ time: instant }); await page.clock.pauseAt(instant);
+  }
   page.on("pageerror", error => state.errors.push(error.message));
   await page.route("**/api/**", async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
@@ -46,16 +54,27 @@ async function scenario(options = {}) {
     const json = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
     if (path.endsWith("/infra-spaces")) return json([infra]);
     if (path.endsWith("/repositories")) return json([]);
-    if (path.endsWith("/app-spaces")) return json([{ ...app, latest_deployment_id: state.latest, ...state.appExtra }]);
+    if (path.endsWith("/app-spaces")) return json([{ ...app, latest_deployment_id: state.latest, ...state.appExtra }, ...(state.otherApp ? [otherApp] : [])]);
+    if (state.otherApp && path.endsWith("/" + otherApp.id)) return json(otherApp);
     if (path.endsWith("/" + app.id)) return json({ ...app, latest_deployment_id: state.latest, ...state.appExtra });
     if (path.endsWith("/teardown")) {
       state.appExtra = { teardown_requested_at: "2026-10-03T02:00:00Z", teardown_status: "requested", teardown_finished_at: null, teardown_reason: null };
       return json({ app_space_id: app.id, status: "requested", requested_at: state.appExtra.teardown_requested_at }, 202);
     }
     if (path.endsWith("/analysis")) {
+      if (request.method() === "GET") {
+        state.analysisReads++;
+        if (state.analysisHttpError) return json({ message: "Controlled analysis read outage" }, 503);
+        const snapshot = path.includes("/" + otherApp.id + "/") ? null : state.analysisSnapshot;
+        if (state.holdAnalysisGet) await new Promise(resolve => state.releaseAnalysisGet = resolve);
+        return snapshot ? json(snapshot) : json({ message: "Analysis has not started" }, 404);
+      }
       if (state.holdAnalysis) await new Promise(resolve => state.releaseAnalysis = resolve);
-      if (state.analysisFailures > 0) { state.analysisFailures--; return json({ ...analysis, status: "failed", candidates: [] }); }
-      return json(analysis);
+      state.analysisSnapshot = state.analysisFailures > 0
+        ? { ...analysis, status: "failed", mascot_message: state.failedMessage }
+        : state.postAnalysis;
+      if (state.analysisFailures > 0) state.analysisFailures--;
+      return json(state.analysisSnapshot);
     }
     if (path.endsWith("/plans")) {
       if (state.planFailures > 0) { state.planFailures--; return json({ error: "compute_not_ready", message: "Controlled configuration failure" }, 400); }
@@ -79,7 +98,7 @@ async function scenario(options = {}) {
     return json({ message: "Unexpected controlled fixture route" }, 404);
   });
   await page.goto(`${base}/?source=api&app=${app.id}`);
-  await page.getByRole("heading", { name: app.name, exact: true }).waitFor();
+  await page.getByRole("heading", { name: new RegExp("^" + app.name) }).waitFor();
   assert.equal(await navigation(page).count(), 1, "deployment workflow must expose the five-step navigation instead of stacked sections");
   assert.equal(await navigation(page).getByRole("button").count(), 5);
   return { page, state };
@@ -106,6 +125,125 @@ try {
   }
   await mkdir("artifacts", { recursive: true });
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_PATH || "C:/Program Files/Google/Chrome/Application/chrome.exe" });
+  {
+    const { page, state } = await scenario({ analysisFailures: 1, failedMessage: "Controlled server failure: Bedrock throttled" });
+    await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click();
+    const failure = page.getByRole("alert");
+    await failure.waitFor();
+    assert.match(await failure.innerText(), /Controlled server failure: Bedrock throttled/, "failed analysis must show the server mascot_message instead of discarding it");
+    await clean(page, state); record("server failure mascot_message is preserved");
+  }
+  {
+    const { page, state } = await scenario();
+    await page.getByRole("button", { name: "코드 분석 시작", exact: true }).waitFor();
+    await page.waitForFunction(() => !document.querySelector("button.primary")?.disabled);
+    assert.equal(await page.getByRole("alert").count(), 0, "GET404 is a normal unanalysed app");
+    assert.deepEqual(mutations(state), []);
+    assert.ok(state.analysisReads >= 1);
+    await clean(page, state); record("GET404 restores an unanalysed app without an error or POST");
+  }
+  for (const message of [null, "", "   "]) {
+    const { page, state } = await scenario({ analysisSnapshot: { ...analysis, status: "failed", mascot_message: message } });
+    await page.getByRole("alert").waitFor(); await step(page, 1);
+    assert.equal(await page.getByRole("alert").innerText(), fallback);
+    assert.equal(await button(page, 2).isDisabled(), true, "failed analysis candidates never unlock choice");
+    assert.equal(await page.locator(".candidate").count(), 0);
+    assert.deepEqual(mutations(state), []);
+    await clean(page, state);
+  }
+  record("null/empty/whitespace server failure fallback; failed candidates remain locked");
+  {
+    const message = "Controlled server failure: Bedrock throttled\n  Keep server spacing";
+    const { page, state } = await scenario({ analysisSnapshot: { ...analysis, status: "failed", mascot_message: message } });
+    await page.getByRole("alert").waitFor(); await step(page, 1);
+    assert.equal(await page.getByRole("alert").textContent(), message, "raw failure text and spacing are preserved");
+    await page.screenshot({ path: "artifacts/analysis-recovery-failure-desktop.png", fullPage: false });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: "artifacts/analysis-recovery-failure-mobile.png", fullPage: false });
+    assert.deepEqual(mutations(state), []); await clean(page, state);
+    record("saved failed analysis shows raw server text on desktop/mobile");
+  }
+  {
+    const { page, state } = await scenario({ analysisSnapshot: analysis });
+    await step(page, 2);
+    assert.equal(await page.locator(".candidate.chosen").count(), 0);
+    assert.equal(await page.getByRole("button", { name: "선택한 환경으로 구성안 조회", exact: true }).isDisabled(), true);
+    await page.screenshot({ path: "artifacts/analysis-recovery-choice-desktop.png", fullPage: false });
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: "artifacts/analysis-recovery-choice-mobile.png", fullPage: false });
+    await page.reload(); await step(page, 2);
+    assert.equal(await page.locator(".candidate.chosen").count(), 0);
+    assert.deepEqual(mutations(state), []);
+    await clean(page, state); record("saved done restores choice across reload without auto-selection or POST");
+  }
+  for (const status of ["pending", "running"]) {
+    const { page, state } = await scenario({ clock: true, analysisSnapshot: runningAnalysis(status) });
+    await page.getByText("코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.", { exact: true }).waitFor();
+    await step(page, 1); assert.deepEqual(mutations(state), []);
+    state.analysisSnapshot = analysis; await page.clock.fastForward(2100); await step(page, 2);
+    assert.ok(state.analysisReads >= 2); assert.deepEqual(mutations(state), []);
+    await clean(page, state);
+  }
+  record("saved pending/running resumes GET-only polling then restores choice");
+  {
+    const { page, state } = await scenario({ analysisHttpError: true });
+    await page.getByRole("alert").waitFor(); await step(page, 1);
+    assert.match(await page.getByRole("alert").innerText(), /Controlled analysis read outage/);
+    state.analysisHttpError = false; state.analysisSnapshot = analysis;
+    await page.getByRole("button", { name: "분석 상태 다시 확인", exact: true }).click(); await step(page, 2);
+    assert.deepEqual(mutations(state), []);
+    await clean(page, state); record("non404 restore outage is visible and status retry reads GET only");
+  }
+  for (const finalStatus of ["done", "failed", "running"]) {
+    const { page, state } = await scenario({ clock: true, postAnalysis: runningAnalysis("running") });
+    await page.waitForFunction(() => !document.querySelector(".deployment-stage-actions button")?.disabled);
+    // Paused virtual time freezes actionability animation frames; enabled state is checked above.
+    await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click({ force: true });
+    await page.getByText("코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.", { exact: true }).waitFor();
+    await page.clock.fastForward(150_000);
+    assert.equal(await page.getByRole("button", { name: "분석 상태 다시 확인", exact: true }).count(), 0, "analysis remains active past the former 150s deadline");
+    await page.clock.fastForward(39_000);
+    await page.getByText("코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.", { exact: true }).waitFor();
+    const reads = state.analysisReads;
+    state.analysisSnapshot = finalStatus === "done" ? analysis : { ...runningAnalysis(finalStatus), mascot_message: finalStatus === "failed" ? "Controlled final GET failure" : null };
+    await page.clock.fastForward(2000);
+    if (finalStatus === "done") await step(page, 2);
+    else if (finalStatus === "failed") { await step(page, 1); await page.getByText("Controlled final GET failure", { exact: true }).waitFor(); }
+    else {
+      await step(page, 1); await page.getByText(/분석 대기 시간이 지나 자동 확인을 중단했습니다/).waitFor();
+      assert.equal(await page.getByRole("button", { name: "다시 분석", exact: true }).isDisabled(), true, "known running server analysis cannot create a duplicate POST");
+      const stoppedReads = state.analysisReads;
+      await page.clock.fastForward(10_000); assert.equal(state.analysisReads, stoppedReads, "timeout stops automatic polling");
+      state.analysisSnapshot = analysis;
+      await page.getByRole("button", { name: "분석 상태 다시 확인", exact: true }).click({ force: true }); await step(page, 2);
+    }
+    assert.ok(state.analysisReads > reads, "190s deadline performs a final GET");
+    assert.equal(mutations(state).length, 1, "timeout recovery and retry never repeat POST");
+    await clean(page, state);
+  }
+  record("190s deadline/final GET restores done or failed; still running stops and retries GET only");
+  {
+    const { page, state } = await scenario({ holdAnalysisGet: true, analysisSnapshot: analysis, otherApp: true });
+    while (!state.releaseAnalysisGet) await page.waitForTimeout(20);
+    const release = state.releaseAnalysisGet; state.holdAnalysisGet = false;
+    await page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+    await page.getByRole("button", { name: otherApp.name + " 상세 보기", exact: true }).click();
+    await page.getByRole("heading", { name: otherApp.name, exact: true }).waitFor();
+    release(); await page.waitForTimeout(100); await step(page, 1);
+    assert.equal(await page.locator(".candidate").count(), 0);
+    assert.deepEqual(mutations(state), []);
+    await clean(page, state); record("late app A GET cannot replace app B state after Back and selection");
+  }
+  {
+    const { page, state } = await scenario({ holdAnalysisGet: true, analysisSnapshot: analysis });
+    while (!state.releaseAnalysisGet) await page.waitForTimeout(20);
+    const release = state.releaseAnalysisGet; state.holdAnalysisGet = false; state.analysisSnapshot = null;
+    await page.reload(); await step(page, 1); release(); await page.waitForTimeout(100); await step(page, 1);
+    assert.equal(await page.locator(".candidate").count(), 0); assert.deepEqual(mutations(state), []);
+    await clean(page, state); record("reload aborts the old GET and restores the current server snapshot");
+  }
   {
     const { page, state } = await scenario();
     await step(page, 1);
@@ -152,13 +290,13 @@ try {
     await page.locator(".resource-tree-node.state-deleted").waitFor();
     assert.equal(await page.getByRole("progressbar", { name: "자원 완료율" }).count(), 0);
     assert.equal(mutations(state).length, terminal.length + 1, "teardown remains a separate explicit operation");
-    await clean(page, state); results.push("happy flow, sticky/mobile/keyboard review, explicit confirmation, server progress/tree, monitoring and teardown preserved");
+    await clean(page, state); record("happy flow, sticky/mobile/keyboard review, explicit confirmation, server progress/tree, monitoring and teardown preserved");
   }
   {
     const { page, state } = await scenario({ analysisFailures: 1, planFailures: 1, deployFailures: 1 });
     await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click();
     await page.getByText(/분석에 실패했습니다/).waitFor(); await step(page, 1);
-    await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click(); await step(page, 2);
+    await page.getByRole("button", { name: "다시 분석", exact: true }).click(); await step(page, 2);
     await page.locator(".candidate").filter({ hasText: "lambda" }).getByRole("button", { name: "이 후보 선택", exact: true }).click();
     await page.getByRole("button", { name: "선택한 환경으로 구성안 조회", exact: true }).click();
     await page.getByText(/배포 준비 중입니다/).waitFor(); await step(page, 2);
@@ -171,10 +309,10 @@ try {
     assert.equal(state.calls.filter(call => call.method === "POST" && call.path.endsWith("/analysis")).length, 2);
     assert.equal(state.calls.filter(call => call.method === "POST" && call.path.endsWith("/plans")).length, 2);
     assert.equal(state.calls.filter(call => call.method === "POST" && call.path.endsWith("/deployments")).length, 2);
-    await clean(page, state); results.push("analysis/config/deploy failures stay in their stage; explicit retries; matching failed terminal result");
+    await clean(page, state); record("analysis/config/deploy failures stay in their stage; explicit retries; matching failed terminal result");
   }
   for (const status of ["deploying", "success", "failed"]) {
-    const { page, state } = await scenario({ latest: dep.id, deployment: { ...dep, status, reason: status === "failed" ? "Restored failure reason" : null }, event: progress(status, status === "success" ? 100 : 63), dropFirstEvent: status === "deploying" });
+    const { page, state } = await scenario({ latest: dep.id, deployment: { ...dep, status, reason: status === "failed" ? "Restored failure reason" : null }, event: progress(status, status === "success" ? 100 : 63), dropFirstEvent: status === "deploying", analysisSnapshot: analysis });
     await step(page, status === "deploying" ? 4 : 5);
     if (status === "deploying") {
       await page.getByText(/배포 상태 연결이 끊겼습니다/).waitFor();
@@ -186,7 +324,7 @@ try {
     assert.deepEqual(mutations(state), []);
     await clean(page, state);
   }
-  results.push("running/success/failure restore on reload; SSE reconnect; no restoration POSTs");
+  record("running/success/failure restore on reload; SSE reconnect; no restoration POSTs");
   {
     const { page, state } = await scenario({ latest: "old-success", deployment: { ...dep, id: "old-success", status: "success" }, event: progress("success", 100), holdAnalysis: true });
     await step(page, 5);
@@ -195,7 +333,7 @@ try {
     await step(page, 1); await page.waitForTimeout(200); await step(page, 1);
     assert.equal(await button(page, 5).isDisabled(), true, "old terminal success is outside the new analysis flow");
     state.holdAnalysis = false; state.releaseAnalysis(); await step(page, 2);
-    await clean(page, state); results.push("old successful deployment never steals the active reanalysis step");
+    await clean(page, state); record("old successful deployment never steals the active reanalysis step");
   }
   await writeFile("artifacts/deployment-flow-results.json", JSON.stringify({ status: "passed", results }, null, 2));
   console.log("PASS deployment flow: " + results.join("; "));

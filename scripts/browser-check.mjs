@@ -31,6 +31,7 @@ server.stdout.on("data", (c) => {
 });
 const url = `http://localhost:${port}`;
 const results = [];
+const record = result => { results.push(result); console.log("PASS " + result.name); };
 let browser;
 function luminance(color) {
   const channels = color.match(/[\d.]+/g).slice(0, 3).map((value) => {
@@ -398,9 +399,10 @@ try {
   assert.equal(await defaultPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await defaultPage.screenshot({ path: "artifacts/default-api-mobile.png", fullPage: true });
   await defaultPage.close();
-  results.push({ name: "default-api-without-source-selector", checks: "plain URL requests controlled backend fixtures, renders API Infra and hides the source selector" });
+  record({ name: "default-api-without-source-selector", checks: "plain URL requests controlled backend fixtures, renders API Infra and hides the source selector" });
   const readinessPage=await browser.newPage();
   let readinessKnown=false, readinessPlanReject=false, readinessExisting=false, readinessPlanPosts=0, readinessDeployPosts=0;
+  const readinessAnalyses = new Map();
   await readinessPage.route("**/api/**",async route=>{
     const req=route.request(),path=new URL(req.url()).pathname;
     const json=(body,status=200)=>route.fulfill({status,contentType:"application/json",body:JSON.stringify(body)});
@@ -408,7 +410,10 @@ try {
     if(path.endsWith("/repositories"))return json([repository]);
     if(path.endsWith("/app-spaces"))return json([app]);
     if(path.endsWith("/app-api"))return json({...app,latest_deployment_id:readinessExisting?"dep-api":null});
-    if(path.endsWith("/analysis"))return json(analysis);
+    if(path.endsWith("/analysis")) {
+      if(req.method()==="POST") readinessAnalyses.set(path,analysis);
+      return readinessAnalyses.has(path) ? json(readinessAnalyses.get(path)) : json({message:"Analysis has not started"},404);
+    }
     if(path.endsWith("/plans")){
       readinessPlanPosts++;
       if(readinessPlanReject)return json({error:"compute_not_ready",message:"아직 준비되지 않은 컴퓨팅"},400);
@@ -426,7 +431,9 @@ try {
   assert.match(await readinessPage.locator(".deploy-actions").innerText(),/배포 가능 여부 미확인/);
   assert.equal(await readinessPage.getByRole("img",{name:"읽기 전용 분석 분기 트리"}).count(),0,"API never fabricates a demo decision tree");
   readinessKnown=true;await readinessPage.reload();
-  await readinessPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
+  await readinessPage.getByRole("heading",{name:"실행 환경 후보",exact:true}).waitFor();
+  await readinessPage.getByRole("navigation",{name:"배포 단계",exact:true}).getByRole("button",{name:"코드 분석",exact:true}).click();
+  await readinessPage.getByRole("button",{name:"다시 분석",exact:true}).click();
   const lambdaCard=readinessPage.locator(".candidate").filter({hasText:"lambda"});
   await lambdaCard.getByRole("button",{name:"이 후보 선택",exact:true}).click();
   assert.match(await lambdaCard.innerText(),/배포 준비 중/);
@@ -447,7 +454,7 @@ try {
   assert.match(await readinessPage.getByRole("alert").innerText(),/이미 배포가 진행 중/);
   assert.equal(readinessDeployPosts,1,"409 restores existing deployment and never retries POST");
   await readinessPage.close();
-  results.push({name:"deployment-readiness",checks:"unknown readiness blocked; unready recommendations retained; compute400 shown; single plan directly reviewed; deployment409 resumes existing SSE without duplicate POST"});
+  record({name:"deployment-readiness",checks:"unknown readiness blocked; unready recommendations retained; compute400 shown; single plan directly reviewed; deployment409 resumes existing SSE without duplicate POST"});
   for (const [name, width, height] of [
     ["desktop", 1440, 1000],
     ["mobile", 390, 844],
@@ -759,7 +766,7 @@ try {
       false,
     );
     assert.deepEqual(errors, []);
-    results.push({
+    record({
       name,
       width,
       checks:
@@ -778,7 +785,7 @@ try {
   assert.equal(await multipleAppRow.getByRole("cell").nth(2).innerText(), "2");
   assert.equal(await multipleAppRow.getByRole("cell").nth(3).innerText(), "미제공");
   await countPage.close();
-  results.push({ name: "infra-linked-app-counts", checks: "zero and multiple demo app relations; unavailable creation dates passed" });
+  record({ name: "infra-linked-app-counts", checks: "zero and multiple demo app relations; unavailable creation dates passed" });
 
   const apiPage = await browser.newPage({
     viewport: { width: 1440, height: 1000 },
@@ -788,6 +795,7 @@ try {
   let serverStatus = "pending";
   let hasDeployment = false;
   let apiRepositories = [repository];
+  const apiAnalyses = new Map();
   let apiInfras = [infra], infraRequestHold;
   await apiPage.route("**/api/**", async (route) => {
     const req = route.request();
@@ -816,7 +824,11 @@ try {
       };
     else if (path.endsWith("/logs")) value = {status:"waiting",message:"서버 로그 수집 대기",lines:[]};
     else if (path.endsWith("/metrics")) value = {status:"waiting",message:"서버 지표 수집 대기",compute:"ecs-fargate",cpu_percent:null,memory_percent:null,response_time_ms:null,request_count:null,error_count:null,measured_at:null};
-    else if (path.endsWith("/analysis")) value = analysis;
+    else if (path.endsWith("/analysis")) {
+      if(req.method()==="POST") apiAnalyses.set(path,analysis);
+      if(!apiAnalyses.has(path)) return route.fulfill({status:404,contentType:"application/json",body:JSON.stringify({message:"Analysis has not started"})});
+      value=apiAnalyses.get(path);
+    }
     else if (path.endsWith("/plans")) return route.fulfill({status:404,contentType:"application/json",body:JSON.stringify({detail:"Not Found"})});
     else if (path.endsWith("/resources")) value = [{address:"aws_ecs_service.web",type:"aws_ecs_service",action:"create",state:"done",reason:null,updated_at:"now"}];
     else if (path.endsWith("/events")) {
@@ -992,7 +1004,7 @@ try {
   await apiPage
     .getByRole("heading", { name: "아직 애플리케이션이 없습니다" })
     .waitFor();
-  results.push({
+  record({
     name: "API",
     checks:
       "API repositories list/register/409/delete204 and create from registered repo+serverinfra; explicit recommendation choice; unavailable Terraform/CI controls; existing deployment SSE; desktop/mobile parity; demo isolation passed",
@@ -1108,10 +1120,11 @@ try {
   assert.equal(await cardPage.evaluate(() => localStorage.getItem("freesia.demo.v1")), cardDemoBefore);
   assert.equal(cardRequests.every(item => item.method === "GET"), true, "card rendering and opening never mutate API data");
   await cardPage.close();
-  results.push({ name: "application-space-cards", checks: "API loading/error/retry, URL+branch integration names, blank/unregistered/missing names and stored references; 3/2/1 responsive columns with long text; keyboard detail entry/reload and demo isolation passed" });
+  record({ name: "application-space-cards", checks: "API loading/error/retry, URL+branch integration names, blank/unregistered/missing names and stored references; 3/2/1 responsive columns with long text; keyboard detail entry/reload and demo isolation passed" });
 
   const racePage = await browser.newPage();
   let phase = "analysis";
+  const raceAnalyses = new Map();
   let eventRequests = 0;
   const a = { ...app, id: "app-a", name: "app-A" };
   const b = { ...app, id: "app-b", name: "app-B" };
@@ -1134,7 +1147,9 @@ try {
         body: JSON.stringify(path.endsWith("/app-a") ? {...a,latest_deployment_id:phase==="detail"?"dep-api":null} : b),
       });
     if (path.endsWith("/analysis")) {
+      if(route.request().method()==="GET") return route.fulfill({status:raceAnalyses.has(path)?200:404,contentType:"application/json",body:JSON.stringify(raceAnalyses.get(path) || {message:"Analysis has not started"})});
       if (phase === "analysis") await new Promise((r) => setTimeout(r, 350));
+      raceAnalyses.set(path,analysis);
       return route.fulfill({
         contentType: "application/json",
         body: JSON.stringify(analysis),
@@ -1159,7 +1174,7 @@ try {
     .waitFor();
   await navigate(racePage, "애플리케이션");
   await racePage.getByRole("button", { name: /app-A/ }).click();
-  const analysisStarted = racePage.waitForRequest("**/app-a/analysis");
+  const analysisStarted = racePage.waitForRequest(request => request.url().endsWith("/app-a/analysis") && request.method()==="POST");
   await racePage
     .getByRole("button", { name: "코드 분석 시작", exact: true })
     .click();
@@ -1195,12 +1210,13 @@ try {
     "late deployment must not start a stream after leaving detail",
   );
   await racePage.close();
-  results.push({
+  record({
     name: "async-navigation",
     checks: "late A analysis/existing deployment detail ignored after opening B passed",
   });
   const listOnly = await browser.newPage();
   let operation = "analysis";
+  const listAnalyses = new Map();
   let listEventRequests = 0;
   await listOnly.route("**/api/**", async (route) => {
     const req = route.request();
@@ -1222,6 +1238,8 @@ try {
     if (path.endsWith("/app-a") || path.endsWith("/app-b"))
       return fulfill(path.endsWith("/app-a") ? {...a,latest_deployment_id:operation==="detail"?"dep-api":null} : b);
     if (path.endsWith("/analysis")) {
+      if(req.method()==="GET") return route.fulfill({status:listAnalyses.has(path)?200:404,contentType:"application/json",body:JSON.stringify(listAnalyses.get(path) || {message:"Analysis has not started"})});
+      listAnalyses.set(path,analysis);
       if (operation === "analysis")
         await new Promise((r) => setTimeout(r, 350));
       return fulfill(analysis);
@@ -1253,7 +1271,7 @@ try {
   assert.equal(await listOnly.getByRole("heading",{name:"late-created",exact:true}).count(),0);
   operation = "analysis";
   await listOnly.getByRole("button", { name: /app-A/ }).click();
-  const listAnalyzeReq = listOnly.waitForRequest("**/app-a/analysis");
+  const listAnalyzeReq = listOnly.waitForRequest(request => request.url().endsWith("/app-a/analysis") && request.method()==="POST");
   await listOnly
     .getByRole("button", { name: "코드 분석 시작", exact: true })
     .click();
@@ -1284,7 +1302,7 @@ try {
     0,
   );
   await listOnly.close();
-  results.push({
+  record({
     name: "list-only-navigation",
     checks:
       "API late create/analyze/existing-deployment-detail ignored on Back without opening B passed",
@@ -1510,7 +1528,7 @@ try {
     );
     assert.deepEqual(errors, []);
     await page.close();
-    results.push({
+    record({
       name: "day3-sprint01-" + viewportName,
       checks:
         "three entry points, direct generation/review/apply->demo-ready, role-free infra/repo/app flow, draft retention, explicit repo registration, reload/API isolation passed",
@@ -1569,7 +1587,7 @@ try {
     assert.equal(await dialog.isVisible(), true);
     assert.deepEqual(await deletePage.evaluate(() => JSON.parse(localStorage.getItem("freesia.demo.v1"))), after);
     await deletePage.close();
-    results.push({ name: "infra-list-delete-" + name, checks: "keyboard/icon; one-target confirm; cancel/Escape/focus; protected seed/legacy/linked/pending/applying/deployed; reload; persist-failure selection/data retention passed" });
+    record({ name: "infra-list-delete-" + name, checks: "keyboard/icon; one-target confirm; cancel/Escape/focus; protected seed/legacy/linked/pending/applying/deployed; reload; persist-failure selection/data retention passed" });
   }
 
   for (const [name, width, height] of [["desktop",1440,1000],["mobile",390,844]]) {
@@ -1658,7 +1676,7 @@ try {
     assert.equal(await deletePage.getByRole("dialog", { name: "애플리케이션 삭제", exact: true }).count(), 0);
     assert.deepEqual(await deletePage.evaluate(() => JSON.parse(localStorage.getItem("freesia.demo.v1"))), before);
     await deletePage.close();
-    results.push({ name: "application-list-delete-" + name, checks: "icon/toolbar; demo refresh retains state; strict no-pointer/no-history target filtering; single removal/unrelated records/counts/reload; cancel/Escape/focus; storage error retains dialog/app; missing/protected targets; no-target state passed" });
+    record({ name: "application-list-delete-" + name, checks: "icon/toolbar; demo refresh retains state; strict no-pointer/no-history target filtering; single removal/unrelated records/counts/reload; cancel/Escape/focus; storage error retains dialog/app; missing/protected targets; no-target state passed" });
   }
 
   for (const [name, width, height] of [["desktop",1440,1000],["mobile",390,844]]) {
@@ -1709,7 +1727,7 @@ try {
     assert.equal(await cancelPage.getByRole("heading",{name:"저장 실패 보존",exact:true}).count(),1);
     assert.deepEqual(await cancelPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1"))),beforeFailure);
     await cancelPage.close();
-    results.push({name:"infra-cancel-"+name,checks:"confirm dismiss retains draft; accept removes only selected Space across reload; linked guard; legacy/apps retained; persistence failure retains draft passed"});
+    record({name:"infra-cancel-"+name,checks:"confirm dismiss retains draft; accept removes only selected Space across reload; linked guard; legacy/apps retained; persistence failure retains draft passed"});
   }
 
   const branchPage = await browser.newPage();
@@ -1733,7 +1751,7 @@ try {
   await branchPage.getByRole("button",{name:"애플리케이션 생성",exact:true}).click();
   assert.equal(await branchPage.evaluate(()=>JSON.parse(localStorage.getItem("freesia.demo.v1")).apps[0].branch),"main");
   await branchPage.close();
-  results.push({name:"legacy-repository-branches",checks:"registered legacy develop and same-URL main remain independently selectable; app persists main passed"});
+  record({name:"legacy-repository-branches",checks:"registered legacy develop and same-URL main remain independently selectable; app persists main passed"});
 
   const repositoryRace = await browser.newPage();
   let repositoryCalls = 0;
@@ -1805,7 +1823,7 @@ try {
   assert.equal(repositoryCalls, 2);
   assert.equal(await repositoryRace.locator(".repository-row").count(), 3);
   await repositoryRace.close();
-  results.push({name:"repository-mode-race",checks:"pending form Back/cancel disabled; source and main-navigation unmount ignore late API registration; demo input/storage retained; reentry reloads actual fixture list passed"});
+  record({name:"repository-mode-race",checks:"pending form Back/cancel disabled; source and main-navigation unmount ignore late API registration; demo input/storage retained; reentry reloads actual fixture list passed"});
   const quota = await browser.newPage();
   await quota.goto(url + "/?source=demo");
   await createInfra(quota,"retain-code"); await answerInfra(quota,"<script>window.bad=1</script> 저장 오류 확인용");
@@ -1819,7 +1837,7 @@ try {
   await quota.getByLabel("Terraform 코드").waitFor();
   assert.equal(await quota.getByRole("region",{name:"인프라 Apply 결과"}).count(),0);
   await quota.close();
-  results.push({name:"quota",checks:"Apply persistence failure retains reviewed code without advancing passed"});
+  record({name:"quota",checks:"Apply persistence failure retains reviewed code without advancing passed"});
 
   const infraQuota = await browser.newPage();
   await infraQuota.addInitScript(() => {
@@ -1850,7 +1868,7 @@ try {
   assert.equal(await infraQuota.locator(".repository-row").count(),0);
   assert.match(await infraQuota.getByRole("alert").innerText(), /저장하지 못/);
   await infraQuota.close();
-  results.push({
+  record({
     name: "meeting-quota",
     checks:
       "new Infra draft retained; Repository input retained and no registered item on persistence failure passed",
@@ -1906,7 +1924,7 @@ try {
     0,
   );
   await pipelineQuota.close();
-  results.push({
+  record({
     name: "pipeline-quota",
     checks:
       "failure to persist start does not run pipeline; selected Terraform preview retained passed",
@@ -1926,7 +1944,7 @@ try {
     .click();
   assert.equal(await corrupt.getByRole("alert").count(), 0);
   await corrupt.close();
-  results.push({
+  record({
     name: "corrupt-store",
     checks: "visible error + explicit reset passed",
   });
@@ -1940,9 +1958,10 @@ try {
   await legacyProgress.getByText("현재 진행률 확인 중…",{exact:true}).waitFor();
   assert.equal(await legacyProgress.getByLabel("배포 진행률",{exact:true}).getAttribute("value"),null);
   await legacyProgress.close();
-  results.push({name:"legacy-progress",checks:"saved deployment without per-stage metadata stays indeterminate instead of negative/fabricated progress"});
+  record({name:"legacy-progress",checks:"saved deployment without per-stage metadata stays indeterminate instead of negative/fabricated progress"});
   const plansPage = await browser.newPage();
   let analysisReads=0, planReads=0, planCount=2, resourceMode="empty", deployBodies=[], failAnalysis=true, failPlans=true;
+  let plansAnalysisSnapshot=null;
   const config={id:"plan-one",name:"기본 구성",summary:"설정 검토",pros:["단순"],cons:["단일 구성"],template:"lambda/basic",values:{memory:512,timeout:30}};
   await plansPage.route("**/api/**", async route=>{
     const req=route.request(), path=new URL(req.url()).pathname;
@@ -1952,8 +1971,12 @@ try {
     if(path.endsWith("/app-spaces"))return json([app]);
     if(path.endsWith("/app-api"))return json(app);
     if(path.endsWith("/analysis")){
-      if(req.method()==="POST")return json({...analysis,status:failAnalysis?"failed":"running",candidates:[]});
-      analysisReads++; return json(analysis);
+      if(req.method()==="POST") {
+        plansAnalysisSnapshot={...analysis,status:failAnalysis?"failed":"running",candidates:[],mascot_message:null};
+        return json(plansAnalysisSnapshot);
+      }
+      if(!plansAnalysisSnapshot)return json({message:"Analysis has not started"},404);
+      analysisReads++; plansAnalysisSnapshot=analysis; return json(analysis);
     }
     if(path.endsWith("/plans")){
       if(req.method()==="POST")return json({status:failPlans?"failed":"running",compute:"lambda",plans:[]});
@@ -1970,7 +1993,7 @@ try {
   await plansPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
   await plansPage.getByText(/분석에 실패했습니다/).waitFor();
   failAnalysis=false;
-  await plansPage.getByRole("button",{name:"코드 분석 시작",exact:true}).click();
+  await plansPage.getByRole("button",{name:"다시 분석",exact:true}).click();
   await plansPage.getByText(/코드를 분석하고 있습니다/).waitFor();
   await plansPage.getByRole("heading",{name:"실행 환경 후보",exact:true}).waitFor();
   assert.equal(analysisReads,1);
@@ -2009,7 +2032,7 @@ try {
   assert.equal(await plansPage.evaluate(()=>localStorage.getItem("freesia.demo.v1")),plansDemoBefore);
   await plansPage.screenshot({path:"artifacts/api-config-reviewed.png",fullPage:true});
   await plansPage.close();
-  results.push({name:"analysis-plans-resources",checks:"pending analysis and plans poll; 1/N plans require explicit review; plan_id submitted; failed reason restored; resource empty/error/retry passed"});
+  record({name:"analysis-plans-resources",checks:"pending analysis and plans poll; 1/N plans require explicit review; plan_id submitted; failed reason restored; resource empty/error/retry passed"});
   await writeFile(
     "artifacts/browser-results.json",
     JSON.stringify({ status: "passed", results }, null, 2),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createApi, watchDeployment } from "../src/lib/api.ts";
+import { ApiError, createApi, watchDeployment } from "../src/lib/api.ts";
 
 test("uses exact FastAPI routes, methods and payloads", async () => {
   const calls: { url: string; init?: RequestInit }[] = [];
@@ -374,14 +374,14 @@ test("deployable computes remains optional but invalid readiness metadata is rej
   }
 });
 
-test("analysis deadline is 150 seconds while plan deadline remains 60 seconds",async(t)=>{
+test("analysis deadline is 190 seconds while plan deadline remains 60 seconds",async(t)=>{
   t.mock.timers.enable({apis:["setTimeout"]});
   let aborted=0;
   const api=createApi("",(_url,init)=>new Promise((_resolve,reject)=>{
     init!.signal!.addEventListener("abort",()=>{aborted++;reject(init!.signal!.reason);},{once:true});
   }));
   const analysis=assert.rejects(api.analyzeUntilDone("a"),/시간/);
-  t.mock.timers.tick(149_999);
+  t.mock.timers.tick(189_999);
   assert.equal(aborted,0);
   t.mock.timers.tick(1);
   await analysis;
@@ -535,4 +535,108 @@ test("metrics preserve partial null and real zero with compute-specific validate
   controller.abort();
   await assert.rejects(api.metrics("a",controller.signal),{name:"AbortError"});
   assert.equal(calls.length,1);
+});
+
+test("existing analysis restoration polls GET only with the default interval and no overlapping reads", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const calls: { url: string; init?: RequestInit }[] = [];
+  const statuses: string[] = [];
+  let firstUpdate!: () => void;
+  const firstSeen = new Promise<void>(resolve => { firstUpdate = resolve; });
+  let secondStarted!: () => void;
+  const secondRead = new Promise<void>(resolve => { secondStarted = resolve; });
+  let finishRead!: (value: Response) => void;
+  const value = { status: "running", requirements: [], evidence: [], candidates: [], mascot_message: null };
+  const api = createApi("/api", (url, init) => {
+    calls.push({ url: String(url), init });
+    if (calls.length === 1) return Promise.resolve(new Response(JSON.stringify(value)));
+    secondStarted();
+    return new Promise<Response>(resolve => { finishRead = resolve; });
+  });
+  assert.equal(typeof api.analysisUntilDone, "function", "existing analysis needs a GET-only restoration helper");
+  const task = api.analysisUntilDone("app/a", { onUpdate: result => { statuses.push(result.status); firstUpdate(); } });
+  await firstSeen;
+  t.mock.timers.tick(1_999);
+  assert.equal(calls.length, 1);
+  t.mock.timers.tick(1);
+  await secondRead;
+  t.mock.timers.tick(10_000);
+  assert.equal(calls.length, 2, "a pending GET must finish before another poll");
+  finishRead(new Response(JSON.stringify({ ...value, status: "done" })));
+  assert.equal((await task).status, "done");
+  assert.deepEqual(calls.map(call => [call.url, call.init?.method, call.init?.body]), [
+    ["/api/app-spaces/app%2Fa/analysis", "GET", undefined],
+    ["/api/app-spaces/app%2Fa/analysis", "GET", undefined],
+  ]);
+  assert.deepEqual(statuses, ["running", "done"]);
+});
+
+test("existing analysis restoration returns terminal snapshots and preserves missing/invalid response errors", async () => {
+  const value = { status: "done", requirements: [], evidence: [], candidates: [], mascot_message: null };
+  for (const status of ["done", "failed"]) {
+    const methods: string[] = [];
+    const api = createApi("/api", async (_url, init) => {
+      methods.push(init!.method!);
+      return new Response(JSON.stringify({ ...value, status }));
+    });
+    assert.equal(typeof api.analysisUntilDone, "function");
+    assert.equal((await api.analysisUntilDone("a")).status, status);
+    assert.deepEqual(methods, ["GET"]);
+  }
+  for (const missing of [false, true]) {
+    const methods: string[] = [];
+    const api = createApi("/api", async (_url, init) => {
+      methods.push(init!.method!);
+      return new Response(JSON.stringify(missing ? { error: "analysis_not_found", message: "분석 이력 없음" } : {}), { status: missing ? 404 : 200 });
+    });
+    await assert.rejects(api.analysisUntilDone("a"), error => error instanceof ApiError && (missing ? error.status === 404 && error.code === "analysis_not_found" : /응답/.test(error.message)));
+    assert.deepEqual(methods, ["GET"]);
+  }
+});
+
+test("existing analysis restoration cancellation preserves its reason and sends no later GET", async () => {
+  const controller = new AbortController();
+  const reason = new Error("application navigation canceled the analysis read");
+  const methods: string[] = [];
+  const statuses: string[] = [];
+  const api = createApi("/api", async (_url, init) => {
+    methods.push(init!.method!);
+    return new Response(JSON.stringify({ status: "pending", requirements: [], evidence: [], candidates: [], mascot_message: null }));
+  });
+  assert.equal(typeof api.analysisUntilDone, "function");
+  await assert.rejects(api.analysisUntilDone("a", {
+    signal: controller.signal,
+    onUpdate: value => { statuses.push(value.status); queueMicrotask(() => controller.abort(reason)); },
+  }), error => error === reason);
+  assert.deepEqual(methods, ["GET"]);
+  assert.deepEqual(statuses, ["pending"]);
+  await assert.rejects(api.analysisUntilDone("a", { signal: controller.signal }), error => error === reason);
+  assert.deepEqual(methods, ["GET"], "an already aborted restore cannot send a request");
+});
+
+test("existing analysis restoration has a typed 190-second deadline distinct from external cancellation", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const methods: string[] = [];
+  let aborted = 0;
+  const api = createApi("/api", (_url, init) => {
+    methods.push(init!.method!);
+    return new Promise<Response>((_resolve, reject) => {
+      init!.signal!.addEventListener("abort", () => { aborted++; reject(init!.signal!.reason); }, { once: true });
+    });
+  });
+  assert.equal(typeof api.analysisUntilDone, "function");
+  const deadline = assert.rejects(api.analysisUntilDone("a"), error => error instanceof ApiError && error.code === "poll_timeout");
+  t.mock.timers.tick(189_999);
+  assert.equal(aborted, 0);
+  t.mock.timers.tick(1);
+  await deadline;
+  assert.equal(aborted, 1);
+  assert.deepEqual(methods, ["GET"], "timeout must not restart analysis or perform caller-owned final recovery");
+  const controller = new AbortController();
+  const reason = new DOMException("navigation", "AbortError");
+  const canceled = assert.rejects(api.analysisUntilDone("a", { signal: controller.signal }), error => error === reason && !(error instanceof ApiError));
+  controller.abort(reason);
+  await canceled;
+  assert.equal(aborted, 2);
+  assert.deepEqual(methods, ["GET", "GET"]);
 });
