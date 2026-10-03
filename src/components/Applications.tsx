@@ -898,7 +898,6 @@ export default function Applications({
             </div>
             {selected && <AppProviderLabel value={infra?.provider} />}
           </div>
-          </div>
           <p>
             {selected
               ? "기반·분석 근거·배포 상태를 확인하세요."
