@@ -8,6 +8,7 @@ export type Repository = {
 import type { DemoPipeline } from "./pipeline.ts";
 export type InfraSpace = {
   id: string;
+  provider?: string | null;
   name: string;
   description: string;
   network: "public" | "private" | "ha" | "multi-az" | "db-isolated";

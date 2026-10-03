@@ -709,3 +709,23 @@ test('redeploy propagates cancellation and structured conflicts without a fallba
   const conflict=createApi('/api',async()=>Response.json({error:'redeploy_target_changed',message:'Changed'},{status:409}));
   await assert.rejects(conflict.redeploy('app-1',{source_deployment_id:'success-1',target_commit_sha:'b'.repeat(40)}),{code:'redeploy_target_changed',status:409});
 });
+
+test("Infra Space providers preserve known, unknown, null and absent values on list and detail", async () => {
+  const base = { id: "infra-provider", name: "Provider fixture", description: "", network: "public", computes: [], app_count: 0 };
+  for (const provider of ["aws", "onprem", "gcp", "azure", "future-provider", "", null, undefined]) {
+    const fixture = { ...base, ...(provider === undefined ? {} : { provider }) };
+    const api = createApi("/api", async (url) => new Response(JSON.stringify(String(url).endsWith("/infra-spaces") ? [fixture] : fixture)));
+    assert.deepEqual(await api.infras(), [fixture], `list preserves ${String(provider)}`);
+    assert.deepEqual(await api.infra(base.id), fixture, `detail preserves ${String(provider)}`);
+  }
+});
+
+test("Infra Space rejects malformed provider values on both list and detail", async () => {
+  for (const provider of [42, false, [], {}, ["aws"]]) {
+    const fixture = { id: "infra-provider", name: "Provider fixture", description: "", network: "public", computes: [], app_count: 0, provider };
+    const api = createApi("/api", async (url) => new Response(JSON.stringify(String(url).endsWith("/infra-spaces") ? [fixture] : fixture)));
+    for (const request of [() => api.infras(), () => api.infra(fixture.id)]) {
+      await assert.rejects(request, (error: unknown) => error instanceof ApiError && error.code === "invalid_response", `reject malformed provider ${JSON.stringify(provider)}`);
+    }
+  }
+});
