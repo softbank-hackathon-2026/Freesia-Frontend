@@ -382,3 +382,9 @@ No UI markup/style/label changes. Default selection already omitted infra_id and
 
 ## Sandbox API follow-up publication approval — 2026-10-03
 User explicitly requested commit and push of the current API-only follow-up diff to codex/sandbox-selection. Product delta preserves server no_default_infra message with unchanged UI; related API/browser tests and existing contract/plan/evaluation records are included. Prior implementation verification: check57/fullE2E26/isolated latest-backend HTTP9/read-only review PASS. No product/test change since those runs. Commit/push approved; PR/main merge/cloud deployment not requested.
+
+2026-10-03: user-requested deployment panel typography correction active on codex/fix-analysis-typography, maina1bf997. Scoped styles/records; commit+push authorized after verification, no PR/merge/deploy.
+
+2026-10-03T23:47:49.8207046 Typography correction: localcheck59/fullE2E27/computedstyle4PASS. Scoped2CSSrules; independentreview next, userauthorizedcommit/push, noPR/merge/deploy.
+
+Independent read-only typography review PASS: source/scope/computed4/screenshots, grades7/6/7/7. check59/E2E27 confirmed. Actual browser200percent zoom not tested; documentbase20 tested. Ready for userauthorizedcurrentdiffcommit/push; noPR/mainmerge/deploy.

@@ -1239,6 +1239,8 @@ progress {
 .deployment-stepper button.complete:not([aria-current="step"]) { background: var(--paper); color: var(--accent-hover); }
 .deployment-step-number { display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; background: var(--paper); border: 1px solid currentColor; font-size: 11px; }
 .deployment-stage h2 { margin: 0; scroll-margin-top: 156px; }
+.deployment-stage .panel-body { font-size: 14px; line-height: 1.6; }
+.deployment-stage .panel-body > p { font-size: inherit; }
 .deployment-stage-actions, .deployment-review-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .deployment-stage-actions > p { margin: 0; }
 .deployment-management-actions { display: flex; flex-wrap: wrap; gap: 8px; }
