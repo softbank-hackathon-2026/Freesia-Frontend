@@ -8,7 +8,7 @@ const nullableString = (value: unknown) => value === null || typeof value === "s
 const fields = (v: Record<string, unknown>, keys: string[]) => keys.every(key => typeof v[key] === "string");
 function infraShape(value: unknown): boolean {
   const v = record(value);
-  return !!v && fields(v,["id","name","description"]) && (v.provider === undefined || nullableString(v.provider)) && ["public","private","ha","multi-az","db-isolated"].includes(String(v.network)) && strings(v.computes) && (v.deployable_computes === undefined || strings(v.deployable_computes)) && typeof v.app_count === "number";
+  return !!v && fields(v,["id","name","description"]) && (v.provider === undefined || nullableString(v.provider)) && ["public","private","ha","multi-az","db-isolated","vm"].includes(String(v.network)) && strings(v.computes) && (v.deployable_computes === undefined || strings(v.deployable_computes)) && typeof v.app_count === "number";
 }
 function repositoryShape(value: unknown): boolean {
   const v = record(value);

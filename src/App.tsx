@@ -261,6 +261,7 @@ export default function App() {
       ha: "고가용성, 접근 방식/AZ 상세 미제공",
       "multi-az": "다중 AZ, 접근 방식 상세 미제공",
       "db-isolated": "DB 격리, 접근 방식 상세 미제공",
+      vm: "온프레미스 내부망",
     }[infra.network];
   }
   function createSpace(space: MeetingInfraSpace) {

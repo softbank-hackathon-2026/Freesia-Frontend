@@ -729,3 +729,28 @@ test("Infra Space rejects malformed provider values on both list and detail", as
     }
   }
 });
+
+test("Infra Space accepts a mixed AWS and on-premise VM network list", async () => {
+  const aws = ["public", "private", "multi-az"].map((network, index) => ({
+    id: `aws-${index}`, name: `AWS ${index}`, description: "", provider: "aws", network,
+    computes: ["ecs-fargate"], deployable_computes: ["ecs-fargate"], app_count: index,
+  }));
+  const onprem = { id: "vm-codex", name: "VM Codex", description: "", provider: "onprem", network: "vm", computes: ["vm"], deployable_computes: ["vm"], app_count: 0 };
+  const fixtures = [...aws, onprem];
+  const api = createApi("/api", async () => Response.json(fixtures));
+  assert.deepEqual(await api.infras(), fixtures, "an on-premise VM row must not discard the three AWS rows");
+});
+
+test("Infra Space accepts on-premise VM network detail", async () => {
+  const fixture = { id: "vm-codex", name: "VM Codex", description: "", provider: "onprem", network: "vm", computes: ["vm"], deployable_computes: ["vm"], app_count: 0 };
+  const api = createApi("/api", async () => Response.json(fixture));
+  assert.deepEqual(await api.infra(fixture.id), fixture);
+});
+
+test("Infra Space still rejects unknown networks on list and detail", async () => {
+  const fixture = { id: "unknown-network", name: "Unknown network", description: "", provider: "onprem", network: "unknown-network", computes: ["vm"], deployable_computes: ["vm"], app_count: 0 };
+  const api = createApi("/api", async (url) => Response.json(String(url).endsWith("/infra-spaces") ? [fixture] : fixture));
+  for (const request of [() => api.infras(), () => api.infra(fixture.id)]) {
+    await assert.rejects(request, (error: unknown) => error instanceof ApiError && error.code === "invalid_response");
+  }
+});

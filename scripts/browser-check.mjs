@@ -565,7 +565,7 @@ try {
   const providerPage = await browser.newPage();
   const providerCases = [
     { provider: "aws", label: "AWS", icon: "/providers/aws.png" },
-    { provider: "onprem", label: "온프레미스", icon: "/providers/on-premise.png" },
+    { provider: "onprem", label: "온프레미스", icon: "/providers/on-premise.png", network: "vm" },
     { provider: "gcp", label: "GCP", icon: "/providers/gcp.png" },
     { provider: "azure", label: "Azure", icon: "/providers/azure.png" },
     { provider: "future-provider", label: "환경 미확인" },
@@ -575,6 +575,7 @@ try {
   const providerInfras = providerCases.map((item, index) => ({
     ...infra, id: `provider-${index}`, name: `Provider fixture ${index + 1}`,
     ...(Object.hasOwn(item, "provider") ? { provider: item.provider } : {}),
+    ...(item.network === "vm" ? { network: "vm", computes: ["vm"], deployable_computes: ["vm"] } : {}),
   }));
   const providerCalls = [];
   await providerPage.route("**/api/**", route => {
@@ -591,10 +592,12 @@ try {
   for (const [size, viewport] of [["desktop", { width: 1440, height: 1050 }], ["mobile", { width: 390, height: 844 }]]) {
     await providerPage.setViewportSize(viewport);
     assert.deepEqual(await providerPanel.getByRole("columnheader").allTextContents(), ["이름", "네트워크 구성", "연결된 애플리케이션", "생성된 시간"]);
+    assert.equal(await providerPanel.locator("tbody tr").count(), providerInfras.length, "VM networks preserve the complete mixed-provider list");
     const backgrounds = [];
     for (const [index, item] of providerCases.entries()) {
       const row = providerPanel.locator("tbody tr").filter({ has: providerPage.getByRole("button", { name: providerInfras[index].name, exact: true }) });
       assert.equal(await row.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
+      assert.equal(await row.getByRole("cell").nth(1).innerText(), item.network === "vm" ? "온프레미스 내부망" : "인터넷 경로 포함", "VM and AWS network labels remain visible in the mixed list");
       const cell = row.getByRole("cell").first();
       assert.equal(await cell.getByText(item.label, { exact: true }).count(), 1);
       assert.match(await cell.innerText(), new RegExp(providerInfras[index].id));
@@ -647,7 +650,7 @@ try {
   assert.ok(providerCalls.length > 0);
   assert.ok(providerCalls.every(call => call.method === "GET"), "provider rendering never mutates backend or infrastructure");
   await providerPage.close();
-  record({ name: "infra-provider-icons", checks: "four loaded provider icons, preserved columns/IDs, cloud/on-premise/unknown backgrounds, null/missing/unknown safety, keyboard detail navigation and mobile internal scroll" });
+  record({ name: "infra-provider-icons", checks: "four loaded provider icons, mixed AWS/on-premise VM network labels, preserved columns/IDs, cloud/on-premise/unknown backgrounds, null/missing/unknown safety, keyboard detail navigation and mobile internal scroll" });
   const readinessPage=await browser.newPage();
   await readinessPage.emulateMedia({ reducedMotion: "reduce" });
   let readinessKnown=false, readinessPlanReject=false, readinessExisting=false, readinessPlanPosts=0, readinessDeployPosts=0;

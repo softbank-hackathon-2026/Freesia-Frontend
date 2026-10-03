@@ -194,3 +194,7 @@ POST /api/app-spaces accepts omitted/null infra_id and picks its sole ready Defa
 
 
 Sandbox API follow-up (2026-10-03): no_default_infra displays the server message verbatim. UI layout/labels unchanged; default requests omit infra_id, creation retains the returned concrete ID and resolves hidden infrastructure with GET detail. Verified against latest backend main f24109c and merged PR36; operating AWS tag setup is a separate runtime prerequisite.
+
+
+## On-premise network — 2026-10-04
+Backend main ed487b4 officially adds InfraSpace.network=vm for onprem VM records. Frontend accepts vm for list/detail and displays 온프레미스 내부망; this label describes network and does not derive provider or guarantee VM deployment readiness. Existing AWS network values and unknown-value rejection remain unchanged.
