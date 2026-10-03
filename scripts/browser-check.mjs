@@ -366,6 +366,163 @@ async function appForm(page, name, infraId) {
   );
 }
 
+async function checkAppProviders(browser) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 1000 }, reducedMotion: "reduce" });
+  const cases = [
+    { provider: "aws", label: "AWS", icon: "/providers/aws.png" },
+    { provider: "onprem", label: "온프레미스", icon: "/providers/on-premise.png" },
+    { provider: "gcp", label: "GCP", icon: "/providers/gcp.png" },
+    { provider: "azure", label: "Azure", icon: "/providers/azure.png" },
+    { provider: "future-provider", label: "환경 미확인" },
+    { provider: null, label: "환경 미확인" },
+    { label: "환경 미확인" },
+  ];
+  const listed = cases.map((item, index) => ({ ...infra, id: `app-provider-${index}`, name: `Provider ${index}`, ...(Object.hasOwn(item, "provider") ? { provider: item.provider } : {}) }));
+  const hidden = { ...infra, id: "app-provider-default", name: "Hidden Default", provider: "gcp" };
+  const fixtureApps = listed.map((item, index) => ({ ...app, id: `provider-app-${index}`, name: `Provider App ${index}`, infra_id: item.id }));
+  for (const [id, infraId] of [["hidden-a", hidden.id], ["hidden-b", hidden.id], ["failed", "provider-failed"], ["wrong", "provider-wrong"]])
+    fixtureApps.push({ ...app, id, name: `Provider ${id}`, infra_id: infraId });
+  const reads = [];
+  const posts = [];
+  const unexpected = [];
+  let holdHidden;
+  let hiddenRequested;
+  await page.route("**/api/**", async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace(/^\/api/, "");
+    const json = (value, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(value) });
+    if (path === "/infra-spaces") return json(listed);
+    if (path.startsWith("/infra-spaces/")) {
+      reads.push(path);
+      if (path === `/infra-spaces/${hidden.id}`) {
+        if (holdHidden) { hiddenRequested(); await holdHidden; }
+        return json(hidden);
+      }
+      if (path === "/infra-spaces/provider-failed") return json({ message: "Provider lookup unavailable" }, 503);
+      if (path === "/infra-spaces/provider-wrong") return json({ ...listed[0], name: "Wrong ID must not appear" });
+      const item = listed.find(entry => path === `/infra-spaces/${entry.id}`);
+      if (item) return json(item);
+    }
+    if (path === "/repositories") return json([repository]);
+    if (path === "/app-spaces" && request.method() === "POST") {
+      const body = request.postDataJSON();
+      posts.push(body);
+      const created = { ...app, ...body, id: `provider-created-${posts.length}`, infra_id: body.infra_id ?? hidden.id };
+      fixtureApps.push(created);
+      return json(created, 201);
+    }
+    if (path === "/app-spaces") return json(fixtureApps);
+    if (path.endsWith("/analysis")) return json({ message: "Fixture has no saved analysis" }, 404);
+    const selected = fixtureApps.find(entry => path === `/app-spaces/${entry.id}`);
+    if (selected) return json(selected);
+    unexpected.push(`${request.method()} ${path}`);
+    return json({ message: "Unexpected provider fixture request" }, 404);
+  });
+  await page.goto(url + "/?source=api&page=apps");
+  const card = entry => page.getByRole("button", { name: `${entry.name} 상세 보기`, exact: true });
+  await card(fixtureApps[0]).waitFor();
+  assert.equal(await card(fixtureApps[0]).getAttribute("data-provider"), "aws", "App Space identifies its linked infrastructure provider");
+  await page.waitForFunction(() => document.querySelector('[aria-label="Provider hidden-b 상세 보기"]')?.getAttribute("data-provider") === "gcp");
+  assert.equal(reads.filter(path => path === `/infra-spaces/${hidden.id}`).length, 1, "two hidden-default app cards share one infrastructure request");
+  for (const entry of fixtureApps.slice(7, 9)) assert.equal(await card(entry).getAttribute("data-provider"), "gcp");
+  const backgrounds = [];
+  for (const [index, item] of cases.entries()) {
+    const current = card(fixtureApps[index]);
+    assert.equal(await current.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
+    const label = current.getByLabel(`배포 환경: ${item.label}`, { exact: true });
+    await label.waitFor();
+    assert.equal(await label.getByText(item.label, { exact: true }).count(), 1);
+    backgrounds.push(await current.evaluate(element => window.getComputedStyle(element).backgroundColor));
+    if (item.icon) {
+      const icon = label.locator(`img[src="${item.icon}"]`);
+      await icon.evaluate(image => image.decode());
+      assert.ok(await icon.evaluate(image => image.naturalWidth > 0));
+    } else assert.equal(await label.locator("img").count(), 0, "unknown providers never fabricate a cloud logo");
+  }
+  assert.equal(backgrounds[0], backgrounds[2]);
+  assert.equal(backgrounds[0], backgrounds[3]);
+  assert.notEqual(backgrounds[0], backgrounds[1], "cloud and on-premise cards remain visually distinct");
+  assert.notEqual(backgrounds[0], backgrounds[4], "unknown environment has neutral styling");
+  for (const entry of fixtureApps.slice(9)) {
+    assert.equal(await card(entry).getAttribute("data-provider"), "unknown");
+    assert.equal(await card(entry).getByLabel("배포 환경: 환경 미확인", { exact: true }).locator("img").count(), 0);
+    assert.doesNotMatch(await card(entry).innerText(), /Wrong ID must not appear|AWS/);
+  }
+  for (const [size, viewport] of [["desktop", { width: 1280, height: 1000 }], ["mobile", { width: 390, height: 844 }]]) {
+    await page.setViewportSize(viewport);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: `artifacts/app-provider-list-${size}.png`, fullPage: true });
+  }
+  const back = () => page.getByRole("button", { name: "앱 목록으로", exact: true }).click();
+  for (const [index, item] of cases.entries()) {
+    await card(fixtureApps[index]).click();
+    await page.getByRole("heading", { name: fixtureApps[index].name, exact: true }).waitFor();
+    const heading = page.locator(".app-detail-heading");
+    assert.equal(await heading.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
+    await heading.getByLabel(`배포 환경: ${item.label}`, { exact: true }).waitFor();
+    await back();
+  }
+  for (const entry of fixtureApps.slice(9)) {
+    await card(entry).click();
+    await page.getByRole("alert").filter({ hasText: /배포 기반 조회 실패/ }).waitFor();
+    assert.equal(await page.locator(".app-detail-heading").getAttribute("data-provider"), "unknown");
+    assert.doesNotMatch(await page.locator(".app-detail-heading").innerText(), /Wrong ID must not appear|AWS/);
+    await back();
+  }
+  const changeApp = async id => page.evaluate(id => { const next = new URL(window.location.href); next.searchParams.set("app", id); window.history.pushState(null, "", next); window.dispatchEvent(new window.PopStateEvent("popstate")); }, id);
+  let releaseHidden;
+  holdHidden = new Promise(resolve => { releaseHidden = resolve; });
+  const pending = new Promise(resolve => { hiddenRequested = resolve; });
+  await card(fixtureApps[7]).click();
+  await pending;
+  await changeApp(fixtureApps[0].id);
+  await page.getByRole("heading", { name: fixtureApps[0].name, exact: true }).waitFor();
+  releaseHidden();
+  holdHidden = undefined;
+  assert.equal(await page.locator(".app-detail-heading").getAttribute("data-provider"), "aws", "late hidden-infra response cannot replace another app's provider");
+  for (const [size, viewport] of [["desktop", { width: 1280, height: 1000 }], ["mobile", { width: 390, height: 844 }]]) {
+    await page.setViewportSize(viewport);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: `artifacts/app-provider-detail-${size}.png`, fullPage: true });
+  }
+  await back();
+  const submit = page.getByRole("button", { name: "애플리케이션 생성", exact: true });
+  const create = async (name, sandbox) => {
+    await submit.click();
+    await page.getByLabel("앱 이름", { exact: true }).fill(name);
+    await page.getByLabel("등록한 Repository", { exact: true }).selectOption(repository.id);
+    const select = page.getByLabel("Infra Space", { exact: true });
+    for (const [index, item] of cases.entries()) assert.equal(await select.locator(`option[value="${listed[index].id}"]`).innerText(), `${item.label} · ${listed[index].name}`);
+    assert.equal(await select.locator(`option[value="${hidden.id}"]`).count(), 0);
+    const checkbox = page.getByRole("checkbox", { name: "샌드박스 배포", exact: true });
+    await checkbox.uncheck();
+    await select.selectOption(listed[1].id);
+    const selected = page.locator(".app-selected-infra");
+    assert.equal(await selected.getAttribute("data-provider"), "onprem");
+    await checkbox.check();
+    assert.equal(await selected.count(), 0);
+    await checkbox.uncheck();
+    assert.equal(await select.inputValue(), listed[1].id);
+    assert.equal(await selected.getAttribute("data-provider"), "onprem");
+    if (sandbox) await checkbox.check();
+    else for (const [size, viewport] of [["desktop", { width: 1280, height: 1000 }], ["mobile", { width: 390, height: 844 }]]) {
+      await page.setViewportSize(viewport);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await page.screenshot({ path: `artifacts/app-provider-create-${size}.png`, fullPage: true });
+    }
+    await submit.click();
+    await page.getByRole("heading", { name, exact: true }).waitFor();
+  };
+  await create("Provider explicit", false);
+  assert.deepEqual(posts[0], { name: "Provider explicit", repo_url: repository.repo_url, branch: "main", infra_id: listed[1].id });
+  await back();
+  await create("Provider sandbox", true);
+  assert.deepEqual(posts[1], { name: "Provider sandbox", repo_url: repository.repo_url, branch: "main" });
+  await page.waitForFunction(() => document.querySelector(".app-detail-heading")?.getAttribute("data-provider") === "gcp");
+  assert.deepEqual(unexpected, [], "only controlled provider fixture APIs are called");
+  await page.close();
+  record({ name: "app-space-providers", checks: "seven provider values in cards/details/options; shared hidden-default lookup dedup; failed/wrong-ID unknown fallback; app-switch stale response isolation; explicit/sandbox payload unchanged; desktop/mobile screenshots and no overflow" });
+}
 async function checkSandboxCreation(browser) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const defaultInfra = { ...infra, id: "sandbox-default", name: "서버 기본 샌드박스" };
@@ -536,6 +693,7 @@ try {
       "C:/Program Files/Google/Chrome/Application/chrome.exe",
     headless: true,
   });
+  await checkAppProviders(browser);
   await checkSandboxCreation(browser);
   // This fixture verifies the public default independently of the retained demo QA flow.
   const defaultPage = await browser.newPage();
