@@ -50,6 +50,9 @@ export type Analysis = {
   mascot_message: string | null;
 };
 export type Deployment = {
+  commit_sha?: string | null;
+  plan_id?: string | null;
+  source_deployment_id?: string | null;
   demo_pipeline?: DemoPipeline;
   id: string;
   app_space_id: string;
@@ -109,4 +112,15 @@ export type AppMetrics = {
   request_count: number | null;
   error_count: number | null;
   measured_at: string | null;
+};
+
+export type RedeployContext = {
+  app_space_id: string;
+  repo_url: string;
+  branch: string;
+  source_deployment_id: string;
+  source_commit_sha: string | null;
+  target_commit_sha: string;
+  compute: string;
+  plan: Pick<DeploymentPlan, "id" | "template" | "values">;
 };
