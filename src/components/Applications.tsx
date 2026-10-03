@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import DeploymentResources from "./DeploymentResources.tsx";
 import ApplicationLogs from "./ApplicationLogs.tsx";
 import ApplicationMetrics from "./ApplicationMetrics.tsx";
+import ContextHelp from "./ContextHelp.tsx";
 import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
 import {
   availableCandidates,
@@ -42,6 +43,11 @@ const appTabs = [
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const api = createApi(apiBase);
 const computeLabels: Record<string, string> = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2" };
+const computeIcons: Record<string, string> = {
+  "ecs-fargate": "/compute/ecs-fargate.png",
+  lambda: "/compute/lambda.png",
+  ec2: "/compute/ec2.png",
+};
 const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "배포 결과"] as const;
 type DeploymentStage = 0 | 1 | 2 | 3 | 4;
 export default function Applications({
@@ -856,10 +862,15 @@ export default function Applications({
             <span aria-hidden="true">← </span>앱 목록으로
           </button>}
           <div className="eyebrow">APPLICATION</div>
-          <h1>
-            {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
-            {deployedCompute && ` (${deployedCompute})`}
-          </h1>
+          <div className="title-with-help">
+            <h1>
+              {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
+              {deployedCompute && ` (${deployedCompute})`}
+            </h1>
+            {mode === "api" && !selected && <ContextHelp id="application-context-help" label="앱 생성 안내">
+              통합에 등록한 Repository와 Infra Space 또는 기본 샌드박스로 앱을 만듭니다. 분석·배포는 서버 설정에 따라 실행됩니다.
+            </ContextHelp>}
+          </div>
           <p>
             {selected
               ? "기반·분석 근거·배포 상태를 확인하세요."
@@ -906,11 +917,6 @@ export default function Applications({
         <button disabled={busy || discarding || analysisPending} onClick={refreshAnalysis}>분석 상태 다시 확인</button>
       </div>}
       {selected && analysisPending && viewStep !== 0 && <p className="notice" role="status">코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
-      {mode === "api" && !selected && (
-        <p className="notice">
-          등록한 Repository와 선택한 Infra Space 또는 서버의 기본 샌드박스로 앱을 생성합니다. 분석·배포 결과는 서버가 제공하며 실제 실행 여부는 서버 설정과 상태를 확인하세요.
-        </p>
-      )}
       {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefresh}>Repository 다시 조회</button></div>}
       {creating && mode === "api" && repositoryLoading ? <p role="status">Repository 불러오는 중…</p> : creating && !registered.length ? (
         <section className="panel detail">
@@ -1063,8 +1069,20 @@ export default function Applications({
                 <div className="deployment-workspace">
                 <section className="panel deployment-stage" aria-labelledby="deployment-step-heading">
                   <div className="section-heading">
-                    <h2 id="deployment-step-heading" ref={stageHeading} tabIndex={-1}>{deploymentStages[viewStep]}</h2>
-                    <span className="badge">{viewStep + 1} / 5</span>
+                    <div className="title-with-help">
+                      <h2 id="deployment-step-heading" ref={stageHeading} tabIndex={-1}>{deploymentStages[viewStep]}</h2>
+                      {mode === "api" && (viewStep === 3 || viewStep === 4) && matchingDeployment && <ContextHelp id="app-access-context-help" label="앱 접속 안내">
+                        서버가 보고한 주소입니다. URL 접속·앱 정상 여부는 별도로 확인하세요. 플랫폼 /health는 고객 앱 상태가 아닙니다.
+                      </ContextHelp>}
+                    </div>
+                    <div className="deployment-result-actions">
+                      {viewStep === 4 && matchingDeployment && mode === "api" && deployment?.status === "success" && deployedAppUrl && !teardownComplete && !teardownUnconfirmed && (
+                        <a className="deployed-app-link" href={deployedAppUrl} target="_blank" rel="noopener noreferrer">
+                          배포된 애플리케이션 접속
+                        </a>
+                      )}
+                      <span className="badge">{viewStep + 1} / 5</span>
+                    </div>
                   </div>
                   <div className="panel-body">
                     {viewStep === 0 && <>
@@ -1169,7 +1187,14 @@ export default function Applications({
                               }
                             >
                               <div className="candidate-title">
-                                <strong>{c.compute}</strong>
+                                <strong className="candidate-compute">
+                                  {Object.hasOwn(computeIcons, c.compute) && (
+                                    <span className={`compute-icon compute-icon-${c.compute}`} aria-hidden="true">
+                                      <img src={computeIcons[c.compute]} alt="" />
+                                    </span>
+                                  )}
+                                  {c.compute}
+                                </strong>
                                 <span className="badge">
                                   {c.state === "selected"
                                     ? "추천"
@@ -1282,20 +1307,9 @@ export default function Applications({
                         <p>구성안: {deployment.plan_id ?? "서버 미제공"}</p>
                         <p>기준 성공 배포: {deployment.source_deployment_id ?? "서버 미제공"}</p>
                       </div>}
-                      {mode === "api" && deployment.status === "success" && deployedAppUrl && !teardownComplete && !teardownUnconfirmed && (
-                        <p>
-                          <a className="deployed-app-link" href={deployedAppUrl} target="_blank" rel="noopener noreferrer">
-                            배포된 애플리케이션 접속
-                          </a>
-                        </p>
-                      )}
                       {mode === "demo" && deployment.url && (
                         <p className="break-word">샘플 URL: <code>{deployment.url}</code></p>
                       )}
-                      <p className="notice">
-                        URL 연결·고객 앱 헬스체크는 검증되지 않았습니다. 플랫폼
-                        /health는 고객 앱 상태가 아닙니다.
-                      </p>
                       {deployment.reason && (
                         <p role="alert">{deployment.reason}</p>
                       )}

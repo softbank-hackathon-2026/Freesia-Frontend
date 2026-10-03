@@ -1047,10 +1047,13 @@ try {
       await page.getByRole("button", { name: "AI로 인프라 설계" }).count(),
       0,
     );
-    assert.match(
-      await page.locator("main").innerText(),
-      /애플리케이션 담당자는 준비된 인프라를 조회/,
-    );
+    const infraInstructions = page.locator("#infra-context-help");
+    await infraInstructions.waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "인프라 조회 안내", exact: true }).click();
+    await infraInstructions.waitFor({ state: "visible" });
+    assert.match(await infraInstructions.innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
+    await page.keyboard.press("Escape");
+    await infraInstructions.waitFor({ state: "hidden" });
     await switchSource(page, "demo");
     assert.equal(
       await page.evaluate(
@@ -1161,7 +1164,13 @@ try {
   await apiPage.getByRole("button", { name: "API 기반", exact: true }).waitFor();
   const apiInfraPanel = apiPage.locator(".infra-list");
   await assertReadOnlyInfra(apiPage);
-  assert.match(await apiPage.locator("main").innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
+  const apiInfraInstructions = apiPage.locator("#infra-context-help");
+  await apiInfraInstructions.waitFor({ state: "hidden" });
+  await apiPage.getByRole("button", { name: "인프라 조회 안내", exact: true }).click();
+  await apiInfraInstructions.waitFor({ state: "visible" });
+  assert.match(await apiInfraInstructions.innerText(), /애플리케이션 담당자는 준비된 인프라를 조회/);
+  await apiPage.keyboard.press("Escape");
+  await apiInfraInstructions.waitFor({ state: "hidden" });
   assert.deepEqual(calls.filter(call => call.path.startsWith("/infra-spaces") && call.method !== "GET"), []);
   const apiInfraRow = apiInfraPanel.getByRole("row").filter({ has: apiPage.getByRole("button", { name: "API 기반", exact: true }) });
   assert.equal(await apiInfraRow.getByRole("cell").nth(2).innerText(), "0", "keep server app_count even when the app list contains a linked app");

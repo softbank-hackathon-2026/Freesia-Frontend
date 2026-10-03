@@ -62,38 +62,48 @@ export default function ApplicationMetrics({ id, mode }: { id: string; mode: Dat
     ["함수 오류 수", metrics.error_count, "건", "함수 실행 오류"],
   ] : metrics?.compute === "ec2" ? [["CPU", metrics.cpu_percent, "%", "EC2 평균"]] : [];
   const status = error ? "조회 실패" : metrics ? labels[metrics.status] : "조회 중";
-  return <section className="panel" aria-label="모니터링">
+  return <section className="panel monitoring-panel" aria-label="모니터링">
     <div className="section-heading">
       <h2>모니터링</h2>
-      <span className="badge">{mode === "demo" ? "샘플 수치" : status}</span>
+      <div className="metrics-actions">
+        <span className="badge">{mode === "demo" ? "샘플 수치" : status}</span>
+        {mode === "api" && <button disabled={loading} onClick={() => refresh.current?.()}>지표 새로고침</button>}
+      </div>
     </div>
     <div className="panel-body">
       {mode === "demo" ? <>
-        <p>실제 앱 관측 데이터가 아닌 고정 샘플입니다.</p>
         <div className="metrics">
           <div><span>CPU</span><strong>24%</strong><meter min={0} max={100} value={24} aria-label="샘플 CPU" /></div>
           <div><span>메모리</span><strong>38%</strong><meter min={0} max={100} value={38} aria-label="샘플 메모리" /></div>
           <div><span>응답 시간</span><strong>128 ms</strong><small>샘플</small></div>
         </div>
-        <p className="notice">고정 시연 화면입니다. 실제 정상 상태를 의미하지 않습니다.</p>
+        <div className="metrics-meta">
+          <p>실제 앱 관측 데이터가 아닌 고정 샘플입니다.</p>
+          <p className="notice">고정 시연 화면입니다. 실제 정상 상태를 의미하지 않습니다.</p>
+        </div>
       </> : <>
-        <p className="muted">60초 단위 집계 · 최신 측정값 · 약 15초마다 새로고침</p>
-        <button disabled={loading} onClick={() => refresh.current?.()}>지표 새로고침</button>
+        {!error && metrics?.status === "ok" && cards.length > 0 && <div className="metrics">{cards.map(([label, value, unit, description]) =>
+          <div key={label}><span>{label}</span><strong>{value === null ? "—" : `${value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit}`}</strong><small>{value === null ? "측정값 없음" : description}</small></div>
+        )}</div>}
         {loading && <p role="status">{metrics ? "지표 갱신 중…" : "지표 조회 중…"}</p>}
         {error && <p role="alert">{error}</p>}
         {!error && metrics && metrics.status !== "ok" &&
           <p className="notice" role={metrics.status === "error" ? "alert" : "status"}>{metrics.message || messages[metrics.status]}</p>}
-        {!error && metrics?.status === "ok" && <>
-          {metrics.message && <p>{metrics.message}</p>}
-          <p>{metrics.measured_at ? <>측정 시각 · <time dateTime={metrics.measured_at}>{new Date(metrics.measured_at).toLocaleString("ko-KR", { hour12: false })}</time> (브라우저 현지 시간)</> : "측정 시각 없음"}</p>
-          <p className="muted">마지막 측정값이며 화면 새로고침 시각과 다를 수 있습니다. 지표별 측정 시각은 다를 수 있습니다. 측정값이 없는 지표는 정상이나 0을 의미하지 않습니다.</p>
-          {metrics.compute ? <p>{computeLabels[metrics.compute]}</p> : <p className="notice">실행 환경을 확인할 수 없어 지원 지표를 표시할 수 없습니다.</p>}
-          {cards.length > 0 && <div className="metrics">{cards.map(([label, value, unit, description]) =>
-            <div key={label}><span>{label}</span><strong>{value === null ? "—" : `${value.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}${unit}`}</strong><small>{value === null ? "측정값 없음" : description}</small></div>
-          )}</div>}
-          {metrics.compute === "lambda" && <p className="notice">Lambda는 CPU·메모리 지표를 제공하지 않습니다.</p>}
-          {metrics.compute === "ec2" && <p className="notice">EC2는 CPU만 제공합니다. 메모리·응답 시간·요청 수·오류 수는 지원하지 않습니다.</p>}
-        </>}
+        <div className="metrics-meta">
+          <p className="muted">{metrics?.status === "ok" && metrics.compute && <>{computeLabels[metrics.compute]} · </>}60초 단위 집계 · 약 15초마다 새로고침</p>
+          {!error && metrics?.status === "ok" && <>
+            {!metrics.compute && <p className="notice">실행 환경을 확인할 수 없어 지원 지표를 표시할 수 없습니다.</p>}
+            <p className="muted">{metrics.measured_at ? <>측정 시각 · <time dateTime={metrics.measured_at}>{new Date(metrics.measured_at).toLocaleString("ko-KR", { hour12: false })}</time> (브라우저 현지 시간)</> : "측정 시각 없음"}</p>
+            {metrics.message && <p>{metrics.message}</p>}
+            {metrics.compute === "lambda" && <p className="notice">Lambda는 CPU·메모리 지표를 제공하지 않습니다.</p>}
+            {metrics.compute === "ec2" && <p className="notice">EC2는 CPU만 제공합니다. 메모리·응답 시간·요청 수·오류 수는 지원하지 않습니다.</p>}
+            <p className="muted">‘—’는 측정값이 없다는 뜻이며, 0이나 정상 상태를 의미하지 않습니다.</p>
+            <details>
+              <summary>측정값 안내</summary>
+              <p className="muted">마지막 측정값이며 화면 새로고침 시각과 다를 수 있습니다. 지표별 측정 시각은 다를 수 있습니다.</p>
+            </details>
+          </>}
+        </div>
       </>}
     </div>
   </section>;

@@ -450,8 +450,16 @@ try {
   await card('평균 응답 시간').getByText('120.68 ms', { exact: true }).waitFor();
   assert.equal(await metrics.locator('time').getAttribute('datetime'), at);
   const measuredText = await metrics.locator('time').innerText();
-  await metrics.getByText('60초 단위 집계 · 최신 측정값 · 약 15초마다 새로고침', { exact: true }).waitFor();
+  await metrics.locator('.metrics-meta').getByText('ECS Fargate · 60초 단위 집계 · 약 15초마다 새로고침', { exact: true }).waitFor();
+  const notes = metrics.locator('.metrics-meta details');
+  assert.equal(await notes.getAttribute('open'), null);
+  assert.doesNotMatch(await metrics.innerText(), /지표별 측정 시각은 다를 수 있습니다/);
+  await notes.locator('summary').click();
   assert.match(await metrics.innerText(), /지표별 측정 시각은 다를 수 있습니다/);
+  await notes.locator('summary').click();
+  const cardBox = await metrics.locator('.metrics').boundingBox();
+  const metadataBox = await metrics.locator('.metrics-meta').boundingBox();
+  assert.ok(cardBox.y + cardBox.height <= metadataBox.y, 'Metric cards precede monitoring metadata');
   await page.screenshot({ path: 'artifacts/monitoring-metrics-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'artifacts/monitoring-metrics-mobile.png', fullPage: true });
