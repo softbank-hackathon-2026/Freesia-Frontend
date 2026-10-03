@@ -172,7 +172,7 @@ export default function Applications({
     || (mode === "demo" ? storageBlocked || appHistory.some(entry => !["success", "failed"].includes(entry.status))
       : !!selected?.latest_deployment_id && !deployment);
   const matchingDeployment = !!deployment && deployment.app_space_id === selected?.id && deployment.id === deploymentFlow.deploymentId;
-  const resourceDeployment = mode === "api" && deployment?.app_space_id === selected?.id ? deployment : null;
+  const resourceDeployment = mode === "api" && (viewStep === 3 || viewStep === 4) && deployment?.app_space_id === selected?.id ? deployment : null;
   const reviewPlan = plan ?? (matchingDeployment ? preview : null);
   const configurationReady = analysis?.status === "done" && (mode === "demo"
     ? reviewPlan?.status === "template_ready" && reviewPlan.compute === chosen
@@ -917,7 +917,7 @@ export default function Applications({
                     ))}
                   </ol>
                 </nav>
-                <div className={resourceDeployment ? "deployment-workspace has-resources" : "deployment-workspace"}>
+                <div className="deployment-workspace">
                 <section className="panel deployment-stage" aria-labelledby="deployment-step-heading">
                   <div className="section-heading">
                     <h2 id="deployment-step-heading" ref={stageHeading} tabIndex={-1}>{deploymentStages[viewStep]}</h2>

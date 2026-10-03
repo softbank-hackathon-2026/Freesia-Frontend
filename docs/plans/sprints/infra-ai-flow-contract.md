@@ -265,3 +265,6 @@ Root owns product/docs; validation worker runs existing flow harness and tempora
 
 ## API Infra read-only action unit — 2026-10-03T14:11:35.9407734+09:00
 Owner root: src/App.tsx and existing docs. Verification worker: scripts/browser-check.mjs API scenarios only. Success: API no refresh/create/delete controls or mutation forms; reads, loading/empty/error retry and application/integration flows intact; legacydemo tests remain. Evidence: check47 plus fullE2E with updated read-only assertions and1440/390 screenshots. User exact3button instruction authorizes bounded implementation/publication; no new infrastructure/config/dependencies.
+
+## Resource tree below deployment unit — 2026-10-03T14:32:30.0726816+09:00
+RootownsApplications.tsx/styles.css/records; verificationworkerownsdeployment-flow-check.mjs. Success: progress/result display currentappresource tree beneathstatus atallwidths; earlierstages show none; matchingappguard/requests/empty/errors/refresh/deletedstates retained; nohorizontalpageoverflow. Existinghorizontal6stagecardsandAPIInfrareadonly unchanged. Userexplicitlayoutinstruction authorizes boundedimplementation; noGitpublication.
