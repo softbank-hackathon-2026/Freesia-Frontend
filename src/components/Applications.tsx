@@ -188,6 +188,8 @@ export default function Applications({
     || (mode === "demo" ? storageBlocked || appHistory.some(entry => !["success", "failed"].includes(entry.status))
       : !!selected?.latest_deployment_id && !deployment);
   const matchingDeployment = !!deployment && deployment.app_space_id === selected?.id && deployment.id === deploymentFlow.deploymentId;
+  const monitoringKey = `${mode}:${selected?.id ?? "none"}:${deployment?.id ?? selected?.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected?.teardown_status ?? "none"}:${selected?.teardown_requested_at ?? ""}:${selected?.teardown_finished_at ?? ""}`;
+  const showDeploymentObservation = viewStep === 4 && matchingDeployment && deployment?.status === "success" && !teardownComplete && !teardownUnconfirmed;
   const resourceDeployment = mode === "api" && (viewStep === 3 || viewStep === 4) && deployment?.app_space_id === selected?.id ? deployment : null;
   const reviewPlan = plan ?? (matchingDeployment ? preview : null);
   const configurationReady = analysis?.status === "done" && (mode === "demo"
@@ -1260,6 +1262,14 @@ export default function Applications({
                     </>}
                   </div>
                 </section>
+                {showDeploymentObservation && <section className="deployment-observation" aria-label="배포 후 운영 확인">
+                  <div className="deployment-observation-heading">
+                    <h2>운영 확인</h2>
+                    <p className="muted">로그와 지표를 각각 조회합니다. 첫 데이터가 도착하기 전에는 수집 대기로 표시됩니다.</p>
+                  </div>
+                  <ApplicationMetrics key={"metrics:" + monitoringKey} id={selected.id} mode={mode}/>
+                  <ApplicationLogs key={"logs:" + monitoringKey} id={selected.id} mode={mode} appName={selected.name} previewLines={15}/>
+                </section>}
                 {resourceDeployment && <DeploymentResources key={resourceDeployment.id} id={resourceDeployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
                 </div>
                 {hasDeploymentHistory && <section className="panel detail" aria-label="새 버전 재배포">
@@ -1277,9 +1287,9 @@ export default function Applications({
 
               </>
             ) : tab === "logs" ? (
-              <ApplicationLogs key={`${mode}:${selected.id}:${deployment?.id ?? selected.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected.teardown_status ?? "none"}:${selected.teardown_requested_at ?? ""}:${selected.teardown_finished_at ?? ""}`} id={selected.id} mode={mode}/>
+              <ApplicationLogs key={"logs:" + monitoringKey} id={selected.id} mode={mode} appName={selected.name}/>
             ) : (
-              <ApplicationMetrics key={`${mode}:${selected.id}:${deployment?.id ?? selected.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected.teardown_status ?? "none"}:${selected.teardown_requested_at ?? ""}:${selected.teardown_finished_at ?? ""}`} id={selected.id} mode={mode}/>
+              <ApplicationMetrics key={"metrics:" + monitoringKey} id={selected.id} mode={mode}/>
             )}
           </div>
         </>

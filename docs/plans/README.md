@@ -338,3 +338,12 @@ Current 2026-10-03T14:32:30.0726816+09:00: resource tree only on progress/result
 2026-10-03T16:21:08.5128734+09:00: Issue8 full-stack implementation approved on isolated codex/issue-8-redeploy in both repos. New preview+execution contract; frontend and backend workers active; feature-only PRs requested after verification. No live deployment/mainmerge.
 
 2026-10-03T16:56:26.4392114+09:00 Issue8 implemented and locally verified on latest main; separate review PRs next. See latest infra-ai-flow-eval and docs/contracts; no merge/deploy.
+
+
+2026-10-03T17:43:42.2253243 Post-deployment observation/TXT: approved; codex/post-deploy-observation based main556d32c. Existing spec/plan/contract contain scope and acceptance; implementation/testing/review pending. No publication or cloud change.
+
+
+2026-10-03T19:23:57.1550943 Post-deployment observation/TXT locally complete: check55/E2E25/focused19/liveEC2GET+TXT and independentreview7/6/6/7PASS. See infra-ai-flow-eval.md current handoff. No publication/deployment authorized or performed.
+
+
+2026-10-03T19:48:06.3244625 Publication approved: user requested push of current verified post-deployment observation/TXT diff, then PR creation. Current codex/post-deploy-observation scope includes product3files+helper, tests3files and existingcontracts/plans6files. Commit/push/EnglishreviewPR next; no mainmerge or cloud deployment requested. Prior verification remains check55/E2E25/focused19/liveEC2GET+TXT/independentreviewPASS. Previous no-publication wording is a historical pre-approval state.
