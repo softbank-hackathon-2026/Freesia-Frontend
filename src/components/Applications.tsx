@@ -53,8 +53,8 @@ const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 �
 type DeploymentStage = 0 | 1 | 2 | 3 | 4;
 function AppProviderLabel({ value }: { value: string | null | undefined }) {
   const provider = getInfraProvider(value);
-  return <span className="app-provider-label" data-provider={provider.key} aria-label={`배포 환경: ${provider.label}`}>
-    {provider.icon && <img src={provider.icon} alt="" />}{provider.label}
+  return <span className="app-provider-label" data-provider={provider.key} role={provider.icon ? "img" : undefined} aria-label={`배포 환경: ${provider.label}`} title={provider.label}>
+    {provider.icon ? <img src={provider.icon} alt="" /> : provider.label}
   </span>;
 }
 export default function Applications({

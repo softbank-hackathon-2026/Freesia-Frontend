@@ -432,7 +432,9 @@ async function checkAppProviders(browser) {
     assert.equal(await current.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
     const label = current.getByLabel(`배포 환경: ${item.label}`, { exact: true });
     await label.waitFor();
-    assert.equal(await label.getByText(item.label, { exact: true }).count(), 1);
+    assert.equal(await label.innerText(), item.icon ? "" : item.label, "known providers show only their icon; unknown providers retain a text fallback");
+    assert.equal(await label.getAttribute("title"), item.label);
+    if (item.icon) assert.equal(await label.getAttribute("role"), "img");
     await page.mouse.move(0, 0);
     const normal = await current.evaluate(element => ({ background: window.getComputedStyle(element).backgroundColor, shadow: window.getComputedStyle(element).boxShadow }));
     backgrounds.push(normal.background);
@@ -486,7 +488,9 @@ async function checkAppProviders(browser) {
     await page.getByRole("heading", { name: fixtureApps[index].name, exact: true }).waitFor();
     const heading = page.locator(".app-detail-heading");
     assert.equal(await heading.getAttribute("data-provider"), item.icon ? item.provider : "unknown");
-    await heading.getByLabel(`배포 환경: ${item.label}`, { exact: true }).waitFor();
+    const headingBadge = heading.getByLabel(`배포 환경: ${item.label}`, { exact: true });
+    await headingBadge.waitFor();
+    assert.equal(await headingBadge.innerText(), item.icon ? "" : item.label);
     await back();
   }
   for (const entry of fixtureApps.slice(9)) {
