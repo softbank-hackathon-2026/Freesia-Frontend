@@ -14,3 +14,7 @@ Backend infra GET-only, observability/questions APIs absent; document implemente
 
 ## User input correction — confirmed
 Infra input is an AI conversation that produces Terraform code, not resource ID form or output import. UI: requirement -> guided Q&A -> summary/code -> save Infra Space design. No AI chat/generation/save route exists. Demo guided conversation clearly labeled, no claims of real AI inference. API mode reports unsupported. Generated design is NOT ready/provisioned infrastructure; cannot be used to deploy until apply/sync exists. No Terraform execution in scope.
+
+
+### EC2 logs follow-up — 2026-10-03
+Reuse the accepted shared log-tab architecture and the existing infra-ai-flow contract/evaluation. Verify merged backend PR32 contract, keep the generic adapter, make log-period copy reflect that the backend controls the query window, and add EC2 current-deployment/cancellation/poll/error regression checks. Root owns copy/contracts/records; worker owns the existing focused checker. Run check + E2E + focused monitoring and independent review. Store local progress in .Codex/plans/2026-10-03-ec2-log-frontend. Existing GET-only production reads may verify server version; do not create an EC2 workload or publish Git changes from this request.

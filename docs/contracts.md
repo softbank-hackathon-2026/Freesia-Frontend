@@ -159,8 +159,8 @@ Pending backend agreement: how to request reuse of the last successful template/
 Evidence: app/schemas.py103-172,233-247; app/routers/app_spaces.py212-283,373-407 in the verified snapshot. User-reported Test002 success is not a test executed by this frontend task.
 
 
-## Application logs — 2026-10-02 (current, supersedes logs unsupported above)
-Backend main3d04671 exposes GET /api/app-spaces/{id}/logs?limit=100. The response is {status,message,lines:[{at,message}]}; status is ok/waiting/not_deployed/unsupported/error and message is nullable. Business states are HTTP200; transport/HTTP/invalid JSON/shape failures are separately visible. Last1hour, last100lines in chronological order; Fargate/Lambda supported and EC2 currently unsupported.
+## Application logs — 2026-10-03 (current, supersedes previous EC2 unsupported records)
+Backend main27b2214 (merged PR32) exposes GET /api/app-spaces/{id}/logs?limit=100 for Fargate, Lambda and EC2. The response is {status,message,lines:[{at,message}]}; status is ok/waiting/not_deployed/unsupported/error and message is nullable. Business states are HTTP200; transport/HTTP/invalid JSON/shape failures are separately visible. Current backend reads last1hour, up to100lines in chronological order. EC2 reads only log streams for the current deployment, excluding previous-server logs after redeployment. This supersedes main3d04671 EC2 unsupported behavior. PR30 proposes a7day query window but is still open; the frontend uses period-neutral copy and does not claim it is merged.
 Only the mounted API logs tab reads immediately, sequentially15seconds after each completion, or on manual refresh. Reads are aborted/ignored when app, source, deployment or teardown context changes or the tab unmounts. No SSE/live tail, no API mutation, no stale data disguised as current results, and no demo fallback. Demo keeps explicitly labeled local sample logs with zero monitoring requests. CloudWatch collection/permissions and live runtime are not verified by frontend fixtures.
 
 

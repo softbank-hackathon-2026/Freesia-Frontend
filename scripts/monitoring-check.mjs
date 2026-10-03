@@ -23,9 +23,9 @@ try {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   const at = '2026-10-02T09:00:00Z';
-  const app = { id: 'monitor-a', name: 'Monitoring A', repo_url: 'https://github.com/example/a', branch: 'main', infra_id: 'infra', created_at: at, latest_deployment_id: null };
-  const second = { ...app, id: 'monitor-b', name: 'Monitoring B' };
-  const demo = { ...initialDemo(), apps: [{ ...app, id: 'demo-monitor', name: 'Demo monitoring' }] };
+  const app = { id: 'monitor-a', name: 'Monitoring A', repo_url: 'https://github.com/example/a', branch: 'main', infra_id: 'infra', created_at: at, latest_deployment_id: 'ec2-logs-deployment' };
+  const second = { ...app, id: 'monitor-b', name: 'Monitoring B', latest_deployment_id: null };
+  const demo = { ...initialDemo(), apps: [{ ...app, id: 'demo-monitor', name: 'Demo monitoring', latest_deployment_id: null }] };
   await page.addInitScript(value => {
     localStorage.setItem('freesia.demo.v1', JSON.stringify(value));
     window.logAborts = 0; window.metricAborts = 0;
@@ -37,13 +37,14 @@ try {
       return original(url, options).finally(() => signal?.removeEventListener('abort', aborted));
     };
   }, demo);
-  let payload = { status: 'ok', message: null, lines: [{ at, message: '<img src=x onerror="window.logExecuted=true"> first log' }] };
+  let payload = { status: 'ok', message: null, lines: [{ at, message: 'sample-shop listening on 3000' }, { at, message: '<img src=x onerror="window.logExecuted=true"> first log' }] };
   let status = 200, count = 0, held = false, release, started;
   const metricFixture = { status: 'ok', message: null, compute: 'ecs-fargate', cpu_percent: 0, memory_percent: null, response_time_ms: 120.67890123, request_count: 15, error_count: 0, measured_at: at };
   let metricPayload = { ...metricFixture }, metricStatus = 200, metricCount = 0, metricHeld = false, metricRelease, metricStarted;
-  let titleDeployment = null;
+  let titleDeployment = { id: 'ec2-logs-deployment', app_space_id: app.id, compute: 'ec2', status: 'success', url: null, reason: null, created_at: at };
   const unexpected = [];
   await page.route('**/api/**', async route => {
+    assert.equal(route.request().method(), 'GET', 'Monitoring checks must not start deployment or change server data');
     const path = new URL(route.request().url()).pathname;
     const json = (value, code = 200) => route.fulfill({ status: code, contentType: 'application/json', body: JSON.stringify(value) });
     if (path.endsWith('/metrics')) {
@@ -63,9 +64,10 @@ try {
       await json(response, code).catch(() => {});
       return;
     }
-    if (path.endsWith('/deployments/title-deployment/events')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `event: progress\ndata: ${JSON.stringify({ status: titleDeployment.status, progress: titleDeployment.status === 'success' ? 100 : 0, message: 'title fixture', step: 'complete', at, url: null })}\n\n` });
-    if (path.endsWith('/deployments/title-deployment/resources')) return json([]);
-    if (path.endsWith('/deployments/title-deployment')) return json(titleDeployment);
+    if (titleDeployment && path.endsWith('/deployments/' + titleDeployment.id + '/events')) return route.fulfill({ status: 200, contentType: 'text/event-stream', body: `event: progress\ndata: ${JSON.stringify({ status: titleDeployment.status, progress: titleDeployment.status === 'success' ? 100 : 0, message: 'title fixture', step: 'complete', at, url: null })}\n\n` });
+    if (titleDeployment && path.endsWith('/deployments/' + titleDeployment.id + '/resources')) return json([]);
+    if (titleDeployment && path.endsWith('/deployments/' + titleDeployment.id)) return json(titleDeployment);
+    if ([app.id, second.id].some(id => path.endsWith('/app-spaces/' + id + '/analysis'))) return json({ error: 'analysis_not_found', message: 'Fixture has no saved analysis' }, 404);
     if (path.endsWith('/repositories')) return json([]);
     if (path.endsWith('/infra-spaces')) return json([{ id: 'infra', name: 'Fixture', description: '', network: 'public', computes: ['ecs-fargate'], app_count: 2 }]);
     if (path.endsWith('/app-spaces')) return json([app, second]);
@@ -82,11 +84,14 @@ try {
   const refresh = () => logs.getByRole('button', { name: '로그 새로고침', exact: true });
   await open();
   await logs.locator('pre').filter({ hasText: 'first log' }).waitFor();
+  await logs.getByText('최근 애플리케이션 로그 · 최대 100줄 · 약 15초마다 새로고침 · 시간은 브라우저 현지 시간 기준입니다.', { exact: true }).waitFor();
   assert.equal(await logs.locator('img').count(), 0);
   assert.equal(await page.evaluate(() => window.logExecuted), undefined);
   assert.match(await logs.locator('pre').innerText(), /2026/);
   assert.equal(await logs.getByText('샘플', { exact: true }).count(), 0);
-  results.push('initial API GET, local timestamp, escaped log content');
+  assert.equal(await page.locator('.page-heading h1').innerText(), app.name + ' (EC2)');
+  await logs.locator('pre').filter({ hasText: 'sample-shop listening on 3000' }).waitFor();
+  results.push('successful EC2 deployment reads app stdout, local timestamp, escaped log content and neutral query-window copy');
   await mkdir('artifacts', { recursive: true });
   await page.screenshot({ path: 'artifacts/monitoring-logs-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -99,18 +104,28 @@ try {
     await logs.getByText(label, { exact: true }).waitFor();
     await logs.getByText(state + ' fixture', { exact: true }).waitFor();
     assert.equal(await logs.locator('pre').count(), 0);
+    assert.doesNotMatch(await logs.innerText(), /\[DEMO\]|샘플|no application connection/);
+    if (state === 'waiting') {
+      payload = { status: 'ok', message: null, lines: [{ at, message: 'sample-shop listening on 3000' }] };
+      await refresh().click();
+      await logs.locator('pre').filter({ hasText: 'sample-shop listening on 3000' }).waitFor();
+      await logs.getByText('로그 수신', { exact: true }).waitFor();
+    }
   }
   payload = { status: 'ok', message: null, lines: [] };
-  await refresh().click(); await logs.getByText('최근 1시간에 수집된 로그가 없습니다.', { exact: true }).waitFor();
+  await refresh().click(); await logs.getByText('수집된 애플리케이션 로그가 없습니다.', { exact: true }).waitFor();
   status = 500; payload = { message: 'fixture HTTP failure' };
   await refresh().click(); await logs.getByRole('alert').filter({ hasText: 'fixture HTTP failure' }).waitFor();
+  assert.equal(await logs.locator('pre').count(), 0);
+  assert.doesNotMatch(await logs.innerText(), /\[DEMO\]|샘플|no application connection/);
   status = 200; payload = { status: 'unknown', message: null, lines: [] };
   await refresh().click(); await logs.getByRole('alert').filter({ hasText: '응답 형식' }).waitFor();
   payload = { status: 'ok', message: null, lines: [{ at, message: 'recovered log' }] };
   await refresh().click(); await logs.locator('pre').filter({ hasText: 'recovered log' }).waitFor();
-  results.push('all business states, empty, HTTP 500, invalid payload and manual recovery');
+  results.push('EC2 waiting-to-ok, business error, empty, HTTP 500, invalid payload and manual recovery never use demo fallback');
 
-  await page.clock.install();
+  await page.clock.install({ time: new Date('2026-10-03T00:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-10-03T00:00:01Z'));
   await refresh().click(); await logs.locator('pre').filter({ hasText: 'recovered log' }).waitFor();
   await refresh().waitFor({ state: 'visible' });
   await page.waitForFunction(() => !document.querySelector('[aria-label="애플리케이션 로그"] button')?.disabled);
@@ -127,6 +142,32 @@ try {
   await page.waitForFunction(() => !document.querySelector('[aria-label="애플리케이션 로그"] button')?.disabled);
   assert.equal(count, beforePoll + 2);
   results.push('15 second completion-based polling, no overlap, refresh disabled while pending');
+
+  // Restore a new deployment generation for the same app through read-only GET fixtures.
+  // Returning to the app list and reopening is explicit; no external deployment is started.
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'previous EC2 deployment late log' }] };
+  held = true;
+  const oldGenerationPending = new Promise(resolve => started = resolve);
+  await refresh().click(); await oldGenerationPending;
+  const oldGenerationRelease = release;
+  const oldGenerationAborts = await page.evaluate(() => window.logAborts);
+  app.latest_deployment_id = 'ec2-logs-redeployment';
+  titleDeployment = { ...titleDeployment, id: app.latest_deployment_id, created_at: '2026-10-02T09:05:00Z' };
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'sample-shop listening on 3000 · new deployment' }] };
+  held = false;
+  await page.getByRole('button', { name: '앱 목록으로', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.logAborts), oldGenerationAborts + 1);
+  await page.getByRole('button', { name: app.name + ' 상세 보기', exact: true }).click();
+  await page.getByRole('tab', { name: '로그', exact: true }).click();
+  await logs.locator('pre').filter({ hasText: 'sample-shop listening on 3000 · new deployment' }).waitFor();
+  oldGenerationRelease();
+  await page.clock.runFor(15000);
+  await page.waitForFunction(() => !document.querySelector('[aria-label="애플리케이션 로그"] button')?.disabled);
+  assert.match(await logs.locator('pre').innerText(), /new deployment/);
+  assert.doesNotMatch(await logs.locator('pre').innerText(), /previous EC2 deployment late log|recovered log|\[DEMO\]/);
+  results.push('same EC2 app reread with new deployment ID aborts old fetch, clears old logs and ignores late previous-generation response');
+  payload = { status: 'ok', message: null, lines: [{ at, message: 'recovered log' }] };
+  await refresh().click(); await logs.locator('pre').filter({ hasText: 'recovered log' }).waitFor();
 
   for (const destination of ['tab', 'app', 'source']) {
     held = true;
@@ -160,6 +201,7 @@ try {
   assert.match(await logs.locator('pre').innerText(), /DEMO/);
   await page.clock.runFor(45000); assert.equal(count, demoCount);
   results.push('demo keeps sample label and sends zero monitoring requests');
+  app.latest_deployment_id = null; titleDeployment = null;
   const metrics = page.getByRole('region', { name: '모니터링', exact: true });
   const metricRefresh = () => metrics.getByRole('button', { name: '지표 새로고침', exact: true });
   const card = label => metrics.locator('.metrics > div').filter({ has: page.getByText(label, { exact: true }) });
@@ -274,7 +316,16 @@ try {
   }
   const openDeployedTitle = async () => {
     await open('개요');
-    await page.getByText('실행 환경: ' + titleDeployment.compute, { exact: true }).waitFor();
+    if (titleDeployment.app_space_id === app.id) {
+      await page.getByText('실행 환경: ' + titleDeployment.compute, { exact: true }).waitFor();
+    } else {
+      // A deployment belonging to another app must not render this app's result body.
+      await page.getByRole('button', { name: '새 버전 재배포', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: '새 버전 재배포', exact: true });
+      await dialog.getByText(titleDeployment.id + ' · ' + titleDeployment.status, { exact: true }).waitFor();
+      await dialog.getByRole('button', { name: '취소', exact: true }).click();
+      assert.equal(await page.getByText('실행 환경: ' + titleDeployment.compute, { exact: true }).count(), 0);
+    }
   };
   titleDeployment.compute = 'constructor'; await openDeployedTitle();
   assert.equal(await page.locator('.page-heading h1').innerText(), app.name);

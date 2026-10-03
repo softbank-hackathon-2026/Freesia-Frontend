@@ -5,7 +5,7 @@ import type { AppLogs, DataMode } from "../lib/types.ts";
 const api = createApi(import.meta.env.VITE_API_BASE_URL || "/api");
 const labels = { ok: "로그 수신", waiting: "수집 대기", not_deployed: "미배포", unsupported: "지원 안 됨", error: "수집 오류" };
 const messages = {
-  ok: "최근 1시간에 수집된 로그가 없습니다.",
+  ok: "수집된 애플리케이션 로그가 없습니다.",
   waiting: "아직 로그를 수집하지 못했습니다. 잠시 후 다시 확인합니다.",
   not_deployed: "배포된 애플리케이션이 없습니다.",
   unsupported: "이 실행 환경은 로그 조회를 지원하지 않습니다.",
@@ -59,7 +59,7 @@ export default function ApplicationLogs({ id, mode }: { id: string; mode: DataMo
 [DEMO] 12:00:02 INFO GET / -> 200
 [DEMO] 12:00:03 INFO Sample log; no application connection`}</pre> : <>
       <div className="panel-body">
-        <p className="muted">최근 1시간 · 최대 100줄 · 15초마다 새로고침 · 시간은 브라우저 현지 시간 기준입니다.</p>
+        <p className="muted">최근 애플리케이션 로그 · 최대 100줄 · 약 15초마다 새로고침 · 시간은 브라우저 현지 시간 기준입니다.</p>
         <button disabled={loading} onClick={() => refresh.current?.()}>로그 새로고침</button>
         {loading && <p role="status">{logs ? "로그 갱신 중…" : "로그 조회 중…"}</p>}
         {error && <p role="alert">{error}</p>}

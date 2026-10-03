@@ -89,6 +89,15 @@ export default function Applications({
   const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const workflowRequest = useRef<AbortController | null>(null);
   const stageHeading = useRef<HTMLHeadingElement>(null);
+  const managementHeading = useRef<HTMLHeadingElement>(null);
+  const managementNavigation = useRef<string | null>(null);
+  useEffect(() => {
+    if (managementNavigation.current !== appId) managementNavigation.current = null;
+    else if (tab === "overview") {
+      managementNavigation.current = null;
+      managementHeading.current?.focus();
+    }
+  }, [appId, tab]);
   const previousStage = useRef<DeploymentStage>(0);
   const [deploymentFlow, setDeploymentFlow] = useState<{ step: DeploymentStage; deploymentId: string | null }>({ step: 0, deploymentId: null });
   const viewStep = deploymentFlow.step;
@@ -736,10 +745,18 @@ export default function Applications({
         </div>
         {(appId || selected || creating) && (
           <div className="heading-actions">
+            {selected && hasDeploymentHistory && <button className="primary" disabled={discarding}
+              onClick={() => {
+                if (tab === "overview") managementHeading.current?.focus();
+                else {
+                  managementNavigation.current = selected.id;
+                  onNavigate(selected.id, "overview");
+                }
+              }}>배포 관리</button>}
             {selected && mode === "api" && deployment && <button className="secondary"
               disabled={(teardownStatus === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || busy || discarding || !!streamId || !["success", "failed"].includes(deployment.status)}
               onClick={teardown}>앱 내리기</button>}
-            {selected && <button className="secondary"
+            {selected && <button className="danger"
               disabled={discarding || busy || teardownUnconfirmed || !!deployment && !["success", "failed"].includes(deployment.status) || (mode === "demo" && storageBlocked) || !discardableApps.some(app => app.id === selected.id)}
               title={mode === "demo" ? "배포 이력 없는 DEMO 애플리케이션 삭제" : "배포·내리기 중에는 삭제할 수 없습니다."}
               onClick={() => { setDiscardId(selected.id); setDiscardError(""); discardDialog.current?.showModal(); }}>
@@ -1114,8 +1131,11 @@ export default function Applications({
                     {(viewStep === 3 || viewStep === 4) && matchingDeployment && deployment && <>
                     <div className="deployment-progress-body">
                       <h3>배포 상태 · {deployment.status}</h3>
-                      {viewStep === 4 && <p role="status">{deployment.status === "success" ? "배포가 완료되었습니다." : "배포에 실패했습니다. 실패 이유를 확인하고 명시적으로 다시 시도하세요."}</p>}
-                      <p>{event?.message ?? "현재 배포 상태를 표시합니다."}</p>
+                      <p role={viewStep === 4 ? "status" : undefined}>
+                        {event?.message?.trim() || (viewStep === 4
+                          ? deployment.status === "success" ? "배포가 완료되었습니다." : "배포에 실패했습니다. 실패 이유를 확인하고 명시적으로 다시 시도하세요."
+                          : "현재 배포 상태를 표시합니다.")}
+                      </p>
                       {reconnecting && <p role="status">배포 연결 복구 중… {streamError} <button onClick={()=>{setStreamError("");setStreamRetry(n=>n+1);}}>배포 상태 다시 연결</button></p>}
                       <ol className="pipeline-steps" aria-label="배포 세부 단계" tabIndex={0}>
                         {pipelineSteps.map((step,i)=>{
@@ -1150,7 +1170,7 @@ export default function Applications({
                 </div>
                 {hasDeploymentHistory && <section className="panel detail" aria-label="새 버전 재배포">
                   <div className="section-heading">
-                    <h2>배포 관리</h2>
+                    <h2 ref={managementHeading} tabIndex={-1}>배포 관리</h2>
                     <div className="deployment-management-actions">
                     {viewStep !== 0 && <button className="secondary" disabled={busy || analysisRunning || discarding || !!streamId || teardownUnconfirmed} onClick={analyze}>설정 변경 · 재분석</button>}
                     <button className="primary" disabled={redeployBlocked} onClick={openRedeploy}>새 버전 재배포</button>
@@ -1201,7 +1221,7 @@ export default function Applications({
               >
                 애플리케이션 생성
               </button>
-              <button className="secondary" disabled={loading || repositoryLoading || discarding || (mode === "demo" && storageBlocked) || !discardableApps.length}
+              <button className="danger" disabled={loading || repositoryLoading || discarding || (mode === "demo" && storageBlocked) || !discardableApps.length}
                 title={mode === "api" ? "애플리케이션을 목록에서 삭제" : "배포 이력 없는 DEMO 애플리케이션 삭제"}
                 onClick={() => { setDiscardId(discardableApps[0].id); setDiscardError(""); discardDialog.current?.showModal(); }}>
                 애플리케이션 삭제
@@ -1285,7 +1305,7 @@ export default function Applications({
           </select>}
           {discardError && <p className="error" role="alert">{discardError}</p>}
           <div className="form-actions">
-            <button className="primary" disabled={discarding || (mode === "demo" && storageBlocked) || !discardableApps.some((entry) => entry.id === discardId)} onClick={() => void discard()}>선택한 애플리케이션 삭제</button>
+            <button className="danger" disabled={discarding || (mode === "demo" && storageBlocked) || !discardableApps.some((entry) => entry.id === discardId)} onClick={() => void discard()}>선택한 애플리케이션 삭제</button>
             <button className="secondary" disabled={discarding} onClick={() => discardDialog.current?.close()}>취소</button>
             {discarding && <span role="status">삭제 요청 중…</span>}
           </div>

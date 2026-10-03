@@ -17,3 +17,7 @@ User confirms AI Q&A produces Terraform source. Actual AI API absent; demo plus 
 
 ## User input correction — confirmed
 Infra input is an AI conversation that produces Terraform code, not resource ID form or output import. UI: requirement -> guided Q&A -> summary/code -> save Infra Space design. No AI chat/generation/save route exists. Demo guided conversation clearly labeled, no claims of real AI inference. API mode reports unsupported. Generated design is NOT ready/provisioned infrastructure; cannot be used to deploy until apply/sync exists. No Terraform execution in scope.
+
+
+### EC2 log compatibility — 2026-10-03
+User requests frontend integration after backend PR32 support. Existing users open the same app-detail logs tab for Fargate, Lambda or EC2. Success means current-deployment EC2 application logs and common status/error/polling behavior work without backend-specific UI forks or sample fallback. Keep the unchanged status/message/lines API and remove hardcoded query-period copy. No new API, screen, monitoring feature, backend change, Terraform, paid deployment or Git publication is in scope. Current log window is1hour; open PR30's7day proposal is not implemented.
