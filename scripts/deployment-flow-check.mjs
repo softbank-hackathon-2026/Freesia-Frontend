@@ -156,7 +156,8 @@ try {
     assert.deepEqual(mutations(state), restored, "visiting earlier stages only changes the workflow view");
     await visitStep(page, 1);
     const started = page.waitForRequest(request => request.url().endsWith("/analysis") && request.method() === "POST");
-    await page.getByRole("button", { name: "설정 변경 · 재분석", exact: true }).click(); await started;
+    await page.getByRole("button", { name: "배포 관리", exact: true }).click();
+    await page.getByRole("dialog", { name: "배포 관리", exact: true }).getByRole("button", { name: /^설정 변경 · 재분석/ }).click(); await started;
     await step(page, 1); await hiddenResources(page);
     assert.equal(await button(page, 5).isDisabled(), true, "old result cannot replace the active reanalysis step");
     await page.screenshot({ path: "artifacts/deployment-resource-hidden-reanalysis-desktop.png", fullPage: true });
@@ -405,7 +406,8 @@ try {
     const { page, state } = await scenario({ latest: "old-success", deployment: { ...dep, id: "old-success", status: "success" }, event: progress("success", 100), holdAnalysis: true });
     await step(page, 5);
     const started = page.waitForRequest(request => request.url().endsWith("/analysis") && request.method() === "POST");
-    await page.getByRole("button", { name: "설정 변경 · 재분석", exact: true }).click(); await started;
+    await page.getByRole("button", { name: "배포 관리", exact: true }).click();
+    await page.getByRole("dialog", { name: "배포 관리", exact: true }).getByRole("button", { name: /^설정 변경 · 재분석/ }).click(); await started;
     await step(page, 1); await page.waitForTimeout(200); await step(page, 1);
     assert.equal(await button(page, 5).isDisabled(), true, "old terminal success is outside the new analysis flow");
     state.holdAnalysis = false; state.releaseAnalysis(); await step(page, 2);

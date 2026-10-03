@@ -73,6 +73,7 @@ try {
     if ([app.id, second.id].some(id => path.endsWith('/app-spaces/' + id + '/analysis'))) return json({ error: 'analysis_not_found', message: 'Fixture has no saved analysis' }, 404);
     if (path.endsWith('/repositories')) return json([]);
     if (path.endsWith('/infra-spaces')) return json([{ id: 'infra', name: 'Fixture', description: '', network: 'public', computes: ['ecs-fargate'], app_count: 2 }]);
+    if (route.request().method() === 'GET' && path === '/api/infra-spaces/infra') return json({ id: 'infra', name: 'Fixture', description: '', network: 'public', computes: ['ecs-fargate'], app_count: 2 });
     if (path.endsWith('/app-spaces')) return json([app, second]);
     if (path.endsWith('/' + app.id)) return json(app);
     if (path.endsWith('/' + second.id)) return json(second);
@@ -555,7 +556,8 @@ try {
       await page.getByText('실행 환경: ' + titleDeployment.compute, { exact: true }).waitFor();
     } else {
       // A deployment belonging to another app must not render this app's result body.
-      await page.getByRole('button', { name: '새 버전 재배포', exact: true }).click();
+      await page.getByRole('button', { name: '배포 관리', exact: true }).click();
+      await page.getByRole('dialog', { name: '배포 관리', exact: true }).getByRole('button', { name: /^새 버전 재배포/ }).click();
       const dialog = page.getByRole('dialog', { name: '새 버전 재배포', exact: true });
       await dialog.getByText(titleDeployment.id + ' · ' + titleDeployment.status, { exact: true }).waitFor();
       await dialog.getByRole('button', { name: '취소', exact: true }).click();
