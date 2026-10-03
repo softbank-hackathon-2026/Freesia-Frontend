@@ -378,3 +378,7 @@ User approved recommended bounded in-chat design: literal case-insensitive messa
 
 ## Log usability publication approval — 2026-10-04
 User explicitly requested pulling latest main, verifying integration, then committing and pushing the current log usability diff on codex/log-search-pause. Safely stashed tracked9files, git pull --ff-only origin main advanced3050fda to de350bb (#24 card/provider/deployment-detail polish), then restored the scoped log diff. Product styles merged automatically; three append-only record conflicts retain both complete upstream and log histories. Latest main product edits preserved; no API/backend/dependency/Terraform/Notion changes. Required check, full browser and monitoring revalidation pending on integrated de350bb. Commit/current named feature-branch push approved; no PR/main merge or deployment dispatch authorized.
+
+
+## Infra title help removal — approved 2026-10-04
+User explicitly requested removing the question-mark beside the Infra Space page title and committing/pushing the change. Bounded scope: remove that ContextHelp and unused App import, update existing API-mode help expectations to absence, preserve all other page behavior/help. Branch codex/remove-infra-title-help from main21eb80c. Existing check/full browser and desktop/mobile API title verification; implementation pending. Commit and named feature-branch push approved; no PR/main merge/deploy/backend/Notion actions.

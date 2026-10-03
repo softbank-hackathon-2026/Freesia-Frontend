@@ -14,7 +14,6 @@ import type {
 import InfraBuilder, { ApiInfraBuilder } from "./components/InfraBuilder.tsx";
 import { canDiscardInfra } from "./lib/infraFlow.ts";
 import Applications, { type ApplicationTab } from "./components/Applications.tsx";
-import ContextHelp from "./components/ContextHelp.tsx";
 import InfraSpaceForm from "./components/InfraSpaceForm.tsx";
 import type { InfraSpaceDraft } from "./components/InfraSpaceForm.tsx";
 import GitHubIntegration from "./components/GitHubIntegration.tsx";
@@ -490,9 +489,6 @@ export default function App() {
                   <div className="eyebrow">INFRA SPACE</div>
                   <div className="title-with-help">
                     <h1>인프라 스페이스</h1>
-                    {mode === "api" && <ContextHelp id="infra-context-help" label="인프라 조회 안내">
-                      애플리케이션 담당자는 준비된 인프라를 조회하고, 앱 배포 시 사용할 기반을 선택할 수 있습니다.
-                    </ContextHelp>}
                   </div>
                   <p>
                     {mode === "demo" ? "VPC, Subnet 등 공통 네트워크 기반을 설계하고, 연결된 애플리케이션을 확인하세요." : "준비된 공통 네트워크 기반과 연결된 애플리케이션을 확인하세요."}
