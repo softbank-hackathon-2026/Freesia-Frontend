@@ -297,3 +297,9 @@ Header teardown placement verification completed 2026-10-03T13:07:44.6156382+09:
 
 ## Publication authorized - 2026-10-03T13:10:12.9117391+09:00
 User explicitly requested commit and push of the current diff, then PR-based merge of all completed work into main. Scope: prior five-stage deployment commit fee2c0d plus current analysis failure/190s/GET recovery and header teardown changes. Latest origin/main54fbd4e is an ancestor; no integration conflicts. Product source unchanged since check47/E2E25/flow14 and desktop/mobile verification. Commit/push codex/analysis-recovery, create English PR, inspect CI and merge; no manual production Deploy dispatch.
+
+Current follow-up: resource tree visibility regression on codex/resource-tree-visibility. See current Day3 plan/spec and infra-ai-flow contract. Browser reproduction before minimal product fix; verification/publication pending.
+
+Resource-tree visibility follow-up verified 2026-10-03T13:27:06.9663764+09:00: check47/E2E25/flow15/tree/source+visual PASS. Implementation complete on codex/resource-tree-visibility; local only, no Git publication or production deployment. See infra-ai-flow-eval current section.
+
+Publication now explicitly authorized 2026-10-03T13:34:24.1659173+09:00: commit/push codex/resource-tree-visibility and merge into main after CI. Actual123 resource data is empty in local simulation; the UI fix does not create resources.
