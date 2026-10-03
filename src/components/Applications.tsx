@@ -3,6 +3,7 @@ import DeploymentResources from "./DeploymentResources.tsx";
 import ApplicationLogs from "./ApplicationLogs.tsx";
 import ApplicationMetrics from "./ApplicationMetrics.tsx";
 import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
+import { getInfraProvider } from "../lib/providers.ts";
 import {
   availableCandidates,
   sampleAnalysis,
@@ -44,6 +45,12 @@ const api = createApi(apiBase);
 const computeLabels: Record<string, string> = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2" };
 const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "배포 결과"] as const;
 type DeploymentStage = 0 | 1 | 2 | 3 | 4;
+function AppProviderLabel({ value }: { value: string | null | undefined }) {
+  const provider = getInfraProvider(value);
+  return <span className="app-provider-label" data-provider={provider.key} aria-label={`배포 환경: ${provider.label}`}>
+    {provider.icon && <img src={provider.icon} alt="" />}{provider.label}
+  </span>;
+}
 export default function Applications({
   mode, appId, tab, onNavigate,
   apps,
@@ -162,24 +169,41 @@ export default function Applications({
     (deployment?.demo_pipeline?.plan.compute === chosen
       ? deployment.demo_pipeline.plan
       : null);
-  const [linkedInfra, setLinkedInfra] = useState<{ id: string; appId: string; list: InfraSpace[]; data?: InfraSpace; error?: string } | null>(null);
-  const missingInfraId = mode === "api" && selected && !infras.some(item => item.id === selected.infra_id)
-    ? selected.infra_id : null;
-  const linkedAppId = selected?.id;
+  const [linkedInfras, setLinkedInfras] = useState<{
+    appId: string | null; apps: AppSpace[]; list: InfraSpace[]; ids: string;
+    entries: Record<string, { data?: InfraSpace; error?: string }>;
+  } | null>(null);
+  // Lists deduplicate shared hidden foundations; each detail visit refreshes readiness.
+  const missingInfraIds = JSON.stringify(mode !== "api" || creating ? [] : appId
+    ? selected?.id === appId && !infras.some(item => item.id === selected.infra_id) ? [selected.infra_id] : []
+    : [...new Set(apps.map(app => app.infra_id).filter(id => !infras.some(item => item.id === id)))].sort());
   useEffect(() => {
-    if (!missingInfraId || !linkedAppId) return;
+    if (mode !== "api") return;
+    const ids: string[] = JSON.parse(missingInfraIds);
+    if (!ids.length) return;
     const controller = new AbortController();
-    api.infra(missingInfraId, controller.signal).then(data => {
-      if (data.id !== missingInfraId) throw new Error("배포 기반 응답이 요청한 인프라와 다릅니다.");
-      if (!controller.signal.aborted) setLinkedInfra({ id: missingInfraId, appId: linkedAppId, list: infras, data });
-    }).catch(error => {
-      if (!controller.signal.aborted) setLinkedInfra({ id: missingInfraId, appId: linkedAppId, list: infras, error: error instanceof Error ? error.message : "배포 기반을 불러오지 못했습니다." });
-    });
+    function receive(id: string, entry: { data?: InfraSpace; error?: string }) {
+      if (controller.signal.aborted) return;
+      setLinkedInfras(current => ({
+        appId, apps, list: infras, ids: missingInfraIds,
+        entries: { ...(current?.appId === appId && current.apps === apps && current.list === infras && current.ids === missingInfraIds ? current.entries : {}), [id]: entry },
+      }));
+    }
+    for (const id of ids) {
+      api.infra(id, controller.signal).then(data => {
+        if (data.id !== id) throw new Error("배포 기반 응답이 요청한 인프라와 다릅니다.");
+        receive(id, { data });
+      }).catch(error => receive(id, { error: error instanceof Error ? error.message : "배포 기반을 불러오지 못했습니다." }));
+    }
     return () => controller.abort();
-  }, [missingInfraId, linkedAppId, infras]);
-  const currentLinkedInfra = linkedInfra?.id === missingInfraId && linkedInfra?.appId === linkedAppId && linkedInfra?.list === infras ? linkedInfra : null;
-  const infra = infras.find((i) => i.id === selected?.infra_id) ?? currentLinkedInfra?.data;
+  }, [mode, appId, apps, infras, missingInfraIds]);
+  const currentLinkedInfras = mode === "api" && linkedInfras?.appId === appId && linkedInfras.apps === apps
+    && linkedInfras.list === infras && linkedInfras.ids === missingInfraIds ? linkedInfras.entries : undefined;
+  const currentLinkedInfra = selected?.id === appId ? currentLinkedInfras?.[selected.infra_id] : undefined;
+  const infra = selected?.id === appId ? infras.find(item => item.id === selected.infra_id) ?? currentLinkedInfra?.data : undefined;
   const linkedInfraError = currentLinkedInfra?.error;
+  const appProvider = getInfraProvider(infra?.provider);
+  const formInfra = mode === "api" && form.sandbox === true ? undefined : infras.find(item => item.id === form.infra_id);
   const currentProgress = event?.progress ?? (mode === "demo" && deployment && demoStep(deployment) >= 0 ? Math.round(demoStep(deployment)/5*100) : undefined);
   const pendingTeardown = !!selected && teardownPending.includes(selected.id);
   const teardownStatus = selected?.teardown_status;
@@ -558,7 +582,7 @@ export default function Applications({
     setBusy(false);
     setDiscarding(false);
     setSelected(null);
-    setLinkedInfra(null);
+    setLinkedInfras(null);
     setCreating(false);
     setStreamId("");
     setError("");
@@ -850,16 +874,19 @@ export default function Applications({
   }
   return (
     <>
-      <div className={"page-heading" + (appId || selected || creating ? " app-detail-heading" : "")}>
+      <div className={"page-heading" + (appId || selected || creating ? " app-detail-heading" : "")} data-provider={selected ? appProvider.key : undefined}>
         <div className="app-heading-copy">
           {(appId || selected || creating) && <button className="app-back-link" disabled={discarding} onClick={() => backToList()}>
             <span aria-hidden="true">← </span>앱 목록으로
           </button>}
           <div className="eyebrow">APPLICATION</div>
+          <div className="app-heading-identity">
           <h1>
             {selected ? selected.name : appId ? "애플리케이션 상세" : creating ? "애플리케이션 생성" : "애플리케이션"}
             {deployedCompute && ` (${deployedCompute})`}
           </h1>
+          {selected && <AppProviderLabel value={infra?.provider} />}
+          </div>
           <p>
             {selected
               ? "기반·분석 근거·배포 상태를 확인하세요."
@@ -969,7 +996,7 @@ export default function Applications({
             <option value="">기반 선택</option>
             {infras.map((i) => (
               <option key={i.id} value={i.id}>
-                {i.name}
+                {getInfraProvider(i.provider).label} · {i.name}
               </option>
             ))}
             {mode === "demo" &&
@@ -985,6 +1012,9 @@ export default function Applications({
             샌드박스 배포
           </label>}
           </div>
+          {formInfra && <div className="app-selected-infra" data-provider={getInfraProvider(formInfra.provider).key}>
+            <AppProviderLabel value={formInfra.provider} /><span>{formInfra.name}</span>
+          </div>}
           {mode === "api" ? <p id="sandbox-description" className="muted">
             샌드박스를 선택하거나 Infra Space를 선택하지 않으면 서버의 기본 인프라를 사용합니다.
           </p> : <p className="muted">
@@ -1039,12 +1069,12 @@ export default function Applications({
           <div id="application-panel" role="tabpanel" aria-labelledby={`application-tab-${tab}`} tabIndex={0}>
             {tab === "overview" ? (
               <>
-                <section className="panel deployment-app-summary" aria-label="앱 정보">
+                <section className="panel deployment-app-summary" data-provider={appProvider.key} aria-label="앱 정보">
                   <div><h2>앱 정보</h2><span className="badge">{mode === "demo" ? "데모 앱" : "서버 등록 앱"}</span></div>
                   <dl>
                     <div><dt>저장소</dt><dd className="break-word">{selected.repo_url}</dd></div>
                     <div><dt>브랜치</dt><dd>{selected.branch}</dd></div>
-                    <div><dt>연결한 기반</dt><dd>{infra?.name ?? selected.infra_id}</dd></div>
+                    <div><dt>연결한 기반</dt><dd className="app-connected-infra"><AppProviderLabel value={infra?.provider} /><span>{infra?.name ?? selected.infra_id}</span></dd></div>
                   </dl>
                 </section>
                 <nav className="deployment-stepper" aria-label="배포 단계">
@@ -1367,15 +1397,17 @@ export default function Applications({
               {apps.map((app) => {
                 const cardId = `app-card-${encodeURIComponent(app.id)}`;
                 const repository = registered.find((repo) => repo.repo_url === app.repo_url && repo.branch === app.branch);
-                const linkedInfra = infras.find((item) => item.id === app.infra_id);
+                const linkedInfra = infras.find(item => item.id === app.infra_id) ?? currentLinkedInfras?.[app.infra_id]?.data;
+                const provider = getInfraProvider(linkedInfra?.provider);
                 const integrationName = mode === "api" && repositoryLoading ? "통합 정보 불러오는 중…"
                   : mode === "api" && repositoryError ? "통합 정보 조회 실패"
                   : repository ? repository.name.trim() || "통합 이름 미제공" : "통합 등록 정보 없음";
                 return (
-                  <button className="app-space-card" key={app.id} aria-label={`${app.name} 상세 보기`} aria-describedby={`${cardId}-integration ${cardId}-infra ${cardId}-branch`} onClick={() => onNavigate(app.id)}>
+                  <button className="app-space-card" data-provider={provider.key} key={app.id} aria-label={`${app.name} 상세 보기`} aria-describedby={`${cardId}-provider ${cardId}-integration ${cardId}-infra ${cardId}-branch`} onClick={() => onNavigate(app.id)}>
                     <span className="app-card-field">
                       <span className="app-card-label">애플리케이션 이름</span>
                       <strong className="app-card-name">{app.name}</strong>
+                      <span id={`${cardId}-provider`}><AppProviderLabel value={linkedInfra?.provider} /></span>
                     </span>
                     <span className="app-card-field" id={`${cardId}-integration`}>
                       <span className="app-card-label">연결된 통합</span>

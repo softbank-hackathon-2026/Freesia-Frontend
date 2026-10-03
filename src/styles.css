@@ -1305,3 +1305,18 @@ button.app-delete-outline:hover:not(:disabled) { background: var(--danger-paper)
   .deployment-management-dialog { padding: 20px; }
   .deployment-management-dialog .form-actions button { flex: 1 1 auto; }
 }
+
+/* Application environments come from their linked foundation, never their names. */
+.app-space-card[data-provider="aws"], .app-space-card[data-provider="gcp"], .app-space-card[data-provider="azure"],
+.deployment-app-summary[data-provider="aws"], .deployment-app-summary[data-provider="gcp"], .deployment-app-summary[data-provider="azure"],
+.app-selected-infra[data-provider="aws"], .app-selected-infra[data-provider="gcp"], .app-selected-infra[data-provider="azure"] { background: #fff7ed; }
+.app-space-card[data-provider="onprem"], .deployment-app-summary[data-provider="onprem"], .app-selected-infra[data-provider="onprem"] { background: #f3f4f6; }
+.app-space-card[data-provider="unknown"], .deployment-app-summary[data-provider="unknown"], .app-selected-infra[data-provider="unknown"] { background: var(--paper); }
+.app-heading-identity { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.app-provider-label { display: inline-flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 12px; font-weight: 600; }
+.app-heading-identity .app-provider-label[data-provider="aws"], .app-heading-identity .app-provider-label[data-provider="gcp"], .app-heading-identity .app-provider-label[data-provider="azure"] { background: #fff7ed; }
+.app-heading-identity .app-provider-label[data-provider="onprem"] { background: #f3f4f6; }
+.app-provider-label img { width: 28px; height: 28px; object-fit: contain; flex: 0 0 28px; }
+.app-selected-infra { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; padding: 10px 12px; border-radius: 6px; }
+.app-selected-infra > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.app-connected-infra { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
