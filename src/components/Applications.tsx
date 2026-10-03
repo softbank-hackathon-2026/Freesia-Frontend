@@ -49,7 +49,7 @@ const computeIcons: Record<string, string> = {
   lambda: "/compute/lambda.png",
   ec2: "/compute/ec2.png",
 };
-const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "배포 결과"] as const;
+const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "전체 구성"] as const;
 type DeploymentStage = 0 | 1 | 2 | 3 | 4;
 function AppProviderLabel({ value }: { value: string | null | undefined }) {
   const provider = getInfraProvider(value);
@@ -236,8 +236,7 @@ export default function Applications({
     } catch { /* Invalid reported URLs are not actionable. */ }
   }
   const monitoringKey = `${mode}:${selected?.id ?? "none"}:${deployment?.id ?? selected?.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected?.teardown_status ?? "none"}:${selected?.teardown_requested_at ?? ""}:${selected?.teardown_finished_at ?? ""}`;
-  const showDeploymentObservation = viewStep === 4 && matchingDeployment && deployment?.status === "success" && !teardownComplete && !teardownUnconfirmed;
-  const resourceDeployment = mode === "api" && (viewStep === 3 || viewStep === 4) && deployment?.app_space_id === selected?.id ? deployment : null;
+  const resourceDeployment = mode === "api" && viewStep === 4 && matchingDeployment ? deployment : null;
   const reviewPlan = plan ?? (matchingDeployment ? preview : null);
   const configurationReady = analysis?.status === "done" && (mode === "demo"
     ? reviewPlan?.status === "template_ready" && reviewPlan.compute === chosen
@@ -258,7 +257,7 @@ export default function Applications({
     heading.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   }, [viewStep]);
   function showDeploymentStage(value: Deployment) {
-    setDeploymentFlow({ step: ["success", "failed"].includes(value.status) ? 4 : 3, deploymentId: value.id });
+    setDeploymentFlow({ step: value.status === "success" ? 4 : 3, deploymentId: value.id });
   }
   const teardownAppId = selected?.id;
   useEffect(() => {
@@ -311,7 +310,7 @@ export default function Applications({
               : current,
           );
           if (data.status === "success" || data.status === "failed") {
-            setDeploymentFlow(current => current.deploymentId === streamId ? { ...current, step: 4 } : current);
+            setDeploymentFlow(current => current.deploymentId === streamId ? { ...current, step: data.status === "success" ? 4 : 3 } : current);
             setStreamId("");
             void api.deployment(streamId).then(value => {
               if (token === session.current) setDeployment(current => current?.id === streamId ? value : current);
@@ -339,7 +338,7 @@ export default function Applications({
           at: new Date().toISOString(),
         });
         if (["success", "failed"].includes(current.status)) {
-          setDeploymentFlow(flow => flow.deploymentId === current.id ? { ...flow, step: 4 } : flow);
+          setDeploymentFlow(flow => flow.deploymentId === current.id ? { ...flow, step: current.status === "success" ? 4 : 3 } : flow);
           clearInterval(timer);
           setStreamId("");
         }
@@ -668,6 +667,7 @@ export default function Applications({
         if (fresh.latest_deployment_id) {
           const value = await api.deployment(fresh.latest_deployment_id, controller.signal);
           if (token !== session.current || controller.signal.aborted) return;
+          if (value.app_space_id !== id || value.id !== fresh.latest_deployment_id) throw new Error("배포 응답이 현재 앱 또는 요청한 배포와 다릅니다.");
           setDeployment(value);
           showDeploymentStage(value);
           setStreamId(value.id);
@@ -903,6 +903,12 @@ export default function Applications({
         </div>
         {selected && (
           <div className="heading-actions app-detail-actions">
+            {mode === "api" && deployment?.app_space_id === selected.id && deployment.status === "success" && deployedAppUrl && !teardownComplete && !teardownUnconfirmed && <div className="title-with-help app-access-actions">
+              <a className="deployed-app-link" href={deployedAppUrl} target="_blank" rel="noopener noreferrer">배포된 애플리케이션 접속</a>
+              <ContextHelp id="app-access-context-help" label="앱 접속 안내">
+                서버가 보고한 주소입니다. URL 접속·앱 정상 여부는 별도로 확인하세요. 플랫폼 /health는 고객 앱 상태가 아닙니다.
+              </ContextHelp>
+            </div>}
             {hasDeploymentHistory && <button className="primary" disabled={discarding} onClick={openManagement}>배포 관리</button>}
             {selected && mode === "api" && deployment && <button className="secondary"
               disabled={(teardownStatus === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || busy || discarding || !!streamId || !["success", "failed"].includes(deployment.status)}
@@ -1098,16 +1104,8 @@ export default function Applications({
                   <div className="section-heading">
                     <div className="title-with-help">
                       <h2 id="deployment-step-heading" ref={stageHeading} tabIndex={-1}>{deploymentStages[viewStep]}</h2>
-                      {mode === "api" && (viewStep === 3 || viewStep === 4) && matchingDeployment && <ContextHelp id="app-access-context-help" label="앱 접속 안내">
-                        서버가 보고한 주소입니다. URL 접속·앱 정상 여부는 별도로 확인하세요. 플랫폼 /health는 고객 앱 상태가 아닙니다.
-                      </ContextHelp>}
                     </div>
                     <div className="deployment-result-actions">
-                      {viewStep === 4 && matchingDeployment && mode === "api" && deployment?.status === "success" && deployedAppUrl && !teardownComplete && !teardownUnconfirmed && (
-                        <a className="deployed-app-link" href={deployedAppUrl} target="_blank" rel="noopener noreferrer">
-                          배포된 애플리케이션 접속
-                        </a>
-                      )}
                       <span className="badge">{viewStep + 1} / 5</span>
                     </div>
                   </div>
@@ -1306,13 +1304,11 @@ export default function Applications({
                     {mode === "demo" && <label className="failure-option"><input type="checkbox" checked={failCI} onChange={e=>setFailCI(e.target.checked)} disabled={!!streamId}/> CI 실패 시뮬레이션 · DEMO</label>}
                     <button className="primary" disabled={!reviewed || !canDeploy || teardownUnconfirmed || !!streamId || busy || (mode === "api" ? !planId : preview?.status !== "template_ready")} onClick={deploy}>{mode === "demo" && deployment?.status === "failed" ? "실패한 데모 파이프라인 재시도" : `선택한 구성안으로 배포${mode === "demo" ? " · 데모" : ""}`}</button>
                     </>}
-                    {(viewStep === 3 || viewStep === 4) && matchingDeployment && deployment && <>
+                    {viewStep === 3 && matchingDeployment && deployment && <>
                     <div className="deployment-progress-body">
                       <h3>배포 상태 · {deployment.status}</h3>
-                      <p role={viewStep === 4 ? "status" : undefined}>
-                        {event?.message?.trim() || (viewStep === 4
-                          ? deployment.status === "success" ? "배포가 완료되었습니다." : "배포에 실패했습니다. 실패 이유를 확인하고 명시적으로 다시 시도하세요."
-                          : "현재 배포 상태를 표시합니다.")}
+                      <p role="status">
+                        {event?.message?.trim() || (deployment.status === "success" ? "배포가 완료되었습니다." : deployment.status === "failed" ? "배포에 실패했습니다. 실패 이유를 확인하고 명시적으로 다시 시도하세요." : "현재 배포 상태를 표시합니다.")}
                       </p>
                       {reconnecting && <p role="status">배포 연결 복구 중… {streamError} <button onClick={()=>{setStreamError("");setStreamRetry(n=>n+1);}}>배포 상태 다시 연결</button></p>}
                       <ol className="pipeline-steps" aria-label="배포 세부 단계" tabIndex={0}>
@@ -1324,7 +1320,7 @@ export default function Applications({
                       </ol>
                       {mode === "demo" && <p className="notice">로컬 샘플 진행입니다. 외부 GitHub·AWS 작업은 실행하지 않습니다.</p>}
                       {deployment.demo_pipeline && deployment.status === "failed" && <button onClick={()=>{setPlan(deployment.demo_pipeline!.plan);setChosen(deployment.compute);setReviewed(false);setFailCI(false);setViewStep(2);}}>실패 내용 확인 · 재시도 준비</button>}
-                      {mode === "api" && deployment.status === "failed" && configurationReady && <button onClick={() => { setReviewed(false); setViewStep(2); }}>설정값 확인 · 배포 재시도</button>}
+                      {mode === "api" && deployment.status === "failed" && <button disabled={busy || discarding || !!streamId || teardownUnconfirmed} onClick={() => { setReviewed(false); setViewStep(configurationReady ? 2 : 0); }}>{configurationReady ? "설정값 확인 · 배포 재시도" : "구성 다시 확인 · 재시도 준비"}</button>}
                       <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
                       <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
                       <p>실행 환경: {deployment.compute}</p>
@@ -1343,17 +1339,10 @@ export default function Applications({
                       )}
                     </div>
                     </>}
+                    {resourceDeployment && <DeploymentResources key={resourceDeployment.id} id={resourceDeployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
+                    {viewStep === 4 && matchingDeployment && mode === "demo" && <p className="muted">데모에서는 실제 배포 자원 구성을 조회하지 않습니다.</p>}
                   </div>
                 </section>
-                {showDeploymentObservation && <section className="deployment-observation" aria-label="배포 후 운영 확인">
-                  <div className="deployment-observation-heading">
-                    <h2>운영 확인</h2>
-                    <p className="muted">로그와 지표를 각각 조회합니다. 첫 데이터가 도착하기 전에는 수집 대기로 표시됩니다.</p>
-                  </div>
-                  <ApplicationMetrics key={"metrics:" + monitoringKey} id={selected.id} mode={mode}/>
-                  <ApplicationLogs key={"logs:" + monitoringKey} id={selected.id} mode={mode} appName={selected.name} previewLines={15}/>
-                </section>}
-                {resourceDeployment && <DeploymentResources key={resourceDeployment.id} id={resourceDeployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
                 </div>
 
 

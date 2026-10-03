@@ -890,6 +890,8 @@ try {
   assert.equal(await singleReview.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).isDisabled(),true);
   await singleReview.getByLabel("설정값을 확인했습니다",{exact:true}).check();
   await singleReview.getByRole("button",{name:"선택한 구성안으로 배포",exact:true}).click();
+  await readinessPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(readinessPage, "배포 진행");
   await readinessPage.getByText("기존 배포 완료",{exact:true}).waitFor();
   assert.equal(await readinessPage.getByRole("link",{name:"배포된 애플리케이션 접속",exact:true}).count(),1,"successful API deployment exposes the access link");
   assert.match(await readinessPage.getByRole("alert").innerText(),/이미 배포가 진행 중/);
@@ -929,6 +931,10 @@ try {
   for (const [status, reportedUrl, teardown] of [["success", "http://deployed.freesia.test/", undefined], ["failed", "https://deployed.freesia.test/", undefined], ["building", "https://deployed.freesia.test/", undefined], ["success", null, undefined], ["success", "javascript:alert(1)", undefined], ["success", "not a URL", undefined], ["success", "https://deployed.freesia.test/", "requested"], ["success", "https://deployed.freesia.test/", "success"]]) {
     accessStatus = status; accessUrl = reportedUrl; accessTeardown = teardown;
     await readinessPage.reload();
+    if (status === "success") {
+      await readinessPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+      await reviewDeploymentStep(readinessPage, "배포 진행");
+    }
     await readinessPage.getByRole("heading", { name: new RegExp(`^배포 상태.*${status}$`) }).waitFor();
     const expected = status === "success" && reportedUrl === "http://deployed.freesia.test/" ? 1 : 0;
     assert.equal(await accessLink.count(), expected, `access link respects status=${status}, url=${reportedUrl}, teardown=${teardown}`);
@@ -1194,6 +1200,8 @@ try {
     await appCard.focus();
     await appCard.press("Enter");
     await page.getByRole("heading", { name: "demo-web", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+    await reviewDeploymentStep(page, "배포 진행");
     await page.getByRole("heading", { name: /^배포 상태.*success$/ }).waitFor();
     assert.equal(await page.getByRole("link", { name: "배포된 애플리케이션 접속", exact: true }).count(), 0, "demo deployment never exposes an active deployment access link");
     await page.screenshot({path:`artifacts/day3-pipeline-result-${name}.png`,fullPage:true});
@@ -1458,6 +1466,8 @@ try {
   serverStatus="building";
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button",{name:/api-web/}).click();
+  await apiPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(apiPage, "배포 진행");
   await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   assert.equal(await apiPage.locator(".pipeline-steps li").count(),6);
   assert.equal(await apiPage.locator(".pipeline-steps .complete").count(),6);
@@ -1475,12 +1485,17 @@ try {
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,1,"existing active deployment resumes SSE");
   await apiPage.getByRole("button",{name:"앱 목록으로",exact:true}).click();
   await apiPage.getByRole("button",{name:/api-web/}).click();
+  await apiPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(apiPage, "배포 진행");
   await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,2,"terminal deployment receives current snapshot after reentry");
+  await reviewDeploymentStep(apiPage, "전체 구성");
   await apiPage.locator("details").filter({hasText:"aws_ecs_service.web"}).locator("summary").click();
   await apiPage.getByText("aws_ecs_service.web",{exact:true}).waitFor();
   await apiPage.reload();
+  await apiPage.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(apiPage, "배포 진행");
   await apiPage.getByRole("heading",{name:/^배포 상태.*success$/}).waitFor();
   await apiPage.waitForFunction(()=>document.querySelectorAll(".pipeline-steps .complete").length===6);
   assert.equal(calls.filter(c=>c.path.endsWith("/events")).length,3,"refresh restores app and terminal snapshot");
@@ -2453,6 +2468,8 @@ try {
   await legacyProgress.evaluate(({oldApp,oldDeployment,state})=>{state.apps=[oldApp];state.deployments=[oldDeployment];localStorage.setItem("freesia.demo.v1",JSON.stringify(state));},{oldApp,oldDeployment,state:initialDemo()});
   await legacyProgress.goto(url+"/?source=demo&app=demo-old-app");
   await legacyProgress.getByRole("heading",{name:"이전 배포 (Lambda)",exact:true}).waitFor();
+  await legacyProgress.getByRole("heading", { name: "전체 구성", exact: true }).waitFor();
+  await reviewDeploymentStep(legacyProgress, "배포 진행");
   await legacyProgress.getByText("현재 진행률 확인 중…",{exact:true}).waitFor();
   assert.equal(await legacyProgress.getByLabel("배포 진행률",{exact:true}).getAttribute("value"),null);
   await legacyProgress.close();
@@ -2520,6 +2537,7 @@ try {
   await plansPage.getByText("컨테이너 빌드 실패 이유",{exact:true}).waitFor();
   assert.deepEqual(deployBodies,[{compute:"lambda",plan_id:"plan-one"}]);
   assert.equal(await plansPage.locator(".pipeline-steps li").nth(2).locator("span").innerText(),"실패");
+  await reviewDeploymentStep(plansPage, "전체 구성");
   await plansPage.getByText(/아직 보고된 자원이 없습니다/).waitFor();
   resourceMode="error";
   await plansPage.getByRole("button",{name:"자원 상태 다시 조회",exact:true}).click();

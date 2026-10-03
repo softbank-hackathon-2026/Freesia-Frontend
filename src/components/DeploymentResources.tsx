@@ -47,9 +47,9 @@ export default function DeploymentResources({ id, refresh, appName }: { id: stri
   const deleted = resources?.filter(resource => resource.state === 'deleted').length ?? 0;
   const remaining = (resources?.length ?? 0) - deleted;
 
-  return <section className="panel resource-tree" aria-label="배포 자원 상태">
-    <div className="section-heading"><h2>전체 구성</h2><button disabled={loading} onClick={() => setRetry(n => n + 1)}>자원 상태 다시 조회</button></div>
-    <div className="panel-body">
+  return <section className="resource-tree" aria-label="배포 자원 상태">
+    <div className="heading-actions"><button disabled={loading} onClick={() => setRetry(n => n + 1)}>자원 상태 다시 조회</button></div>
+    <div>
       <p className="muted">최근 배포에서 보고된 자원입니다. 새 분석·구성안의 예상 자원은 포함하지 않습니다.</p>
       {loading && <p role="status">{resources?.length ? "상태 갱신 중… 이전 조회 결과를 표시합니다." : "자원 상태 조회 중…"}</p>}
       {error && <p role="alert">{error}</p>}
