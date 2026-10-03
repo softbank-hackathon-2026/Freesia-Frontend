@@ -40,6 +40,8 @@ const appTabs = [
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const api = createApi(apiBase);
 const computeLabels: Record<string, string> = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2" };
+const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "배포 결과"] as const;
+type DeploymentStage = 0 | 1 | 2 | 3 | 4;
 export default function Applications({
   mode, appId, tab, onNavigate,
   apps,
@@ -85,6 +87,14 @@ export default function Applications({
   const request = useRef<AbortController | null>(null);
   const restoredApp = useRef<string | null>(null);
   const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
+  const workflowRequest = useRef<AbortController | null>(null);
+  const stageHeading = useRef<HTMLHeadingElement>(null);
+  const previousStage = useRef<DeploymentStage>(0);
+  const [deploymentFlow, setDeploymentFlow] = useState<{ step: DeploymentStage; deploymentId: string | null }>({ step: 0, deploymentId: null });
+  const viewStep = deploymentFlow.step;
+  function setViewStep(step: DeploymentStage) {
+    setDeploymentFlow(current => ({ ...current, step }));
+  }
   const teardownRequest = useRef<string | null>(null);
   const teardownBaseline = useRef(new Map<string, string | null | undefined>());
   const demoResumeStatus = useRef<Deployment["status"]>("pending");
@@ -132,6 +142,7 @@ export default function Applications({
   const [failCI, setFailCI] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [analysisPending, setAnalysisPending] = useState(false);
+  const [analysisReadError, setAnalysisReadError] = useState("");
   const [reconnecting, setReconnecting] = useState(false);
   const [streamError, setStreamError] = useState("");
   const [streamRetry, setStreamRetry] = useState(0);
@@ -160,6 +171,29 @@ export default function Applications({
     || (!!deployment && !["success", "failed"].includes(deployment.status))
     || (mode === "demo" ? storageBlocked || appHistory.some(entry => !["success", "failed"].includes(entry.status))
       : !!selected?.latest_deployment_id && !deployment);
+  const matchingDeployment = !!deployment && deployment.app_space_id === selected?.id && deployment.id === deploymentFlow.deploymentId;
+  const reviewPlan = plan ?? (matchingDeployment ? preview : null);
+  const configurationReady = analysis?.status === "done" && (mode === "demo"
+    ? reviewPlan?.status === "template_ready" && reviewPlan.compute === chosen
+    : plans?.status === "done" && plans.compute === chosen && plans.plans.length > 0);
+  const analysisRunning = analysis?.status === "pending" || analysis?.status === "running";
+  const failedAnalysisMessage = analysis?.status === "failed"
+    ? analysis.mascot_message?.trim() ? analysis.mascot_message : "분석에 실패했습니다. 코드 분석을 다시 시작하세요."
+    : "";
+  const deploymentFinished = matchingDeployment && !!deployment && ["success", "failed"].includes(deployment.status);
+  const availableStages = [true, analysis?.status === "done", !!configurationReady, matchingDeployment, deploymentFinished];
+  const completedStages = [analysis?.status === "done", !!configurationReady, matchingDeployment, deploymentFinished, deploymentFinished];
+  useEffect(() => {
+    if (previousStage.current === viewStep) return;
+    previousStage.current = viewStep;
+    const heading = stageHeading.current;
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [viewStep]);
+  function showDeploymentStage(value: Deployment) {
+    setDeploymentFlow({ step: ["success", "failed"].includes(value.status) ? 4 : 3, deploymentId: value.id });
+  }
   const teardownAppId = selected?.id;
   useEffect(() => {
     if (mode !== "api" || !teardownAppId || !teardownUnconfirmed || (busy && pendingTeardown)) return;
@@ -211,6 +245,7 @@ export default function Applications({
               : current,
           );
           if (data.status === "success" || data.status === "failed") {
+            setDeploymentFlow(current => current.deploymentId === streamId ? { ...current, step: 4 } : current);
             setStreamId("");
             void api.deployment(streamId).then(value => {
               if (token === session.current) setDeployment(current => current?.id === streamId ? value : current);
@@ -238,6 +273,7 @@ export default function Applications({
           at: new Date().toISOString(),
         });
         if (["success", "failed"].includes(current.status)) {
+          setDeploymentFlow(flow => flow.deploymentId === current.id ? { ...flow, step: 4 } : flow);
           clearInterval(timer);
           setStreamId("");
         }
@@ -277,6 +313,7 @@ export default function Applications({
           : current,
       );
       if (index === steps.length) {
+        setDeploymentFlow(current => current.deploymentId === streamId ? { ...current, step: 4 } : current);
         clearInterval(timer);
         setStreamId("");
       }
@@ -371,6 +408,7 @@ export default function Applications({
       setSelected({ ...selected, latest_deployment_id: result.id });
       setPlan(reusablePlan!); setChosen(result.compute); setReviewed(false); setFailCI(false);
       setError(""); setPlanError(""); setDeployment(result); setEvent(null); setStreamId(result.id);
+      showDeploymentStage(result);
       demoResumeStatus.current = result.status;
       redeployDialog.current?.close();
     } catch (e) {
@@ -382,6 +420,11 @@ export default function Applications({
     discardDialog.current?.close();
     request.current?.abort();
     discardRequest.current?.abort();
+    workflowRequest.current = null;
+    setAnalysis(null);
+    setAnalysisPending(false);
+    setAnalysisReadError("");
+    setDeploymentFlow({ step: 0, deploymentId: null });
     session.current++;
     setBusy(false);
     setDiscarding(false);
@@ -445,23 +488,28 @@ export default function Applications({
         setChosen(saved.compute);
       }
       demoResumeStatus.current = saved?.status ?? "pending";
-      if (saved && !["success", "failed"].includes(saved.status))
-        setStreamId(saved.id);
+      if (saved) {
+        showDeploymentStage(saved);
+        if (!["success", "failed"].includes(saved.status)) setStreamId(saved.id);
+      }
     }
     if (mode === "demo" && !app) setError("애플리케이션을 찾을 수 없습니다.");
     if (mode === "api") {
       const controller = new AbortController();
       request.current = controller;
       let appLoaded = false;
+      let preferDeployment = false;
       try {
         const fresh = await api.app(id, controller.signal);
         if (token !== session.current || controller.signal.aborted) return;
         appLoaded = true;
+        preferDeployment = !!fresh.latest_deployment_id;
         setSelected(fresh);
         if (fresh.latest_deployment_id) {
           const value = await api.deployment(fresh.latest_deployment_id, controller.signal);
           if (token !== session.current || controller.signal.aborted) return;
           setDeployment(value);
+          showDeploymentStage(value);
           setStreamId(value.id);
         }
       } catch (e) {
@@ -472,6 +520,9 @@ export default function Applications({
       } finally {
         if (token === session.current && !controller.signal.aborted) setBusy(false);
       }
+      // Analysis errors are isolated from restoring deployment, SSE and teardown state.
+      if (appLoaded && token === session.current && !controller.signal.aborted)
+        void readAnalysis(id, preferDeployment);
     }
   }
   useEffect(() => {
@@ -484,34 +535,76 @@ export default function Applications({
     // List refreshes must not restart analysis, SSE or teardown guards.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appId]);
+  async function waitForAnalysis(id: string, controller: AbortController, token: number, existing: boolean, preserveDeployment: boolean) {
+    workflowRequest.current = controller;
+    setBusy(true); setAnalysisPending(true); setAnalysisReadError("");
+    const current = () => token === session.current && !controller.signal.aborted;
+    try {
+      const onUpdate = (value: Analysis) => { if (current()) setAnalysis(value); };
+      let result: Analysis;
+      try {
+        result = mode === "demo" ? sampleAnalysis : await (existing ? api.analysisUntilDone : api.analyzeUntilDone)(id, { signal: controller.signal, onUpdate });
+      } catch (e) {
+        if (!current()) return;
+        if (!(e instanceof ApiError) || e.code !== "poll_timeout") throw e;
+        // A polling deadline stops this client wait; it does not cancel the server analysis.
+        result = await api.analysis(id, AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]));
+      }
+      if (!current()) return;
+      setAnalysis(result);
+      if (result.status === "pending" || result.status === "running") {
+        setAnalysisReadError("분석 대기 시간이 지나 자동 확인을 중단했습니다. 서버 분석은 아직 진행 중입니다. 분석 상태 다시 확인으로 기존 결과를 조회하세요.");
+      } else if (!preserveDeployment) {
+        setViewStep(result.status === "done" ? 1 : 0);
+      }
+    } catch (e) {
+      if (!current()) return;
+      if (existing && e instanceof ApiError && e.status === 404) {
+        setAnalysis(null);
+      } else {
+        setAnalysisReadError(e instanceof Error && e.name === "TimeoutError"
+          ? "분석 상태 조회 시간이 초과되었습니다. 분석 상태 다시 확인으로 기존 결과를 조회하세요."
+          : e instanceof Error ? `분석 상태를 확인하지 못했습니다. ${e.message}` : "분석 상태를 확인하지 못했습니다. 다시 조회하세요.");
+      }
+    } finally {
+      if (workflowRequest.current === controller) workflowRequest.current = null;
+      if (current()) { setBusy(false); setAnalysisPending(false); }
+    }
+  }
+  async function readAnalysis(id: string, preserveDeployment: boolean) {
+    if (workflowRequest.current) return;
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    await waitForAnalysis(id, controller, session.current, true, preserveDeployment);
+  }
+  function refreshAnalysis() {
+    if (!selected || busy || discarding || workflowRequest.current) return;
+    void readAnalysis(selected.id, deploymentFlow.deploymentId !== null);
+  }
   async function analyze() {
-    if (!selected || busy || discarding || !!streamId || teardownUnconfirmed) return;
+    if (!selected || busy || analysisRunning || workflowRequest.current || discarding || !!streamId || teardownUnconfirmed) return;
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
     const token = session.current;
-    setBusy(true); setAnalysisPending(true); setError("");
+    setDeploymentFlow({ step: 0, deploymentId: null });
+    setError("");
     setPlan(null); setPlans(null); setPlanId(""); setPlanError(""); setReviewed(false); setChosen(""); setAnalysis(null);
-    try {
-      const result = mode === "demo" ? sampleAnalysis : await api.analyzeUntilDone(selected.id, {signal: controller.signal});
-      if (token !== session.current || controller.signal.aborted) return;
-      if(result.status === "failed") throw new Error("분석에 실패했습니다. 코드 분석을 다시 시작하세요.");
-      setAnalysis(result);
-    } catch (e) {
-      if (token === session.current && !controller.signal.aborted)
-        setError(e instanceof Error ? e.message : "분석 실패");
-    } finally {
-      if (token === session.current && !controller.signal.aborted) { setBusy(false); setAnalysisPending(false); }
-    }
+    await waitForAnalysis(selected.id, controller, token, false, false);
   }
   async function preparePlans() {
-    if (!selected || !chosen || !canDeploy) return;
+    if (!selected || analysis?.status !== "done" || !chosen || !canDeploy || busy || workflowRequest.current || discarding || !!streamId || teardownUnconfirmed) return;
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
     const token = session.current;
+    workflowRequest.current = controller;
     setBusy(true); setError(""); setPlanError(""); setPlan(null); setPlans(null); setPlanId(""); setReviewed(false);
     try {
-      if (mode === "demo") setPlan(makeAppPlan(selected, chosen, allowed, demoRegistered));
+      if (mode === "demo") {
+        setPlan(makeAppPlan(selected, chosen, allowed, demoRegistered));
+        setViewStep(2);
+      }
       else {
         const result = await api.plansUntilDone(selected.id, chosen, { signal: controller.signal });
         if (token !== session.current || controller.signal.aborted) return;
@@ -519,26 +612,33 @@ export default function Applications({
         if(result.compute !== chosen) throw new Error("선택한 실행 환경과 구성안 응답이 다릅니다. 다시 조회하세요.");
         setPlans(result);
         if (result.plans.length === 1) setPlanId(result.plans[0].id);
+        if (result.plans.length) setViewStep(2);
+        else setPlanError("제공된 구성안이 없습니다. 다시 조회하거나 분석 결과를 확인하세요.");
       }
     } catch(e) {
       if (token === session.current && !controller.signal.aborted)
         setPlanError(e instanceof ApiError && e.code === "compute_not_ready" ? "선택한 실행 환경은 배포 준비 중입니다. 다른 후보를 선택하거나 서버 지원 상태를 확인하세요." : e instanceof ApiError && (e.status === 404 || e.status === 501) ? "구성안 API 연동 대기입니다. 서버에 템플릿과 설정값 조회 기능이 아직 없습니다." : e instanceof Error ? e.message : "구성안 조회 실패");
-    } finally { if (token === session.current && !controller.signal.aborted) setBusy(false); }
+    } finally {
+      if (workflowRequest.current === controller) workflowRequest.current = null;
+      if (token === session.current && !controller.signal.aborted) setBusy(false);
+    }
   }
   async function deploy() {
-    if (!selected || !reviewed || !canDeploy || teardownUnconfirmed || !allowed.some(c => c.compute === chosen)) return;
+    if (!selected || analysis?.status !== "done" || !reviewed || !canDeploy || teardownUnconfirmed || busy || workflowRequest.current || discarding || !!streamId || !allowed.some(c => c.compute === chosen)) return;
     const realPlan = plans?.compute === chosen && plans.status === "done" ? plans.plans.find(p => p.id === planId) : null;
     if ((mode === "api" && !realPlan) || (mode === "demo" && (!preview || preview.compute !== chosen || preview.status !== "template_ready"))) {
       setError("현재 선택한 환경의 구성안을 조회하고 설정값을 확인하세요."); return;
     }
     const token = ++session.current;
     request.current?.abort(); const controller = new AbortController(); request.current = controller;
+    workflowRequest.current = controller;
     setBusy(true); setError("");
     try {
       const result = mode === "demo" ? startDemoDeployment(selected.id, preview!, failCI) : await api.deploy(selected.id, chosen, realPlan!.id, controller.signal);
       if (token !== session.current || controller.signal.aborted) return;
       onStartDeployment(result); demoResumeStatus.current = result.status;
       setDeployment(result); setEvent(null); setStreamId(result.id);
+      showDeploymentStage(result);
     } catch(e) {
       if(token !== session.current || controller.signal.aborted) return;
       setError(e instanceof ApiError && e.code === "compute_not_ready" ? "선택한 실행 환경은 배포 준비 중입니다. 서버 지원 상태를 확인하세요." : e instanceof Error ? e.message : "배포 요청 실패");
@@ -556,13 +656,17 @@ export default function Applications({
             const existing = await api.deployment(fresh.latest_deployment_id, controller.signal);
             if(token !== session.current || controller.signal.aborted) return;
             setDeployment(existing); setEvent(null); setStreamId(existing.id);
+            showDeploymentStage(existing);
           }
         } catch(refreshError) {
           if(token === session.current && !controller.signal.aborted) setError(`${e.message} · 현재 배포 조회 실패: ${refreshError instanceof Error ? refreshError.message : "다시 앱을 열어 확인하세요."}`);
         }
       }
     }
-    finally { if(token === session.current && !controller.signal.aborted)setBusy(false); }
+    finally {
+      if (workflowRequest.current === controller) workflowRequest.current = null;
+      if(token === session.current && !controller.signal.aborted)setBusy(false);
+    }
   }
   async function teardown() {
     if (mode !== "api" || !selected || (selected.teardown_status === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || !deployment || !["success", "failed"].includes(deployment.status) || busy || streamId || teardownPending.includes(selected.id) || teardownRequest.current === selected.id) return;
@@ -605,6 +709,7 @@ export default function Applications({
             const current = await api.deployment(fresh.latest_deployment_id, controller.signal);
             if (token !== session.current || controller.signal.aborted) return;
             setDeployment(current); setEvent(null); setStreamId(current.id);
+            showDeploymentStage(current);
           }
         } catch { /* Preserve the original conflict if refreshing fails. */ }
       }
@@ -630,6 +735,9 @@ export default function Applications({
         </div>
         {(appId || selected || creating) && (
           <div className="heading-actions">
+            {selected && mode === "api" && deployment && <button className="secondary"
+              disabled={(teardownStatus === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || busy || discarding || !!streamId || !["success", "failed"].includes(deployment.status)}
+              onClick={teardown}>앱 내리기</button>}
             {selected && <button className="secondary"
               disabled={discarding || busy || teardownUnconfirmed || !!deployment && !["success", "failed"].includes(deployment.status) || (mode === "demo" && storageBlocked) || !discardableApps.some(app => app.id === selected.id)}
               title={mode === "demo" ? "배포 이력 없는 DEMO 애플리케이션 삭제" : "배포·내리기 중에는 삭제할 수 없습니다."}
@@ -640,11 +748,30 @@ export default function Applications({
           </div>
         )}
       </div>
+      {selected && mode === "api" && deployment && <section className="panel" aria-label="앱 내리기">
+        <div className="section-heading"><h2>앱 내리기</h2></div>
+        <div className="panel-body">
+        {teardownStatus === "requested" ? <p role="status">앱을 내리는 중입니다. 3초마다 상태를 확인합니다. {selected.teardown_requested_at && `요청 시각: ${selected.teardown_requested_at}`} 화면을 이동해도 접수된 작업은 계속됩니다.</p>
+          : teardownComplete ? <p role="status">내림 완료{selected.teardown_finished_at ? `: ${selected.teardown_finished_at}` : ""} · 이전 앱 주소는 더 이상 사용할 수 없습니다. 다시 배포할 수 있습니다.</p>
+          : teardownStatus === "failed" && !hasNewDeployment ? <p role="alert">내리기 실패: {selected.teardown_reason || "서버에서 실패 이유를 제공하지 않았습니다."} 다시 시도할 수 있습니다.</p>
+          : teardownStatus === undefined && selected.teardown_requested_at === undefined ? <p>내리기 API 연동 대기 · 현재 서버는 내리기 요청 상태를 제공하지 않습니다.</p>
+          : teardownStatus === undefined && selected.teardown_requested_at ? <p role="status">내리기 요청 접수: {selected.teardown_requested_at} · 현재 서버는 완료·실패 상태를 제공하지 않습니다. 확인 전에는 다시 요청할 수 없습니다.</p>
+          : <p>앱 전용 자원을 내리는 요청입니다. 요청 접수는 삭제 완료가 아닙니다. 화면을 이동해도 서버에 접수된 작업은 취소되지 않습니다.</p>}
+        {pendingTeardown && teardownStatus !== "requested" && <p role="status">내리기 요청 중이거나 처리 여부가 확인되지 않았습니다. 서버 상태를 다시 확인하는 동안 내리기·재배포를 잠시 막습니다.</p>}
+        {teardownError && <p role="alert">{teardownError}</p>}
+        </div>
+      </section>}
       {error && (
         <div className="error" role="alert">
           {error}
         </div>
       )}
+      {selected && failedAnalysisMessage && <div className="error" role="alert" style={{ whiteSpace: "pre-wrap" }}>{failedAnalysisMessage}</div>}
+      {selected && analysisReadError && <div className="error" role="alert">
+        {analysisReadError}
+        <button disabled={busy || discarding || analysisPending} onClick={refreshAnalysis}>분석 상태 다시 확인</button>
+      </div>}
+      {selected && analysisPending && viewStep !== 0 && <p className="notice" role="status">코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
       {mode === "api" && !selected && (
         <p className="notice">
           서버에 등록된 Repository와 Infra Space로 앱을 생성합니다. 분석·배포 결과는 서버가 제공하며 실제 실행 여부는 서버 설정과 상태를 확인하세요.
@@ -768,56 +895,44 @@ export default function Applications({
           <div id="application-panel" role="tabpanel" aria-labelledby={`application-tab-${tab}`} tabIndex={0}>
             {tab === "overview" ? (
               <>
-                <section className="panel detail">
-                  <div className="section-heading">
-                    <h2>앱 정보</h2>
-                    <span className="badge">
-                      {mode === "demo" ? "데모 앱" : "서버 등록 앱"}
-                    </span>
-                  </div>
+                <section className="panel deployment-app-summary" aria-label="앱 정보">
+                  <div><h2>앱 정보</h2><span className="badge">{mode === "demo" ? "데모 앱" : "서버 등록 앱"}</span></div>
                   <dl>
-                    <dt>저장소</dt>
-                    <dd className="break-word">{selected.repo_url}</dd>
-                    <dt>브랜치</dt>
-                    <dd>{selected.branch}</dd>
-                    <dt>연결한 기반</dt>
-                    <dd>{infra?.name ?? selected.infra_id}</dd>
+                    <div><dt>저장소</dt><dd className="break-word">{selected.repo_url}</dd></div>
+                    <div><dt>브랜치</dt><dd>{selected.branch}</dd></div>
+                    <div><dt>연결한 기반</dt><dd>{infra?.name ?? selected.infra_id}</dd></div>
                   </dl>
                 </section>
-                {hasDeploymentHistory && <section className="panel detail" aria-label="새 버전 재배포">
+                <nav className="deployment-stepper" aria-label="배포 단계">
+                  <p><span>현재 단계 {viewStep + 1} / 5</span><strong>{deploymentStages[viewStep]}</strong></p>
+                  <ol>
+                    {deploymentStages.map((label, index) => (
+                      <li key={label}>
+                        <button aria-label={label} aria-current={viewStep === index ? "step" : undefined} disabled={!availableStages[index]}
+                          className={completedStages[index] ? "complete" : ""} onClick={() => setViewStep(index as DeploymentStage)}>
+                          <span className="deployment-step-number" aria-hidden="true">{completedStages[index] ? "✓" : index + 1}</span><span>{label}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+                <section className="panel deployment-stage" aria-labelledby="deployment-step-heading">
                   <div className="section-heading">
-                    <h2>새 버전 재배포</h2>
-                    <button className="primary" disabled={redeployBlocked} onClick={openRedeploy}>새 버전 재배포</button>
-                  </div>
-                  <p>이전 성공 설정을 유지하는 재배포입니다. 설정을 바꾸려면 아래의 재분석을 선택하세요.</p>
-                  <p className="muted">{mode === "demo" ? "DEMO · 저장된 설정으로 로컬 배포 과정을 시연합니다." : "연동 대기 · 최신 커밋 확인과 이전 성공 설정 재사용을 서버에서 지원해야 실행할 수 있습니다."}</p>
-                  {redeployBlocked && <p role="status">진행 중인 작업이나 상태 조회가 끝난 뒤 다시 확인하세요. 저장 오류가 있다면 먼저 해결하세요.</p>}
-                </section>}
-                <section className="panel">
-                  <div className="section-heading">
-                    <h2>코드 분석과 배포 선택</h2>
-                    <button
-                      className="primary"
-                      disabled={busy || discarding || !!streamId || teardownUnconfirmed}
-                      onClick={analyze}
-                    >
-                      {busy
-                        ? analysisPending ? "분석 중…" : "요청 중…"
-                        : hasDeploymentHistory
-                          ? "설정 변경 · 재분석"
-                          : analysis ? "다시 분석" : "코드 분석 시작"}
-                    </button>
+                    <h2 id="deployment-step-heading" ref={stageHeading} tabIndex={-1}>{deploymentStages[viewStep]}</h2>
+                    <span className="badge">{viewStep + 1} / 5</span>
                   </div>
                   <div className="panel-body">
-                    <p className="muted">
-                      {mode === "demo"
-                        ? "고정 샘플 분석입니다. 저장소 코드를 읽거나 AI를 호출하지 않습니다."
-                        : "서버가 반환한 요구사항·근거·실행 환경 후보입니다. 추천과 현재 배포 지원 여부를 구분해 확인하세요."}
-                    </p>
-                    {hasDeploymentHistory && <p className="notice">{mode === "demo" ? "재분석은 별도 샘플 구성 선택 과정입니다. 기존 성공 설정이 바뀔 수 있습니다." : "재분석은 AI 분석과 새 구성 선택 과정이며 기존 설정이 바뀔 수 있습니다. 현재 서버에서 새 코드를 반영하려면 이 과정을 거쳐야 합니다."}</p>}
-                    {analysisPending && <p role="status">코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
-                    {analysis ? (
-                      <>
+                    {viewStep === 0 && <>
+                      <div className="deployment-stage-actions">
+                        <p>코드 분석을 시작하면 요구사항과 후보별 이유를 볼 수 있습니다.</p>
+                        <button className="primary" disabled={busy || analysisRunning || discarding || !!streamId || teardownUnconfirmed} onClick={analyze}>
+                          {busy ? analysisPending ? "분석 중…" : "요청 중…" : hasDeploymentHistory ? "설정 변경 · 재분석" : analysis ? "다시 분석" : "코드 분석 시작"}
+                        </button>
+                      </div>
+                      <p className="muted">{mode === "demo" ? "고정 샘플 분석입니다. 저장소 코드를 읽거나 AI를 호출하지 않습니다." : "서버가 반환한 요구사항·근거·실행 환경 후보입니다. 추천과 현재 배포 지원 여부를 구분해 확인하세요."}</p>
+                      {hasDeploymentHistory && <p className="notice">{mode === "demo" ? "재분석은 별도 샘플 구성 선택 과정입니다. 기존 성공 설정이 바뀔 수 있습니다." : "재분석은 AI 분석과 새 구성 선택 과정이며 기존 설정이 바뀔 수 있습니다. 현재 서버에서 새 코드를 반영하려면 이 과정을 거쳐야 합니다."}</p>}
+                      {analysisPending && <p role="status">코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
+                      {analysis?.status === "done" && <>
                         {mode === "demo" && <div
                           className="decision-tree"
                           role="img"
@@ -886,6 +1001,10 @@ export default function Applications({
                             </div>
                           ))}
                         </div>
+                        <button className="primary" onClick={() => setViewStep(1)}>실행 환경 선택으로</button>
+                      </>}
+                    </>}
+                    {viewStep === 1 && analysis && <>
                         <h3>실행 환경 후보</h3>
                         {allowed.length < 2 && (
                           <p className="notice">
@@ -930,6 +1049,7 @@ export default function Applications({
                                 }
                                 onClick={() => {
                                   setChosen(c.compute);
+                                  setDeploymentFlow({ step: 1, deploymentId: null });
                                   setReviewed(false);
                                   setPlan(null); setPlans(null); setPlanId(""); setPlanError("");
                                 }}
@@ -963,24 +1083,15 @@ export default function Applications({
                             </p>
                           </div>
                           {mode === "api" && chosen && !canDeploy && <p role="status">{readinessMessage} · 추천 결과는 확인할 수 있지만 현재 이 환경으로 배포할 수 없습니다.</p>}
-                          <button className="primary" disabled={busy || !!streamId || !chosen || !canDeploy || analysis.status !== "done"} onClick={preparePlans}>
+                          {planError && <p className="error" role="alert">{planError}</p>}
+                          {busy && <p role="status">구성안을 준비하고 있습니다.</p>}
+                          <button className="primary" disabled={busy || discarding || !!streamId || teardownUnconfirmed || !chosen || !canDeploy || analysis.status !== "done"} onClick={preparePlans}>
                             선택한 환경으로 구성안 조회
                           </button>
                         </div>
-                      </>
-                    ) : (
-                      <div className="empty">
-                        <p>
-                          코드 분석을 시작하면 요구사항과 후보별 이유를 볼 수
-                          있습니다.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </section>
-                {(preview || chosen) && (
-                  <section className="panel detail" aria-label="배포 변경 확인">
-                    <div className="section-heading"><h2>템플릿 · 설정값 검토</h2><span className="badge caution">{mode === "demo" ? "샘플 구성안" : "서버 구성안"}</span></div>
+                    </>}
+                    {viewStep === 2 && <>
+                      <div className="deployment-review-title"><h3>템플릿 · 설정값 검토</h3><span className="badge caution">{mode === "demo" ? "샘플 구성안" : "서버 구성안"}</span></div>
                     <p>실행 환경: {chosen}</p>
                     {planError && <p role="alert">{planError}</p>}
                     {busy && !analysisPending && <p role="status">요청 처리 중…</p>}
@@ -997,15 +1108,11 @@ export default function Applications({
                     <label className="failure-option"><input type="checkbox" checked={reviewed} disabled={busy || !!streamId || (mode === "api" ? !planId : preview?.status !== "template_ready")} onChange={e=>setReviewed(e.target.checked)}/> 설정값을 확인했습니다</label>
                     {mode === "demo" && <label className="failure-option"><input type="checkbox" checked={failCI} onChange={e=>setFailCI(e.target.checked)} disabled={!!streamId}/> CI 실패 시뮬레이션 · DEMO</label>}
                     <button className="primary" disabled={!reviewed || !canDeploy || teardownUnconfirmed || !!streamId || busy || (mode === "api" ? !planId : preview?.status !== "template_ready")} onClick={deploy}>{mode === "demo" && deployment?.status === "failed" ? "실패한 데모 파이프라인 재시도" : `선택한 구성안으로 배포${mode === "demo" ? " · 데모" : ""}`}</button>
-                  </section>
-                )}
-                {deployment && (
-                  <section className="panel">
-                    <div className="section-heading">
-                      <h2>배포 상태</h2>
-                      <span className="badge">{deployment.status}</span>
-                    </div>
-                    <div className="panel-body">
+                    </>}
+                    {(viewStep === 3 || viewStep === 4) && matchingDeployment && deployment && <>
+                    <div className="deployment-progress-body">
+                      <h3>배포 상태 · {deployment.status}</h3>
+                      {viewStep === 4 && <p role="status">{deployment.status === "success" ? "배포가 완료되었습니다." : "배포에 실패했습니다. 실패 이유를 확인하고 명시적으로 다시 시도하세요."}</p>}
                       <p>{event?.message ?? "현재 배포 상태를 표시합니다."}</p>
                       {reconnecting && <p role="status">배포 연결 복구 중… {streamError} <button onClick={()=>{setStreamError("");setStreamRetry(n=>n+1);}}>배포 상태 다시 연결</button></p>}
                       <ol className="pipeline-steps">
@@ -1016,7 +1123,8 @@ export default function Applications({
                         })}
                       </ol>
                       {mode === "demo" && <p className="notice">로컬 샘플 진행입니다. 외부 GitHub·AWS 작업은 실행하지 않습니다.</p>}
-                      {deployment.demo_pipeline && deployment.status === "failed" && <button onClick={()=>{setPlan(deployment.demo_pipeline!.plan);setChosen(deployment.compute);setReviewed(false);setFailCI(false);}}>실패 내용 확인 · 재시도 준비</button>}
+                      {deployment.demo_pipeline && deployment.status === "failed" && <button onClick={()=>{setPlan(deployment.demo_pipeline!.plan);setChosen(deployment.compute);setReviewed(false);setFailCI(false);setViewStep(2);}}>실패 내용 확인 · 재시도 준비</button>}
+                      {mode === "api" && deployment.status === "failed" && configurationReady && <button onClick={() => { setReviewed(false); setViewStep(2); }}>설정값 확인 · 배포 재시도</button>}
                       <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
                       <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
                       <p>실행 환경: {deployment.compute}</p>
@@ -1033,23 +1141,23 @@ export default function Applications({
                         <p role="alert">{deployment.reason}</p>
                       )}
                     </div>
-                  </section>
-                )}
-                {mode === "api" && deployment && <section className="panel" aria-label="앱 내리기">
-                  <div className="section-heading"><h2>앱 내리기</h2></div>
-                  <div className="panel-body">
-                  {teardownStatus === "requested" ? <p role="status">앱을 내리는 중입니다. 3초마다 상태를 확인합니다. {selected.teardown_requested_at && `요청 시각: ${selected.teardown_requested_at}`} 화면을 이동해도 접수된 작업은 계속됩니다.</p>
-                    : teardownComplete ? <p role="status">내림 완료{selected.teardown_finished_at ? `: ${selected.teardown_finished_at}` : ""} · 이전 앱 주소는 더 이상 사용할 수 없습니다. 다시 배포할 수 있습니다.</p>
-                    : teardownStatus === "failed" && !hasNewDeployment ? <p role="alert">내리기 실패: {selected.teardown_reason || "서버에서 실패 이유를 제공하지 않았습니다."} 다시 시도할 수 있습니다.</p>
-                    : teardownStatus === undefined && selected.teardown_requested_at === undefined ? <p>내리기 API 연동 대기 · 현재 서버는 내리기 요청 상태를 제공하지 않습니다.</p>
-                    : teardownStatus === undefined && selected.teardown_requested_at ? <p role="status">내리기 요청 접수: {selected.teardown_requested_at} · 현재 서버는 완료·실패 상태를 제공하지 않습니다. 확인 전에는 다시 요청할 수 없습니다.</p>
-                    : <p>앱 전용 자원을 내리는 요청입니다. 요청 접수는 삭제 완료가 아닙니다. 화면을 이동해도 서버에 접수된 작업은 취소되지 않습니다.</p>}
-                  {pendingTeardown && teardownStatus !== "requested" && <p role="status">내리기 요청 중이거나 처리 여부가 확인되지 않았습니다. 서버 상태를 다시 확인하는 동안 내리기·재배포를 잠시 막습니다.</p>}
-                  {teardownError && <p role="alert">{teardownError}</p>}
-                  <button disabled={(teardownStatus === undefined && selected.teardown_requested_at !== null) || teardownComplete || teardownUnconfirmed || busy || !!streamId || !["success", "failed"].includes(deployment.status)} onClick={teardown}>앱 내리기</button>
+                    </>}
                   </div>
+                </section>
+                {mode === "api" && deployment && matchingDeployment && (viewStep === 3 || viewStep === 4) && <DeploymentResources key={deployment.id} id={deployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
+                {hasDeploymentHistory && <section className="panel detail" aria-label="새 버전 재배포">
+                  <div className="section-heading">
+                    <h2>배포 관리</h2>
+                    <div className="deployment-management-actions">
+                    {viewStep !== 0 && <button className="secondary" disabled={busy || analysisRunning || discarding || !!streamId || teardownUnconfirmed} onClick={analyze}>설정 변경 · 재분석</button>}
+                    <button className="primary" disabled={redeployBlocked} onClick={openRedeploy}>새 버전 재배포</button>
+                    </div>
+                  </div>
+                  <p>이전 성공 설정을 유지하는 재배포입니다. 설정을 바꾸려면 설정 변경 · 재분석을 선택하세요.</p>
+                  <p className="muted">{mode === "demo" ? "DEMO · 저장된 설정으로 로컬 배포 과정을 시연합니다." : "연동 대기 · 최신 커밋 확인과 이전 성공 설정 재사용을 서버에서 지원해야 실행할 수 있습니다."}</p>
+                  {redeployBlocked && <p role="status">진행 중인 작업이나 상태 조회가 끝난 뒤 다시 확인하세요. 저장 오류가 있다면 먼저 해결하세요.</p>}
                 </section>}
-                {mode === "api" && deployment && <DeploymentResources key={deployment.id} id={deployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
+
               </>
             ) : tab === "logs" ? (
               <ApplicationLogs key={`${mode}:${selected.id}:${deployment?.id ?? selected.latest_deployment_id ?? "none"}:${deployment?.status ?? "none"}:${selected.teardown_status ?? "none"}:${selected.teardown_requested_at ?? ""}:${selected.teardown_finished_at ?? ""}`} id={selected.id} mode={mode}/>

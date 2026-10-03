@@ -79,9 +79,9 @@ try {
  receipt=null;hasDeployment=false;
  for(const value of [3000,80,undefined,0,65536,'3000']){
   port=value;await open();await page.getByRole('button',{name:'코드 분석 시작',exact:true}).click();await page.getByRole('button',{name:'이 후보 선택',exact:true}).click();await page.getByRole('button',{name:'선택한 환경으로 구성안 조회',exact:true}).click();
-  const review=page.getByRole('region',{name:'배포 변경 확인'});await review.getByRole('heading',{name:'포트 검증',exact:true}).waitFor();
+  const review=page.getByRole('region',{name:'구성안 검토'});await review.getByRole('heading',{name:'포트 검증',exact:true}).waitFor();
   if(typeof value==='number'&&value>0&&value<=65535)await review.getByText(`컨테이너 포트: ${value}`,{exact:true}).waitFor();else await review.getByText(/서버 값 확인 필요/).waitFor();
-  if(value===3000){await review.screenshot({path:'artifacts/container-port-review.png'});assert.equal(JSON.parse(await review.getByLabel('포트 검증 설정값').innerText()).container_port,3000);await review.getByRole('checkbox',{name:'설정값을 확인했습니다'}).check();await review.getByRole('button',{name:'선택한 구성안으로 배포',exact:true}).click();await page.getByRole('heading',{name:'배포 상태',exact:true}).waitFor();assert.deepEqual(bodies,[{compute:'ecs-fargate',plan_id:'port-plan'}]);}
+  if(value===3000){await review.screenshot({path:'artifacts/container-port-review.png'});assert.equal(JSON.parse(await review.getByLabel('포트 검증 설정값').innerText()).container_port,3000);await review.getByRole('checkbox',{name:'설정값을 확인했습니다'}).check();await review.getByRole('button',{name:'선택한 구성안으로 배포',exact:true}).click();await page.getByRole('heading',{name:/^배포 상태/}).waitFor();assert.deepEqual(bodies,[{compute:'ecs-fargate',plan_id:'port-plan'}]);}
  }
  assert.deepEqual(errors,[]);console.log('PASS followup: requested polling/reload, terminal success/failure/retry, stale success redeploy, both 409 conflicts, errors and app-switch cancellation, port preservation; browser mocks only');
 }finally{await browser.close();}
