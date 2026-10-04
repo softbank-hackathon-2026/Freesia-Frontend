@@ -11,7 +11,7 @@ const messages = {
   unsupported: "이 실행 환경은 지표 조회를 지원하지 않습니다.",
   error: "지표를 수집하지 못했습니다. 잠시 후 다시 확인하세요.",
 };
-const computeLabels = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2" };
+const computeLabels = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2", onprem: "On-premises" };
 
 export default function ApplicationMetrics({ id, mode }: { id: string; mode: DataMode }) {
   const [metrics, setMetrics] = useState<AppMetrics | null>(null);

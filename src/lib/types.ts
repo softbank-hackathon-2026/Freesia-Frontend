@@ -107,7 +107,7 @@ export type AppLogs = {
 export type AppMetrics = {
   status: MonitoringStatus;
   message: string | null;
-  compute: "ecs-fargate" | "lambda" | "ec2" | null;
+  compute: "ecs-fargate" | "lambda" | "ec2" | "onprem" | null;
   cpu_percent: number | null;
   memory_percent: number | null;
   response_time_ms: number | null;

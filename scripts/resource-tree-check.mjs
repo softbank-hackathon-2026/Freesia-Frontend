@@ -5,7 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 const base=process.env.TREE_CHECK_URL||'http://localhost:5173';
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
 const app={id:'tree-review',name:'todo-app / 트리 시안',repo_url:'https://github.com/example/todo',branch:'main',infra_id:'infra-review',created_at:'2026-10-02',latest_deployment_id:'tree-deploy'};
-const deployment={id:'tree-deploy',app_space_id:app.id,compute:'ecs-fargate',status:'deploying',url:null,reason:null,created_at:'2026-10-02'};
+const deployment={id:'tree-deploy',app_space_id:app.id,compute:'ecs-fargate',status:'success',url:null,reason:null,created_at:'2026-10-02'};
 const resource=(type,state,name='app')=>({address:`${type}.${name}`,type,state,action:state==='deleted'?'delete':'create',reason:null,updated_at:'2026-10-02T05:00:00Z'});
 const sample=[resource('aws_ecs_service','done'),resource('aws_db_instance','done'),resource('aws_s3_bucket','in_progress'),resource('aws_lb','done'),resource('aws_route53_record','pending')];
 let resources=sample,responseError=false,reads=0;
@@ -29,7 +29,7 @@ try {
  });
  await page.goto(`${base}/?source=api&app=${app.id}`);
  const panel=page.getByRole('region',{name:'배포 자원 상태'});
- await panel.getByRole('heading',{name:'전체 구성',exact:true}).waitFor({timeout:5000});
+ await page.getByRole('heading',{name:'전체 구성',exact:true}).waitFor({timeout:5000});
  const progress=panel.getByRole('progressbar',{name:'자원 완료율'});
  assert.equal(await progress.getAttribute('value'),'3');assert.equal(await progress.getAttribute('max'),'5');
  await panel.getByText(app.name,{exact:true}).first().waitFor();
@@ -49,7 +49,7 @@ try {
 
  const before=reads;
  resources=[...sample.map(r=>({...r})),resource('aws_custom_resource','in_progress','unknown')];resources[3].state='in_progress';resources[4].state='failed';resources[4].reason='도메인 확인 실패';
- await page.evaluate(()=>window.treeStreams.filter(s=>!s.closed).forEach(s=>s.dispatchEvent(new window.MessageEvent('progress',{data:JSON.stringify({status:'deploying',step:'deploy',message:'자원 상태 갱신',progress:60,url:null,at:'2026-10-02T05:01:00Z'})}))));
+ await page.evaluate(()=>window.treeStreams.filter(s=>!s.closed).forEach(s=>s.dispatchEvent(new window.MessageEvent('progress',{data:JSON.stringify({status:'success',step:'done',message:'자원 상태 갱신',progress:60,url:null,at:'2026-10-02T05:01:00Z'})}))));
  await panel.getByText('기타',{exact:true}).first().waitFor();assert.ok(reads>before);
  assert.equal(await progress.getAttribute('value'),'2');assert.equal(await progress.getAttribute('max'),'6');
  assert.ok(await panel.getByText('지금 여기',{exact:true}).count()>=2);
