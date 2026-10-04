@@ -1,142 +1,125 @@
-# Freesia Frontend
+# PieckPick Frontend
 
-Freesia는 준비된 인프라에 애플리케이션을 배포하고, 진행 상황과 자원 상태를 확인하는 플랫폼입니다. 이 저장소는 **React + TypeScript + Vite 기반 관리 콘솔**을 담당합니다.
+준비된 인프라에 애플리케이션을 배포하고, 진행 상황·자원 구성·로그·지표를 확인하는 **React + TypeScript + Vite 관리 콘솔**입니다. 서비스 이름은 **PieckPick**, 저장소 이름은 기존 `Freesia-Frontend`를 유지합니다.
 
-- [운영 콘솔](https://sbh.howon.me/)
-- 관련 저장소: [백엔드](https://github.com/softbank-hackathon-2026/Freesia-backend) · [앱 배포 워크플로](https://github.com/softbank-hackathon-2026/workload-deploy) · [플랫폼 인프라](https://github.com/softbank-hackathon-2026/platform-terraform)
+[운영 콘솔](https://sbh.howon.me/) · [백엔드](https://github.com/softbank-hackathon-2026/Freesia-backend) · [앱 배포 워크플로](https://github.com/softbank-hackathon-2026/workload-deploy) · [플랫폼 인프라](https://github.com/softbank-hackathon-2026/platform-terraform)
 
-## 1. 화면과 사용 흐름
+## 빠른 시작
 
-| 메뉴 | 하는 일 |
-|---|---|
-| 인프라 | 앱이 사용할 Infra Space 조회. 인프라 생성·AI 질의응답·Terraform Apply는 현재 데모 흐름 |
-| 애플리케이션 | 앱 생성, 코드 분석 결과·실행 환경 선택, 구성안 검토, 배포, 자원 트리, 앱 내리기 |
-| 통합 | 기존 공개 GitHub Repository URL 등록·조회·등록 해제. 새 등록은 `main` 브랜치 사용 |
-
-**앱 배포 순서**
-
-1. **통합**에서 공개 GitHub 저장소 URL을 등록합니다. GitHub 로그인·OAuth 연결이나 새 저장소 생성 과정은 없습니다.
-2. **애플리케이션 생성**에서 앱 이름, 준비된 Infra Space, 등록한 Repository를 선택합니다. 이 화면에 URL을 다시 입력하지 않습니다.
-3. 분석을 요청하고 서버가 반환한 요구사항·근거·실행 환경 후보를 확인합니다. 추천 여부와 현재 배포 지원 여부는 별개입니다.
-4. 실행 환경을 직접 선택하고 **템플릿 + 설정값 구성안**을 검토합니다. 구성안이 하나면 바로 검토 화면으로 이동하며, `container_port` 등 서버가 제공한 값을 확인합니다.
-5. 배포 버튼을 누르면 백엔드가 배포 워크플로를 실행합니다. 진행 단계·자원 트리·결과를 확인하고 성공 시 앱 주소를 엽니다.
-6. 사용을 마친 앱은 상세 화면의 **내리기**에서 확인 후 종료합니다. 완료되면 앱 주소가 숨겨집니다. 앱 기록은 남으며 다시 배포할 수 있습니다.
-
-앱 상세의 **개요**는 `코드 분석 → 실행 환경 선택 → 구성안 검토 → 배포 진행 → 배포 결과`의 5단계 화면입니다. 상단 단계 표시로 현재 위치를 확인하고, 분석·구성안·배포 결과를 받으면 다음 화면으로 자동 이동합니다. 실행 환경 선택과 실제 배포 시작은 직접 누릅니다. 완료된 단계는 다시 열어볼 수 있으며, 보기만으로 분석이나 배포를 다시 요청하지 않습니다.
-
-앱을 다시 열면 서버에 저장된 코드 분석 결과와 최신 배포 상태를 조회합니다. 분석 중이면 GET으로 상태 확인을 재개하고, 분석 완료 후에는 실행 환경을 직접 선택합니다. 분석 실패는 서버의 원인을 표시합니다. 분석 대기는 최대 190초이며, 시간 초과 후 결과를 한 번 더 확인하고 필요한 경우 분석 상태만 다시 조회할 수 있습니다. 후보 선택·구성안·검토 체크 중간 입력은 새로고침 시 복원하지 않습니다. 배포 기록이 있으면 배포 진행·결과 화면을 우선 표시합니다. 로그·모니터링 탭과 앱 내리기·삭제는 기존대로 사용할 수 있습니다.
-```mermaid
-flowchart LR
-    UI[React 콘솔] -->|배포 · 내리기 요청| API[FastAPI]
-    API -->|workflow_dispatch| Actions[GitHub Actions]
-    Actions -->|Terraform apply / destroy| AWS[고객 앱 AWS 자원]
-    Actions -->|서명된 결과 콜백| API
-    API -->|상태 저장 · 조회| DB[(PostgreSQL)]
-    API -->|SSE 진행 이벤트 · GET 상태/자원| UI
-```
-
-프론트는 AWS나 Terraform을 직접 실행하지 않습니다. 자원 트리는 워크플로가 보고하고 백엔드 DB에 저장한 상태를 표시합니다. 현재 앱 배포는 템플릿과 설정값을 사용하며, AI가 Terraform 코드를 사용자 저장소에 commit/push하는 흐름이 아닙니다.
-
-## 2. 로컬 실행
-
-필수 환경: **Node.js 24 이상**, npm. 기본 API 화면은 별도로 실행한 [Freesia 백엔드](https://github.com/softbank-hackathon-2026/Freesia-backend#readme)가 필요합니다.
+**Node.js 24 이상과 npm**이 필요합니다. API 화면을 사용하려면 [백엔드 실행 안내](https://github.com/softbank-hackathon-2026/Freesia-backend#readme)에 따라 백엔드를 먼저 실행합니다.
 
 ```sh
 npm ci
 npm run dev
 ```
 
-| 접속 주소 | 데이터와 동작 |
+| 주소 | 데이터 소스 |
 |---|---|
-| [localhost:5173](http://localhost:5173/) | 기본 화면. 백엔드가 반환한 데이터를 사용하며 실제 배포 여부는 연결한 백엔드 설정에 따름 |
-| [명시적인 데모 QA 경로](http://localhost:5173/?source=demo) | 기존 데모 구현과 회귀 검사를 보존하는 경로. 브라우저 `localStorage`의 샘플 데이터 사용 |
+| [http://localhost:5173/](http://localhost:5173/) | 기본 API 모드. 실행 중인 백엔드에 연결 |
+| [http://localhost:5173/?source=demo](http://localhost:5173/?source=demo) | 명시적인 데모 경로. 브라우저 `localStorage`의 샘플 데이터 |
 
-화면 오른쪽 위 데이터 소스 선택기는 제거했습니다. 일반 URL은 API로 시작하고, API 오류를 데모 데이터로 자동 대체하지 않습니다. 기존 데모 코드와 테스트는 유지하며 두 모드의 데이터는 별개입니다.
+API 오류가 발생해도 데모 데이터로 자동 대체하지 않습니다. Vite는 5173 포트를 고정 사용하므로 이미 개발 서버가 실행 중이면 기존 서버를 사용하거나 포트를 비운 뒤 시작합니다.
 
-### 백엔드 연결
+### API 주소 설정
 
-기본 설정은 별도 환경변수 없이 다음 경로를 사용합니다.
+기본값은 `/api`이며, 개발 서버는 경로를 그대로 유지하여 `http://localhost:8000/api/...`로 전달합니다. 별도 환경변수 설정 없이 로컬 백엔드와 연결할 수 있습니다.
 
-```text
-브라우저 /api/... → Vite 개발 프록시 → http://localhost:8000/api/...
-```
-
-주소를 바꾸려면 [`.env.example`](.env.example)을 `.env.local`로 복사하고 설정한 뒤 개발 서버를 재시작합니다.
+주소를 바꾸려면 [`.env.example`](.env.example)을 `.env.local`로 복사하고 개발 서버를 재시작합니다.
 
 ```dotenv
-# 로컬 백엔드와 개발 프록시 사용 (기본값)
 VITE_API_BASE_URL=/api
 ```
 
-다른 백엔드에 직접 연결하려면 `VITE_API_BASE_URL=https://backend.example.com/api`처럼 **`/api`까지 포함**합니다. 이 경우 백엔드에서 프론트 주소에 대한 CORS 허용이 필요합니다. `VITE_` 환경변수는 브라우저 빌드에 포함되므로 비밀키를 넣지 않습니다.
+다른 서버에 직접 연결할 때는 `https://backend.example.com/api`처럼 **`/api`를 포함한 주소**를 지정하고 백엔드 CORS를 허용합니다. `VITE_` 변수는 브라우저 빌드에 포함되므로 비밀키를 넣지 않습니다. 배포된 정적 파일에는 Vite 개발 프록시가 없으며 운영 환경에서는 CloudFront가 같은 도메인의 `/api`를 백엔드로 전달합니다.
 
-배포 빌드에는 Vite 개발 프록시가 없습니다. 현재 운영 환경은 같은 도메인의 `/api` 요청을 CloudFront에서 백엔드로 전달합니다.
+## 화면과 앱 배포 흐름
 
-### 자주 확인할 사항
-
-- **서버 데이터를 확인하려면:** 기본 URL로 접속합니다. 기존 `source=demo` 링크는 명시적으로 데모 QA 경로를 엽니다.
-- **API 연결 실패:** 백엔드 실행 상태, 8000 포트, `VITE_API_BASE_URL`의 `/api`, 직접 연결 시 CORS를 확인합니다.
-- **트리가 비어 있음:** 해당 배포의 자원 API가 목록을 반환하는지 확인합니다. 빈 목록을 임의의 샘플 자원으로 채우지 않습니다.
-- **5173 포트를 사용할 수 없음:** 기존 개발 서버를 사용하거나 종료한 뒤 재실행합니다. Vite는 `strictPort`를 사용합니다.
-
-## 3. 현재 구현 범위
-
-아래는 **2026-10-02 기준**입니다. API에 연결되어 있다는 사실만으로 응답이 실제 AI 분석이거나 클라우드 실행 결과라고 판단하지 않습니다.
-
-| 기능 | 현재 상태 |
+| 메뉴 | 주요 기능 |
 |---|---|
-| 공개 Repository 등록·조회·해제, 앱 생성·조회 | 백엔드 API 연결. 저장소 등록은 URL 저장이며 실제 공개 여부·접근 권한·브랜치 존재를 보증하지 않음 |
-| Infra Space 목록·상세 | 백엔드 API 연결. 인프라 생성·AI 대화·Apply는 데모이며 실제 네트워크 생성 API는 미연결 |
-| 앱 분석·구성안 | 서버 결과 표시·비동기 완료 대기 구현. 분석은 기본 2초 간격·최대 150초 재조회. 실제 AI 사용 여부는 백엔드 모델 설정에 따름 |
-| 실행 환경 선택 | 추천 후보와 `deployable_computes`를 구분. 미지원 후보는 준비 중으로 표시. 실제 배포 가능 대상은 서버의 `deployable_computes`를 따름 |
-| 앱 배포·진행 | 구성안의 `plan_id`를 포함해 배포 요청. SSE로 진행 이벤트 수신, 연결 복구·실패 표시 지원 |
-| 새 버전 재배포 | 앱 상세의 별도 확인창. 데모는 이전 성공 설정을 그대로 재사용하며, API 모드는 최신 커밋·성공 설정 재사용 계약이 없어 실행 대기. 기존 분석→구성안→배포는 별도 흐름 |
-| 자원 트리 | 자원 조회 API의 상태로 표시하며 내린 자원은 회색 `삭제됨`으로 표시. 서버/저장소/연결 등의 화면상 그룹이며 Terraform 의존성 그래프나 자원 편집기가 아님 |
-| 앱 내리기 | `requested` 동안 3초 간격 조회·새로고침 후 재개. 성공 시 주소 숨김, 실패 이유·재시도 표시, 진행 중 배포·중복 내리기 차단 |
-| 앱 삭제 | 목록에서 선택하거나 앱 상세에서 현재 앱을 확인한 후 서버에서 숨김. 기록은 유지하며, AWS 자원이 남았거나 배포·내리기 중이면 서버가 거절한 이유 표시 |
-| 앱 로그 | API 모드는 최근 1시간의 최대 100줄을 조회. 열린 탭에서 15초 간격 및 수동 갱신. 수집 대기·미배포·미지원·오류를 구분 |
-| 앱 모니터링 | 최근 1분 지표 API 연결. 15초 간격 및 수동 갱신. Fargate는 CPU·메모리·응답·요청·5xx, Lambda는 처리 시간·호출·오류, EC2는 CPU. 미수집 값은 `0`으로 대체하지 않음 |
+| 인프라 | Infra Space 목록·상세 조회. 이름 입력 → AI 대화 → Terraform 검토·Apply의 생성 흐름은 데모 |
+| 통합 | 기존 공개 GitHub 저장소 URL 등록·조회·등록 해제. 새 등록의 브랜치는 `main` |
+| 애플리케이션 | 앱 생성, 분석·실행 환경 선택·구성안 검토, 배포·재배포·내리기·삭제, 자원 트리, 로그·모니터링 |
 
-**팀원 공유 검증 결과:** 2026-10-02 `sample-shop` 퍼블릭 환경에서 운영 콘솔의 배포 → 진행 단계·자원 트리 → 앱 접속, 내리기 → AWS 자원 삭제 → 완료 콜백 → 주소 제거가 성공했다고 공유받았습니다. 각각 약 4분이었으며, 다른 앱·프라이빗 환경·실패/재시도·실제 AI 분석·모니터링까지 검증했다는 의미는 아닙니다.
+**통합에서 저장소를 등록한 뒤**, 앱 이름·등록된 저장소·Infra Space를 선택하여 앱을 만듭니다. 앱 생성 화면에서는 저장소 URL을 다시 입력하지 않습니다. 인프라를 선택하지 않는 샌드박스 경로는 서버에 준비된 기본 Infra Space를 사용합니다. GitHub 로그인·OAuth 연결이나 새 GitHub 저장소 생성 기능은 없습니다.
 
-## 4. 검증과 프론트엔드 배포
+앱 상세의 **개요**는 다음 5단계입니다.
 
-### 로컬 검증
+1. **코드 분석** — 서버가 반환한 요구사항·근거·실행 환경 후보를 확인합니다.
+2. **실행 환경 선택** — 추천 후보 중 배포 가능한 환경을 직접 선택합니다. 추천 여부와 배포 지원 여부는 구분합니다.
+3. **구성안 검토** — 템플릿과 설정값을 확인하고 배포를 요청합니다.
+4. **배포 진행** — SSE(Server-Sent Events)로 진행 단계·성공/실패 상태·소요 시간을 확인합니다.
+5. **전체 구성** — 백엔드가 제공한 배포 자원을 트리로 확인합니다.
 
-```sh
-npm run check
-npm run test:e2e
+**로그와 모니터링은 별도 탭**에서 확인합니다. 4단계는 배포 진행, 5단계는 자원 구성에 집중합니다. 트리는 보고된 자원을 그룹으로 보여주는 화면이며 Terraform 의존성 그래프나 자원 편집기가 아닙니다.
+
+새 버전 재배포는 성공한 배포의 설정과 대상 커밋을 조회하고 확인한 뒤 요청합니다. 설정을 바꾸려면 별도의 재분석 흐름을 사용합니다. 앱 내리기는 자원을 정리하는 요청이며, 앱 삭제는 서버에서 앱 기록을 숨기는 별도 동작입니다. 실행 가능 여부와 실패 이유는 서버 응답을 따릅니다.
+
+## 전체 구조
+
+![PieckPick 전체 구조: 저장소 등록부터 앱 배포와 모니터링까지](docs/architecture/system.svg)
+
+[전체 구조 상세 다이어그램](docs/architecture/system.html) · [모니터링 상세 다이어그램](docs/architecture/monitoring.html)
+
+위 그림은 기존 **archify** 다이어그램에서 내보낸 이미지입니다. 상세 HTML은 GitHub에서 소스로 표시됩니다. 저장소를 clone하거나 파일을 다운로드한 뒤 **브라우저로 열면** 확대·검색·노드 상세 탐색을 사용할 수 있습니다.
+
+프론트엔드는 FastAPI에 요청하고 서버 결과를 표시합니다. 백엔드는 GitHub Actions에 배포를 요청하며, 워크플로가 AWS에서는 Terraform, 온프레미스에서는 Ansible로 작업하고 결과를 백엔드에 전달합니다. 프론트엔드가 AWS 자격증명을 갖거나 Terraform을 직접 실행하지 않습니다. 앱 배포 구성은 템플릿과 설정값을 사용하며, AI가 사용자 저장소에 Terraform 코드를 commit/push하는 흐름은 아닙니다.
+
+## 로그와 모니터링
+
+![PieckPick 모니터링 구조: 앱 로그·지표 수집, 백엔드 조회, 프론트엔드 표시](docs/architecture/monitoring.svg)
+
+| 실행 환경 | 화면에 표시하는 지표 | 앱 로그 |
+|---|---|---|
+| ECS Fargate | CPU·메모리·평균 응답 시간·요청 수·앱 5xx 오류 수 | 컨테이너가 CloudWatch로 보낸 로그 |
+| Lambda | 평균 처리 시간·호출 수·함수 오류 수 | 함수의 CloudWatch 로그 |
+| EC2 | CPU | Docker가 CloudWatch로 보낸 앱 로그 |
+
+EC2 메모리 지표는 현재 화면에서 제공하지 않습니다. 온프레미스·다른 공급자의 아이콘 표시는 해당 환경의 지표 수집 지원을 뜻하지 않습니다. 알람과 트레이스는 현재 구현 범위에 포함되지 않습니다.
+
+- **조회:** 로그·모니터링 탭을 열 때 즉시 요청하고, 요청이 끝난 뒤 약 15초 후 다시 조회합니다. 수동 새로고침도 지원합니다. 지표는 60초 단위 집계의 최신 측정값을 표시하며, 새로고침 시각과 측정 시각은 다를 수 있습니다.
+- **로그:** 최대 100줄을 받아 메시지 검색·강조, 자동 갱신 일시정지/재개, TXT 다운로드를 제공합니다. TXT는 검색 결과와 관계없이 수신한 전체 로그 스냅샷을 저장합니다. UTF-8 BOM·CRLF를 사용하며 화면 시간은 브라우저 현지 시간, TXT 시간은 UTC입니다.
+- **상태:** `ok` / `waiting` / `not_deployed` / `unsupported` / `error`를 구분합니다. 측정값이 없으면 `—`로 표시하며 실제 `0`과 구분합니다. 배포 완료나 데이터 수신만으로 앱 정상 상태를 판단하지 않습니다.
+
+연결 경로는 `GET /api/app-spaces/{id}/metrics`와 `GET /api/app-spaces/{id}/logs?limit=100`입니다. 실제 데이터 수집은 배포 템플릿·로그 설정·백엔드의 AWS 읽기 권한에 따릅니다. API 응답 계약과 변경 이력은 [docs/contracts.md](docs/contracts.md)를 확인하세요.
+
+## 코드 위치
+
+```text
+src/
+├─ App.tsx                         # 공통 레이아웃과 화면 진입점
+├─ components/Applications.tsx     # 앱 분석·배포·재배포·내리기 흐름
+├─ components/DeploymentResources.tsx # 자원 트리
+├─ components/ApplicationLogs.tsx  # 로그 조회·검색·다운로드
+├─ components/ApplicationMetrics.tsx # 실행 환경별 지표
+├─ components/GitHubIntegration.tsx # 저장소 등록
+├─ components/InfraBuilder.tsx     # 인프라 설계 데모
+└─ lib/api.ts                      # API 어댑터·응답 검증·SSE 연결
 ```
+
+## 검증
 
 | 명령 | 확인 범위 |
 |---|---|
 | `npm run check` | TypeScript → ESLint → Node 테스트 → Vite 빌드. 첫 실패 시 종료 |
-| `npm run test:e2e` | 로컬 Vite와 Chrome으로 데모·모의 API 응답을 사용한 UI 회귀 검사, 데스크톱·모바일 캡처를 `artifacts/`에 저장 |
-| `npm run build` | 배포할 정적 파일을 `dist/`에 생성 |
+| `npm run test:e2e` | 설치된 Chrome과 로컬 Vite로 데모·모의 API UI 검사. 캡처는 `artifacts/`에 저장 |
+| `npm run build` | 타입 검사 후 배포할 정적 파일을 `dist/`에 생성 |
 
-브라우저 검사는 설치된 Chrome을 사용하며 `CHROME_PATH`로 실행 파일 경로를 지정할 수 있습니다. 브라우저를 추가 다운로드하지 않습니다. 5173 포트를 사용하므로 실행 중인 개발 서버는 먼저 종료합니다. 프록시 테스트는 로컬 HTTP 테스트 서버로 GET·POST·SSE 경로 전달을 확인합니다. 이 자동 검사들은 실제 AI 호출이나 AWS 배포 성공을 증명하지 않습니다.
+브라우저 검사는 `CHROME_PATH`로 Chrome 경로를 지정할 수 있으며 브라우저를 다운로드하지 않습니다. 기본 5173 포트가 사용 중이면 개발 서버를 종료하거나 `BROWSER_CHECK_PORT`로 검사 포트를 지정합니다. 자동 검사는 실제 AI 호출·AWS 배포·운영 모니터링의 성공을 증명하지 않습니다.
 
-### 관리 콘솔 자체 배포
+## 프론트엔드 배포
 
-이 절은 **Freesia 프론트 파일을 배포하는 방법**입니다. 화면에서 고객 앱을 배포하는 기능은 1절의 흐름을 따릅니다.
+관리 콘솔 자체는 **S3 + CloudFront**에 배포합니다. 고객 앱을 배포하는 화면 기능과 별개의 워크플로입니다.
 
-1. GitHub 저장소의 **Actions → Deploy → Run workflow**를 엽니다.
-2. 배포할 브랜치를 확인합니다. 운영 반영은 병합된 `main`을 선택해 수동 실행합니다.
-3. 워크플로의 완료 결과와 [운영 콘솔](https://sbh.howon.me/?source=api)을 확인합니다.
+1. GitHub **Actions → Deploy → Run workflow**에서 병합된 `main`을 선택합니다.
+2. 검사·빌드 → S3 업로드 → CloudFront 캐시 갱신 → 배포 HTML 확인이 완료되는지 봅니다.
+3. [운영 콘솔](https://sbh.howon.me/)에서 화면과 API 연결을 확인합니다.
 
-현재 [배포 워크플로](.github/workflows/deploy.yml)는 `workflow_dispatch` 전용이므로 **main에 머지해도 자동 배포되지 않습니다.**
+[Deploy 워크플로](.github/workflows/deploy.yml)는 **수동 실행 전용**입니다. main에 머지하는 것만으로 배포되지 않습니다. JS·CSS를 먼저 업로드하고 `index.html`을 마지막에 올리며, 이전 페이지가 참조하는 파일을 보존하기 위해 `--delete`를 사용하지 않습니다. 필요한 AWS 자격증명은 GitHub Secrets에서 주입합니다. 마지막 자동 검사는 배포 HTML과 빌드 결과의 일치 확인입니다.
 
-```text
-npm ci → npm run check → dist/를 S3에 업로드
-→ CloudFront 캐시 갱신 완료 대기 → 배포된 index.html과 빌드 결과 비교
-```
+## 상세 문서
 
-JS·CSS를 먼저 올리고 `index.html`을 마지막에 올립니다. 기존 페이지가 참조하는 파일을 보존하도록 `--delete`를 사용하지 않습니다. 실행에는 저장소에 설정된 AWS 자격증명과 대상 S3·CloudFront 권한이 필요합니다. 마지막 검사는 HTML 일치 확인이며 버튼·실제 앱 배포까지 검사하지 않습니다.
+- [API 계약·변경 이력](docs/contracts.md)
+- [개발 계획·검증·인수인계](docs/plans/README.md)
+- [전체 구조 HTML](docs/architecture/system.html) · [모니터링 HTML](docs/architecture/monitoring.html)
 
-### 코드와 상세 문서
-
-- [API 어댑터](src/lib/api.ts) · [앱 배포·내리기 화면](src/components/Applications.tsx) · [자원 트리](src/components/DeploymentResources.tsx)
-- [API 계약과 변경 이력](docs/contracts.md)
-- [개발 계획·검증 기록](docs/plans/README.md)
-
-상세 문서에는 초기 제안과 과거 구현 상태도 보존되어 있습니다. 현재 기능 안내는 위 구현 범위를 보고, 변경 배경은 문서의 후속 정정·최신 날짜 기록을 함께 확인하세요.
+README 기능 안내는 **2026-10-04의 main `0dba04e`**를 기준으로 정리했습니다. archify 그림은 같은 날 검증된 구조 설명을 재사용합니다. 실제 운영 배포 버전이나 AWS 자원 상태를 조회한 결과는 아닙니다. 개발 기록에는 과거 제안·구현 상태가 보존되어 있으므로 최신 후속 기록을 함께 확인하세요.
