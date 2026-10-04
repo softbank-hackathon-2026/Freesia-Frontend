@@ -529,3 +529,9 @@ User approved the previously presented bounded frontend design and now requests 
 
 ### On-premises implementation verified — 2026-10-04
 On codex/onprem-deployment-tree: onprem deployment/redeploy/metrics contracts and provider-aware Ansible task tree complete. check65, browser28, onprem fixtures, AWS tree/redeploy regression and independent review PASS. Existing production deployment inspected GET-only: already torn down,15 deleted tasks. Commit/push approved; PR/main merge/deployment excluded. See sprints/infra-ai-flow-eval.md for evidence.
+
+Current local task: PieckPick branding/mascot implementation per approved user request 2026-10-04; see Day3 spec/plan and infra-ai-flow contract latest addition. No publication/deployment authorization.
+
+- 2026-10-04 PieckPick branding: completed locally; check65/browser28/focused branding/source+visual PASS. Branch codex/pieckpick-branding; unpublished.
+
+- 2026-10-04 access-help removal + PieckPick publication: final check65/browser28/branding/source+visual PASS; current full diff commit/push/English PR/main merge explicitly approved; result in canonical wiki/private INDEX. No Deploy dispatch.

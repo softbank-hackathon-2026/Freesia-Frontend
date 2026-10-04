@@ -55,6 +55,13 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuToggle = useRef<HTMLButtonElement>(null);
   const firstNav = useRef<HTMLButtonElement>(null);
+  const guideMascotArmored = useRef(false);
+  const nextGuideMascot = useCallback(() => {
+    const source = guideMascotArmored.current
+      ? "/pieckpick-mascot-armored.png" : "/pieckpick-mascot.png";
+    guideMascotArmored.current = !guideMascotArmored.current;
+    return source;
+  }, []);
   useEffect(() => {
     if (!menuOpen) return;
     const toggle = menuToggle.current;
@@ -302,9 +309,11 @@ export default function App() {
         id="primary-navigation"
       >
         <a className="brand" href="#" onClick={(event) => { event.preventDefault(); nav("infra"); }}>
-          <img className="brand-icon" src="/freesia-mascot.jpg" alt="" />
+          <img className="brand-icon" src="/pieckpick-mascot.png" alt="" />
           <span className="brand-name">
-            Freesia<small>아이디어가 자라는 공간</small>
+            <span className="brand-title">PieckPick</span>
+            <small>&quot;인프라를 구축하겠어!&quot;</small>
+            <small lang="ja">&quot;インフラを構築してやる！&quot;</small>
           </span>
         </a>
         <nav className="sidebar-nav" aria-label="주요 메뉴">
@@ -436,6 +445,7 @@ export default function App() {
                 else setApiAppDraft(null);
               }}
               onDeployment={updateDeployment}
+              nextGuideMascot={nextGuideMascot}
               initialForm={mode === "demo" ? appDraft : apiAppDraft}
               onDraftChange={mode === "demo" ? setAppDraft : setApiAppDraft}
               meeting={meeting}
