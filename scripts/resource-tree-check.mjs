@@ -49,7 +49,13 @@ try {
 
  const before=reads;
  resources=[...sample.map(r=>({...r})),resource('aws_custom_resource','in_progress','unknown')];resources[3].state='in_progress';resources[4].state='failed';resources[4].reason='도메인 확인 실패';
- await page.evaluate(()=>window.treeStreams.filter(s=>!s.closed).forEach(s=>s.dispatchEvent(new window.MessageEvent('progress',{data:JSON.stringify({status:'success',step:'done',message:'자원 상태 갱신',progress:60,url:null,at:'2026-10-02T05:01:00Z'})}))));
+ // Completed deployments restore one terminal snapshot when the progress view opens.
+ const stages=page.getByRole('navigation',{name:'배포 단계',exact:true});
+ await stages.getByRole('button',{name:'배포 진행',exact:true}).click();
+ await page.waitForFunction(()=>window.treeStreams.some(s=>!s.closed));
+ await page.evaluate(()=>window.treeStreams.filter(s=>!s.closed).forEach(s=>s.dispatchEvent(new window.MessageEvent('progress',{data:JSON.stringify({status:'success',step:'done',message:'자원 상태 갱신',progress:100,url:null,at:'2026-10-02T05:01:00Z'})}))));
+ await page.waitForFunction(()=>window.treeStreams.every(s=>s.closed));
+ await stages.getByRole('button',{name:'전체 구성',exact:true}).click();
  await panel.getByText('기타',{exact:true}).first().waitFor();assert.ok(reads>before);
  assert.equal(await progress.getAttribute('value'),'2');assert.equal(await progress.getAttribute('max'),'6');
  assert.ok(await panel.getByText('지금 여기',{exact:true}).count()>=2);
@@ -90,5 +96,5 @@ try {
  assert.ok((await panel.locator('.resource-tree-totals').textContent()).includes('실패 있음'));
  await page.setViewportSize({width:1440,height:1050});await panel.screenshot({path:'artifacts/resource-tree-deleted-mixed-desktop.png'});
  assert.deepEqual(mutations,[]);assert.deepEqual(errors,[]);
- console.log('PASS tree: groups, counts, concurrent progress, unknown type, failure, SSE refresh, mobile, empty/error/retry, deleted-only/mixed counts and details, no mutations');
+ console.log('PASS tree: groups, counts, concurrent progress, unknown type, failure, terminal snapshot and tree refresh, mobile, empty/error/retry, deleted-only/mixed counts and details, no mutations');
 } finally {await browser.close();}

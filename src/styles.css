@@ -1457,3 +1457,5 @@ button.context-help {
 .resource-tree-onprem .resource-tree-groups { flex-wrap: wrap; }
 .resource-tree-onprem .resource-tree-group { flex: 1 1 280px; min-width: 0; }
 .resource-tree-onprem .resource-tree-node summary small { font-size: 13px; line-height: 1.5; }
+.deployment-progress-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 20px; }
+.deployment-duration { font-variant-numeric: tabular-nums; }
