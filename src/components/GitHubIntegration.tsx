@@ -106,7 +106,6 @@ export default function GitHubIntegration({
               <div>
                 <strong>{repo.name}</strong><span className="badge">{repo.branch}</span>
                 <p className="break-word">{repo.repo_url}</p>
-                <small>실제 접근·공개 여부·브랜치 존재 미확인</small>
               </div>
               <button disabled={disabled} aria-label={"등록 해제: " + repo.name + " (" + repo.branch + ")"} onClick={() => void unregister(repo.id)}>등록 해제</button>
             </div>
