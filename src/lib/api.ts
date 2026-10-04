@@ -55,7 +55,7 @@ function redeployContextShape(value: unknown): boolean {
   const sha = (value: unknown) => typeof value === "string" && /^[a-f0-9]{40}$/i.test(value);
   return !!v && ["app_space_id","repo_url","branch","source_deployment_id"].every(key => nonempty(v[key]))
     && (v.source_commit_sha === null || sha(v.source_commit_sha)) && sha(v.target_commit_sha)
-    && typeof v.compute === "string" && ["ecs-fargate","lambda","ec2","onprem"].includes(v.compute) && !!plan
+    && typeof v.compute === "string" && ["ecs-fargate","lambda","ec2","onprem","onprem-container"].includes(v.compute) && !!plan
     && nonempty(plan.id) && nonempty(plan.template) && !!record(plan.values) && jsonValue(plan.values);
 }
 function monitoringShape(v: Record<string, unknown>): boolean {

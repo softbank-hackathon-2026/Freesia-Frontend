@@ -801,6 +801,27 @@ test("onprem redeploy accepts the saved context and retains source and SHA guard
   await assert.rejects(createApi("/api",async()=>Response.json({...result,commit_sha:"a".repeat(40)})).redeploy("app-1",body),{code:"invalid_response"});
 });
 
+test("onprem-container redeploy submits the reviewed context source and SHA", async () => {
+  const context = {...redeployContext,compute:"onprem-container",plan:{...redeployContext.plan,template:"onprem-container/basic"}};
+  const result = {...redeployResult,compute:"onprem-container"};
+  const calls: {url:string;init?:RequestInit}[] = [];
+  const api = createApi("/api", async (url,init) => {
+    calls.push({url:String(url),init});
+    return Response.json(String(url).endsWith("/redeploy-context") ? context : result, {status:init?.method === "POST" ? 201 : 200});
+  });
+  const reviewed = await api.redeployContext("app-1");
+  assert.deepEqual(reviewed,context);
+  assert.deepEqual(await api.redeploy("app-1",{
+    source_deployment_id:reviewed.source_deployment_id,
+    target_commit_sha:reviewed.target_commit_sha,
+  }),result);
+  assert.deepEqual(calls.map(({url,init})=>[url,init?.method]),[
+    ["/api/app-spaces/app-1/redeploy-context","GET"],
+    ["/api/app-spaces/app-1/redeployments","POST"],
+  ]);
+  assert.equal(calls[0].init?.body,undefined);
+  assert.deepEqual(JSON.parse(String(calls[1].init?.body)),{source_deployment_id:"success-1",target_commit_sha:"b".repeat(40)});
+});
 test("onprem unsupported metrics preserve the server explanation and null measurements", async () => {
   const data = {status:"unsupported",message:"On-premises metrics are not supported.",compute:"onprem",cpu_percent:null,memory_percent:null,response_time_ms:null,request_count:null,error_count:null,measured_at:null};
   const calls: {url:string;init?:RequestInit}[] = [];

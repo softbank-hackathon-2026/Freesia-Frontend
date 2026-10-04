@@ -535,3 +535,9 @@ Current local task: PieckPick branding/mascot implementation per approved user r
 - 2026-10-04 PieckPick branding: completed locally; check65/browser28/focused branding/source+visual PASS. Branch codex/pieckpick-branding; unpublished.
 
 - 2026-10-04 access-help removal + PieckPick publication: final check65/browser28/branding/source+visual PASS; current full diff commit/push/English PR/main merge explicitly approved; result in canonical wiki/private INDEX. No Deploy dispatch.
+
+
+## Container redeploy response compatibility — approved 2026-10-04
+Branch codex/onprem-container-redeploy from origin/main18c0c3a. Unit: add a failing onprem-container GET-context -> POST-redeployment regression, confirm invalid_response, add exact compute string to redeployContextShape, then run API tests, required check and full browser suite. Retain existing source/app/SHA validation and endpoint contracts. Review bounded diff, then user-approved current feature-branch commit/push. Publication is separate from PR/main/production deployment.
+
+Verification: container context RED reproduced; API42/check66/browser28/independent review PASS. Minimal product fix complete, current commit/push approved. No PR/main/deploy.
