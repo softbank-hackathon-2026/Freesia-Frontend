@@ -556,3 +556,13 @@ User-approved publication follow-up (2026-10-04): commit and push the verified c
 User explicitly requested removal of the repeated access/public/branch-unverified small text from integration repository rows, followed by commit, feature-branch push, PR and main merge. Remove only that small element in GitHubIntegration.tsx; preserve repository name/branch/URL, actions, registration form and API behavior. Branch codex/remove-repository-disclaimer from maindaca013. Required check and original full browser suite before publication; no new test needed for this one-line copy removal. Operational Deploy not requested.
 
 Repository disclaimer removal verified: check66/type/lint/build and fullbrowser28 PASS; current commit/push/PR/main merge approved, Deploy excluded.
+
+
+## README and Archify architecture assets — approved 2026-10-04
+User requested README cleanup and reuse of existing Archify diagrams. Documentation-only scope: README.md, canonical image/standalone HTML exports under docs/architecture, and this record. Branch codex/readme-architecture from main0dba04e. README reflects PieckPick branding, current onboarding/API defaults, separate progress/tree/observation views, reviewed redeployment, logs search/pause/TXT, and manual frontend CD. Existing historical contracts/evaluations remain preserved. Diff/link/instruction and exported-asset portability/rendering checks are required; application checks are not rerun for this documentation-only change. No commit, push, PR, main merge, Deploy, Notion, backend or cloud changes authorized.
+
+README/Archify documentation verification completed 2026-10-04:11 source-consistency checks,11 relative links, diff/scope/hash/portability checks PASS. Worker inspected canonical SVG img renders at native and README960px widths; no clipping. HTML copies equal the prior finalized artifacts. Application checks not rerun for documentation-only change. Local uncommitted codex/readme-architecture; no Git publication or operational deployment.
+
+Publication follow-up approved 2026-10-04: user explicitly requested committing and pushing the reviewed README/assets, then creating a PR and merging main. Fresh documentation/link/hash/diff checks precede publication. No operational Deploy is included.
+
+Canonical Archify HTML/SVG are preserved byte-for-byte. Their generator contains trailing whitespace; prose passes the default staged whitespace check and generated assets pass with only blank-at-eol excluded. No generated runtime content is rewritten for formatting.
