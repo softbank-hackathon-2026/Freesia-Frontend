@@ -240,7 +240,14 @@ async function checkSidebar(page, mobile) {
   assert.equal(await page.locator(".role-note").count(), 0);
   const brandIcon = sidebar.locator(".brand .brand-icon");
   assert.equal(await brandIcon.count(), 1);
-  assert.equal(await brandIcon.getAttribute("src"), "/freesia-mascot.jpg");
+  assert.equal(await brandIcon.getAttribute("src"), "/pieckpick-mascot.png");
+  assert.equal(await sidebar.locator(".brand-title").textContent(), "PieckPick");
+  assert.deepEqual(await sidebar.locator(".brand-name small").allTextContents(), [
+    '"인프라를 구축하겠어!"', '"インフラを構築してやる！"',
+  ]);
+  assert.equal(await sidebar.locator('.brand-name small[lang="ja"]').count(), 1);
+  assert.equal(await page.title(), "PieckPick Console");
+  assert.equal(await page.locator('link[rel="icon"]').getAttribute("href"), "/pieckpick-mascot.png");
   await brandIcon.evaluate((image) => image.decode());
   assert.ok(await brandIcon.evaluate((image) => image.naturalWidth > 0));
   const flower = await page.evaluate((source) => {
@@ -911,6 +918,8 @@ try {
   assert.equal(await readinessPage.getByRole("heading", { name: "배포 관리", exact: true }).count(), 1, "only the dialog heading remains");
   await managementChooser.getByRole("button", { name: "취소", exact: true }).click();
   const accessLink = readinessPage.getByRole("link", { name: "배포된 애플리케이션 접속", exact: true });
+  assert.equal(await readinessPage.getByRole("button", { name: "앱 접속 안내", exact: true }).count(), 0, "access action has no question-mark help button");
+  assert.equal(await readinessPage.locator("#app-access-context-help").count(), 0, "removed access help has no popup content");
   assert.equal(await accessLink.getAttribute("href"), accessUrl);
   assert.equal(await accessLink.getAttribute("target"), "_blank");
   assert.deepEqual((await accessLink.getAttribute("rel")).split(/\s+/).sort(), ["noopener", "noreferrer"]);

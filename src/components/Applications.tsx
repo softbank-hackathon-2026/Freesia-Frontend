@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import DeploymentResources from "./DeploymentResources.tsx";
 import ApplicationLogs from "./ApplicationLogs.tsx";
 import ApplicationMetrics from "./ApplicationMetrics.tsx";
-import ContextHelp from "./ContextHelp.tsx";
 import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
 import { getInfraProvider } from "../lib/providers.ts";
 import {
@@ -72,7 +71,7 @@ export default function Applications({
   initialForm,
   onDraftChange,
   apiRepositories, repositoryLoading, repositoryError, onRefresh,
-  loading, loadError, discardableApps, onDiscard, storageBlocked,
+  loading, loadError, discardableApps, onDiscard, storageBlocked, nextGuideMascot,
 }: {
   mode: DataMode;
   appId: string | null;
@@ -87,6 +86,7 @@ export default function Applications({
   discardableApps: AppSpace[];
   onDiscard: (id: string, signal?: AbortSignal) => void | Promise<void>;
   storageBlocked: boolean;
+  nextGuideMascot: () => string;
   apps: AppSpace[];
   infras: InfraSpace[];
   designs: InfraDesign[];
@@ -102,6 +102,13 @@ export default function Applications({
   const session = useRef(0);
   const request = useRef<AbortController | null>(null);
   const restoredApp = useRef<string | null>(null);
+  const guideApp = useRef<string | null>(null);
+  const [guideImage, setGuideImage] = useState('/pieckpick-mascot.png');
+  function chooseGuide(id: string) {
+    if (guideApp.current === id) return;
+    guideApp.current = id;
+    setGuideImage(nextGuideMascot());
+  }
   const tabButtons = useRef<(HTMLButtonElement | null)[]>([]);
   const workflowRequest = useRef<AbortController | null>(null);
   const stageHeading = useRef<HTMLHeadingElement>(null);
@@ -441,6 +448,7 @@ export default function Applications({
       if (token !== session.current) { onRefresh(); return; }
       onCreate(app);
       setCreating(false);
+      chooseGuide(app.id);
       restoredApp.current = app.id;
       onNavigate(app.id);
       setSelected(app);
@@ -596,6 +604,7 @@ export default function Applications({
   function backToList(replace = false) {
     resetDetail();
     restoredApp.current = null;
+    guideApp.current = null;
     onNavigate(null, "overview", replace);
   }
   async function discard() {
@@ -620,6 +629,7 @@ export default function Applications({
     }
   }
   async function restoreApp(id: string) {
+    chooseGuide(id);
     resetDetail();
     const token = session.current;
     const app = apps.find(entry => entry.id === id);
@@ -692,7 +702,10 @@ export default function Applications({
     // Only a different app changes the session; tab/history changes retain active work.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (appId) void restoreApp(appId);
-    else resetDetail();
+    else {
+      guideApp.current = null;
+      resetDetail();
+    }
     // List refreshes must not restart analysis, SSE or teardown guards.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appId]);
@@ -906,9 +919,6 @@ export default function Applications({
           <div className="heading-actions app-detail-actions">
             {mode === "api" && deployment?.app_space_id === selected.id && deployment.status === "success" && deployedAppUrl && !teardownComplete && !teardownUnconfirmed && <div className="title-with-help app-access-actions">
               <a className="deployed-app-link" href={deployedAppUrl} target="_blank" rel="noopener noreferrer">배포된 애플리케이션 접속</a>
-              <ContextHelp id="app-access-context-help" label="앱 접속 안내">
-                서버가 보고한 주소입니다. URL 접속·앱 정상 여부는 별도로 확인하세요. 플랫폼 /health는 고객 앱 상태가 아닙니다.
-              </ContextHelp>
             </div>}
             {hasDeploymentHistory && <button className="primary" disabled={discarding} onClick={openManagement}>배포 관리</button>}
             {selected && mode === "api" && deployment && <button className="secondary"
@@ -1264,8 +1274,8 @@ export default function Applications({
                         {analysis.mascot_message && (
                           <div className="mascot">
                             <img
-                              src="/freesia-mascot.jpg"
-                              alt="Freesia 집 캐릭터"
+                              src={guideImage}
+                              alt="PieckPick 배포 안내 캐릭터"
                             />
                             <p>{analysis.mascot_message}</p>
                           </div>

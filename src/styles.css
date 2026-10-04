@@ -141,6 +141,7 @@ a {
   background: transparent;
 }
 .brand {
+  max-width: 100%;
   display: inline-flex;
   gap: 10px;
   align-items: center;
@@ -157,6 +158,7 @@ a {
   border-radius: 6px;
 }
 .brand-name {
+  min-width: 0;
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 22px;
   font-weight: 700;
@@ -164,6 +166,9 @@ a {
   line-height: 1.1;
 }
 .brand-name small {
+  white-space: nowrap;
+  line-height: 1.4;
+  font-weight: 500;
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 10px;
   letter-spacing: 0;

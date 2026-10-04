@@ -10,7 +10,7 @@ export function generateTerraform(c: Choices): string {
   if (!complete(c)) throw new Error("필수 질문에 모두 답변하세요.");
   const count = c.availability === "multi" ? 2 : 1;
   // ponytail: guided VPC/subnet template only; replace with reviewed AI output when the API exists.
-  return `# Freesia 데모 템플릿 · 실제 AI 생성/검증/적용되지 않았습니다.
+  return `# PieckPick 데모 템플릿 · 실제 AI 생성/검증/적용되지 않았습니다.
 # 요구사항 자유 입력은 보존되며 이 코드에 자동 반영되지 않습니다.
 # 샘플은 VPC/Subnet만 포함합니다. ALB/ECS/NAT/IAM/보안 규칙은 별도 설계가 필요합니다.
 terraform {
