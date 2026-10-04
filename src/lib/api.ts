@@ -55,7 +55,7 @@ function redeployContextShape(value: unknown): boolean {
   const sha = (value: unknown) => typeof value === "string" && /^[a-f0-9]{40}$/i.test(value);
   return !!v && ["app_space_id","repo_url","branch","source_deployment_id"].every(key => nonempty(v[key]))
     && (v.source_commit_sha === null || sha(v.source_commit_sha)) && sha(v.target_commit_sha)
-    && ["ecs-fargate","lambda","ec2"].includes(String(v.compute)) && !!plan
+    && typeof v.compute === "string" && ["ecs-fargate","lambda","ec2","onprem"].includes(v.compute) && !!plan
     && nonempty(plan.id) && nonempty(plan.template) && !!record(plan.values) && jsonValue(plan.values);
 }
 function monitoringShape(v: Record<string, unknown>): boolean {
@@ -71,7 +71,7 @@ function logsShape(value: unknown): boolean {
 function metricsShape(value: unknown): boolean {
   const v = record(value);
   return !!v && monitoringShape(v)
-    && (v.compute === null || (typeof v.compute === "string" && ["ecs-fargate","lambda","ec2"].includes(v.compute)))
+    && (v.compute === null || (typeof v.compute === "string" && ["ecs-fargate","lambda","ec2","onprem"].includes(v.compute)))
     && ["cpu_percent","memory_percent","response_time_ms","request_count","error_count"].every(key => v[key] === null || (typeof v[key] === "number" && Number.isFinite(v[key]) && v[key] >= 0))
     && ["request_count","error_count"].every(key => v[key] === null || Number.isInteger(v[key]))
     && nullableString(v.measured_at);

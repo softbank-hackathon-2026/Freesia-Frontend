@@ -43,11 +43,12 @@ const appTabs = [
 ] as const;
 const apiBase = import.meta.env.VITE_API_BASE_URL || "/api";
 const api = createApi(apiBase);
-const computeLabels: Record<string, string> = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2" };
+const computeLabels: Record<string, string> = { "ecs-fargate": "ECS Fargate", lambda: "Lambda", ec2: "EC2", onprem: "On-premises" };
 const computeIcons: Record<string, string> = {
   "ecs-fargate": "/compute/ecs-fargate.png",
   lambda: "/compute/lambda.png",
   ec2: "/compute/ec2.png",
+  onprem: "/providers/on-premise.png",
 };
 const deploymentStages = ["코드 분석", "실행 환경 선택", "구성안 검토", "배포 진행", "전체 구성"] as const;
 type DeploymentStage = 0 | 1 | 2 | 3 | 4;
@@ -1218,7 +1219,7 @@ export default function Applications({
                                       <img src={computeIcons[c.compute]} alt="" />
                                     </span>
                                   )}
-                                  {c.compute}
+                                  {c.compute === "onprem" ? computeLabels.onprem : c.compute}
                                 </strong>
                                 <span className="badge">
                                   {c.state === "selected"
@@ -1271,7 +1272,7 @@ export default function Applications({
                         )}
                         <div className="deploy-actions">
                           <div>
-                            <strong>사용자 선택: {chosen || "없음"}</strong>
+                            <strong>사용자 선택: {chosen === "onprem" ? computeLabels.onprem : chosen || "없음"}</strong>
                             <p className="muted">
                               추천 표시와 사용자 선택은 별개입니다.
                               {mode === "demo" ? " 실제 클라우드 변경 없이 샘플 상태만 진행합니다." : " 선택 후 서버의 템플릿과 설정값을 검토합니다."}
@@ -1287,7 +1288,7 @@ export default function Applications({
                     </>}
                     {viewStep === 2 && <>
                       <div className="deployment-review-title"><h3>템플릿 · 설정값 검토</h3><span className="badge caution">{mode === "demo" ? "샘플 구성안" : "서버 구성안"}</span></div>
-                    <p>실행 환경: {chosen}</p>
+                    <p>실행 환경: {chosen === "onprem" ? computeLabels.onprem : chosen}</p>
                     {planError && <p role="alert">{planError}</p>}
                     {busy && !analysisPending && <p role="status">요청 처리 중…</p>}
                     {mode === "api" && !plans && !planError && <p>구성안 조회 후 템플릿과 설정값을 확인하세요.</p>}
@@ -1323,7 +1324,7 @@ export default function Applications({
                       {mode === "api" && deployment.status === "failed" && <button disabled={busy || discarding || !!streamId || teardownUnconfirmed} onClick={() => { setReviewed(false); setViewStep(configurationReady ? 2 : 0); }}>{configurationReady ? "설정값 확인 · 배포 재시도" : "구성 다시 확인 · 재시도 준비"}</button>}
                       <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
                       <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
-                      <p>실행 환경: {deployment.compute}</p>
+                      <p>실행 환경: {deployment.compute === "onprem" ? computeLabels.onprem : deployment.compute}</p>
                       {mode === "api" && <details className="break-word" aria-label="배포 버전과 설정">
                         <summary>배포 상세 정보</summary>
                         <p>배포 ID: {deployment.id}</p>
@@ -1339,7 +1340,7 @@ export default function Applications({
                       )}
                     </div>
                     </>}
-                    {resourceDeployment && <DeploymentResources key={resourceDeployment.id} id={resourceDeployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
+                    {resourceDeployment && <DeploymentResources provider={infra?.provider} key={resourceDeployment.id} id={resourceDeployment.id} refresh={`${event?.at ?? "initial"}:${selected.teardown_status ?? "none"}:${selected.teardown_finished_at ?? ""}`} appName={selected.name}/>}
                     {viewStep === 4 && matchingDeployment && mode === "demo" && <p className="muted">데모에서는 실제 배포 자원 구성을 조회하지 않습니다.</p>}
                   </div>
                 </section>
@@ -1504,7 +1505,7 @@ export default function Applications({
         <dialog ref={discardDialog} className="discard-dialog" aria-labelledby="app-discard-heading" aria-describedby="app-discard-description" aria-busy={discarding} onCancel={event => { if (discarding) event.preventDefault(); }}>
           <h2 id="app-discard-heading">애플리케이션 삭제</h2>
           <p id="app-discard-description">{mode === "api"
-            ? "선택한 애플리케이션을 목록에서 숨깁니다. 배포·분석 기록과 연결된 인프라·Repository는 유지됩니다. AWS에 배포된 앱은 먼저 내리기를 완료해 주세요. 배포·내리기 중에는 삭제할 수 없습니다."
+            ? "선택한 애플리케이션을 목록에서 숨깁니다. 배포·분석 기록과 연결된 인프라·Repository는 유지됩니다. 배포된 앱은 먼저 내리기를 완료해 주세요. 배포·내리기 중에는 삭제할 수 없습니다."
             : "선택한 DEMO 애플리케이션이 브라우저에서 삭제돼요. 배포 이력이 있는 애플리케이션은 삭제할 수 없어요. 연결된 인프라와 Repository는 유지돼요."}</p>
           <label htmlFor="app-discard-target">삭제할 애플리케이션</label>
           {selected ? <input id="app-discard-target" value={selected.name} readOnly /> : <select id="app-discard-target" disabled={discarding} value={discardId} onChange={(event) => { setDiscardId(event.target.value); setDiscardError(""); }}>

@@ -754,3 +754,63 @@ test("Infra Space still rejects unknown networks on list and detail", async () =
     await assert.rejects(request, (error: unknown) => error instanceof ApiError && error.code === "invalid_response");
   }
 });
+test("onprem plans, deployments and Ansible resources use existing API routes", async () => {
+  const planSet = {status:"done",compute:"onprem",plans:[{id:"onprem-plan",name:"VM",summary:"",pros:[],cons:[],template:"onprem/basic",values:{container_port:3000}}]};
+  const deployment = {...redeployResult,compute:"onprem",plan_id:"onprem-plan"};
+  const resources = [{address:"ansible.deploy_container",type:"ansible_task",action:"create",state:"done",reason:null,updated_at:"now"}];
+  const calls: {url:string;init?:RequestInit}[] = [];
+  const api = createApi("/api", async (url,init) => {
+    calls.push({url:String(url),init});
+    return Response.json(String(url).endsWith("/resources") ? resources : String(url).endsWith("/deployments") ? deployment : planSet);
+  });
+  assert.deepEqual(await api.createPlans("app/one","onprem"),planSet);
+  assert.deepEqual(await api.plans("app/one","onprem"),planSet);
+  assert.deepEqual(await api.deploy("app/one","onprem","onprem-plan"),deployment);
+  assert.deepEqual(await api.resources(deployment.id),resources);
+  assert.deepEqual(calls.map(({url,init})=>[url,init?.method]),[
+    ["/api/app-spaces/app%2Fone/plans","POST"],
+    ["/api/app-spaces/app%2Fone/plans?compute=onprem","GET"],
+    ["/api/app-spaces/app%2Fone/deployments","POST"],
+    ["/api/deployments/new-deployment/resources","GET"],
+  ]);
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)),{compute:"onprem"});
+  assert.deepEqual(JSON.parse(String(calls[2].init?.body)),{compute:"onprem",plan_id:"onprem-plan"});
+});
+
+test("onprem redeploy accepts the saved context and retains source and SHA guards", async () => {
+  const context = {...redeployContext,compute:"onprem",plan:{...redeployContext.plan,template:"onprem/basic"}};
+  const result = {...redeployResult,compute:"onprem"};
+  const calls: {url:string;init?:RequestInit}[] = [];
+  const api = createApi("/api", async (url,init) => {
+    calls.push({url:String(url),init});
+    return Response.json(String(url).endsWith("/redeploy-context") ? context : result);
+  });
+  assert.deepEqual(await api.redeployContext("app-1"),context);
+  const body = {source_deployment_id:context.source_deployment_id,target_commit_sha:context.target_commit_sha};
+  assert.deepEqual(await api.redeploy("app-1",body),result);
+  assert.deepEqual(calls.map(({url,init})=>[url,init?.method]),[
+    ["/api/app-spaces/app-1/redeploy-context","GET"],
+    ["/api/app-spaces/app-1/redeployments","POST"],
+  ]);
+  assert.equal(calls[0].init?.body,undefined);
+  assert.deepEqual(JSON.parse(String(calls[1].init?.body)),body);
+  for (const compute of ["vm","on-prem","onprem-future",["onprem"],null]) {
+    await assert.rejects(createApi("/api",async()=>Response.json({...context,compute})).redeployContext("app-1"),{code:"invalid_response"});
+  }
+  await assert.rejects(createApi("/api",async()=>Response.json({...context,app_space_id:"other"})).redeployContext("app-1"),{code:"invalid_response"});
+  await assert.rejects(createApi("/api",async()=>Response.json({...result,commit_sha:"a".repeat(40)})).redeploy("app-1",body),{code:"invalid_response"});
+});
+
+test("onprem unsupported metrics preserve the server explanation and null measurements", async () => {
+  const data = {status:"unsupported",message:"On-premises metrics are not supported.",compute:"onprem",cpu_percent:null,memory_percent:null,response_time_ms:null,request_count:null,error_count:null,measured_at:null};
+  const calls: {url:string;init?:RequestInit}[] = [];
+  const api = createApi("/api",async(url,init)=>{calls.push({url:String(url),init});return Response.json(data);});
+  assert.deepEqual(await api.metrics("app/one"),data);
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].url,"/api/app-spaces/app%2Fone/metrics");
+  assert.equal(calls[0].init?.method,"GET");
+  assert.equal(calls[0].init?.body,undefined);
+  for (const compute of ["vm","on-prem","onprem-future",["onprem"]]) {
+    await assert.rejects(createApi("/api",async()=>Response.json({...data,compute})).metrics("app/one"),{code:"invalid_response"});
+  }
+});
