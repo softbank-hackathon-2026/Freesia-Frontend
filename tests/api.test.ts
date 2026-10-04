@@ -299,10 +299,10 @@ test("analysis polls after one POST, supports cancellation and enforces deadline
   assert.deepEqual(calls, ["POST", "GET", "GET"]);
   assert.deepEqual(seen, ["pending", "running", "done"]);
   let aborted = false;
-  const hanging = createApi("/api", (_url, init) => new Promise((_resolve, reject) => {
+  const hanging = createApi("/api", (_url, init) => init?.method === "GET" ? Promise.reject(new TypeError("recovery unavailable")) : new Promise((_resolve, reject) => {
     init!.signal!.addEventListener("abort", () => { aborted = true; reject(init!.signal!.reason); }, { once: true });
   }));
-  await assert.rejects(hanging.analyzeUntilDone("a", {timeoutMs: 5}), /시간/);
+  await assert.rejects(hanging.analyzeUntilDone("a", {timeoutMs: 5}), /연결/);
   assert.equal(aborted, true);
   const controller = new AbortController();
   const task = hanging.analyzeUntilDone("a", {signal:controller.signal});
@@ -333,13 +333,13 @@ test("analysis failure terminates polling and abort during delay sends no GET or
   const failed = {status:"failed",requirements:[],evidence:[],candidates:[],mascot_message:"분석 실패"};
   let calls=0;
   assert.equal((await createApi("",async()=>{calls++;return new Response(JSON.stringify(failed));}).analyzeUntilDone("x")).status,"failed");
-  assert.equal(calls,1);
+  assert.equal(calls,5);
   const controller = new AbortController();
   const statuses:string[]=[];
   const api=createApi("",async()=>{calls++;return new Response(JSON.stringify({...failed,status:"running"}));});
   const result=api.analyzeUntilDone("x",{signal:controller.signal,intervalMs:1000,onUpdate:value=>{statuses.push(value.status);queueMicrotask(()=>controller.abort());}});
   await assert.rejects(result,{name:"AbortError"});
-  assert.equal(calls,2);
+  assert.equal(calls,6);
   assert.deepEqual(statuses,["running"]);
 });
 
@@ -407,10 +407,10 @@ test("deployable computes remains optional but invalid readiness metadata is rej
 test("analysis deadline is 190 seconds while plan deadline remains 60 seconds",async(t)=>{
   t.mock.timers.enable({apis:["setTimeout"]});
   let aborted=0;
-  const api=createApi("",(_url,init)=>new Promise((_resolve,reject)=>{
+  const api=createApi("",(_url,init)=>init?.method === "GET" ? Promise.reject(new TypeError("recovery unavailable")) : new Promise((_resolve,reject)=>{
     init!.signal!.addEventListener("abort",()=>{aborted++;reject(init!.signal!.reason);},{once:true});
   }));
-  const analysis=assert.rejects(api.analyzeUntilDone("a"),/시간/);
+  const analysis=assert.rejects(api.analyzeUntilDone("a"),/연결/);
   t.mock.timers.tick(189_999);
   assert.equal(aborted,0);
   t.mock.timers.tick(1);
@@ -834,4 +834,191 @@ test("onprem unsupported metrics preserve the server explanation and null measur
   for (const compute of ["vm","on-prem","onprem-future",["onprem"]]) {
     await assert.rejects(createApi("/api",async()=>Response.json({...data,compute})).metrics("app/one"),{code:"invalid_response"});
   }
+});
+
+test("analysis retries confirmed failures and stops on early or fifth success", async () => {
+  for (const successAttempt of [1, 2, 5]) {
+    const methods: string[] = [];
+    const attempts: number[] = [];
+    const statuses: string[] = [];
+    let posts = 0;
+    const api = createApi("/api", async (_url, init) => {
+      methods.push(init!.method!);
+      if (init!.method === "POST") posts++;
+      const status = init!.method === "POST" ? "running" : posts === successAttempt ? "done" : "failed";
+      return new Response(JSON.stringify({status,requirements:[],evidence:[],candidates:[],mascot_message:null}));
+    });
+    const result = await api.analyzeUntilDone("a", {intervalMs:1, onAttempt: attempt => attempts.push(attempt), onUpdate: value => statuses.push(value.status)});
+    assert.equal(result.status, "done");
+    assert.equal(posts, successAttempt);
+    assert.deepEqual(attempts, Array.from({length:successAttempt}, (_, index) => index + 1));
+    assert.deepEqual(methods, Array.from({length:successAttempt}, () => ["POST", "GET"]).flat());
+    assert.deepEqual(statuses, [...Array.from({length:successAttempt}, () => "running"), "done"]);
+  }
+});
+
+test("analysis exposes only the fifth failure and preserves its final reason without a sixth POST", async () => {
+  let posts = 0;
+  const statuses: string[] = [];
+  const attempts: number[] = [];
+  const api = createApi("/api", async (_url, init) => {
+    assert.equal(init!.method, "POST");
+    posts++;
+    return new Response(JSON.stringify({status:"failed",requirements:[],evidence:[],candidates:[],mascot_message:"failure " + posts}));
+  });
+  const result = await api.analyzeUntilDone("a", {onAttempt: attempt => attempts.push(attempt), onUpdate: value => statuses.push(value.status)});
+  assert.equal(result.status, "failed");
+  assert.equal(result.mascot_message, "failure 5");
+  assert.equal(posts, 5);
+  assert.deepEqual(attempts, [1,2,3,4,5]);
+  assert.deepEqual(statuses, ["failed"]);
+});
+
+test("analysis abort between attempts prevents the next POST and preserves cancellation reason", async () => {
+  const controller = new AbortController();
+  const reason = new DOMException("navigation", "AbortError");
+  let posts = 0;
+  const api = createApi("/api", async () => {
+    posts++;
+    return new Response(JSON.stringify({status:"failed",requirements:[],evidence:[],candidates:[],mascot_message:null}));
+  });
+  await assert.rejects(api.analyzeUntilDone("a", {signal:controller.signal, onAttempt: attempt => {if (attempt === 2) controller.abort(reason);}}), error => error === reason);
+  assert.equal(posts, 1);
+  await assert.rejects(api.analyzeUntilDone("a", {signal:controller.signal}), error => error === reason);
+  assert.equal(posts, 1);
+});
+
+test("analysis does not retry HTTP, transport, or invalid response errors", async () => {
+  for (const kind of ["http", "transport", "invalid"]) {
+    let calls = 0;
+    const api = createApi("/api", async () => {
+      calls++;
+      if (kind === "transport") throw new TypeError("offline");
+      return new Response(JSON.stringify(kind === "http" ? {message:"unavailable",error:"unavailable"} : {}), {status:kind === "http" ? 503 : 200});
+    });
+    await assert.rejects(api.analyzeUntilDone("a"), ApiError);
+    assert.equal(calls, 1);
+  }
+});
+
+test("analysis deadline recovery retries only confirmed failure and returns active or done snapshots", async () => {
+  for (const recoveredStatus of ["failed", "running", "pending", "done"]) {
+    const methods: string[] = [];
+    const statuses: string[] = [];
+    const attempts: number[] = [];
+    const api = createApi("/api", async (_url, init) => {
+      methods.push(init!.method!);
+      if (methods.length === 1) return new Promise<Response>((_resolve,reject) => {
+        init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), {once:true});
+      });
+      return new Response(JSON.stringify({status:init!.method === "GET" ? recoveredStatus : "done",requirements:[],evidence:[],candidates:[],mascot_message:null}));
+    });
+    const result = await api.analyzeUntilDone("a", {timeoutMs:5, onAttempt: attempt => attempts.push(attempt), onUpdate: value => statuses.push(value.status)});
+    assert.equal(result.status, recoveredStatus === "failed" ? "done" : recoveredStatus);
+    assert.deepEqual(methods, recoveredStatus === "failed" ? ["POST","GET","POST"] : ["POST","GET"]);
+    assert.deepEqual(attempts, recoveredStatus === "failed" ? [1,2] : [1]);
+    assert.deepEqual(statuses, [result.status]);
+  }
+});
+
+
+test("analysis timeout recovery shares the five-attempt limit and final failure reason", async () => {
+  const methods: string[] = [];
+  const statuses: string[] = [];
+  let posts = 0;
+  const api = createApi("/api", async (_url, init) => {
+    methods.push(init!.method!);
+    if (init!.method === "POST") {
+      posts++;
+      return new Promise<Response>((_resolve,reject) => {
+        init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), {once:true});
+      });
+    }
+    return new Response(JSON.stringify({status:"failed",requirements:[],evidence:[],candidates:[],mascot_message:"timeout failure " + posts}));
+  });
+  const result = await api.analyzeUntilDone("a", {timeoutMs:5, onUpdate: value => statuses.push(value.status)});
+  assert.equal(posts, 5);
+  assert.equal(result.mascot_message, "timeout failure 5");
+  assert.deepEqual(methods, Array.from({length:5}, () => ["POST","GET"]).flat());
+  assert.deepEqual(statuses, ["failed"]);
+});
+
+test("analysis timeout recovery remains cancellable without another request", async () => {
+  const controller = new AbortController();
+  const reason = new DOMException("navigation during recovery", "AbortError");
+  const methods: string[] = [];
+  const api = createApi("/api", async (_url, init) => {
+    methods.push(init!.method!);
+    return new Promise<Response>((_resolve,reject) => {
+      init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), {once:true});
+      if (init!.method === "GET") controller.abort(reason);
+    });
+  });
+  await assert.rejects(api.analyzeUntilDone("a", {timeoutMs:5, signal:controller.signal}), error => error === reason);
+  assert.deepEqual(methods, ["POST","GET"]);
+});
+
+
+test("analysis does not recover or retry an HTTP error carrying the poll_timeout code", async () => {
+  const methods: string[] = [];
+  const api = createApi("/api", async (_url, init) => {
+    methods.push(init!.method!);
+    if (methods.length === 1) return new Response(JSON.stringify({error:"poll_timeout",message:"upstream deadline"}), {status:504});
+    return new Response(JSON.stringify({status:"failed",requirements:[],evidence:[],candidates:[],mascot_message:"failed"}));
+  });
+  await assert.rejects(api.analyzeUntilDone("a"), {status:504,code:"poll_timeout",message:"upstream deadline"});
+  assert.deepEqual(methods, ["POST"]);
+});
+
+
+test("analysis waits exactly 200ms only between confirmed failures, including the fifth-attempt boundary", async (t) => {
+  t.mock.timers.enable({apis:["setTimeout"]});
+  for (const terminal of [{attempt:1,status:"done"}, {attempt:3,status:"done"}, {attempt:5,status:"failed"}]) {
+    let posts = 0;
+    let completed = false;
+    const api = createApi("/api", async (_url, init) => {
+      assert.equal(init!.method, "POST");
+      posts++;
+      return new Response(JSON.stringify({status:posts === terminal.attempt ? terminal.status : "failed",requirements:[],evidence:[],candidates:[],mascot_message:null}));
+    });
+    const task = api.analyzeUntilDone("a").then(value => {completed = true; return value;});
+    assert.equal(posts, 1, "the first POST must start without a delay");
+    await new Promise<void>(resolve => setImmediate(resolve));
+    for (let attempt = 2; attempt <= terminal.attempt; attempt++) {
+      assert.equal(posts, attempt - 1);
+      assert.equal(completed, false);
+      t.mock.timers.tick(199);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(posts, attempt - 1, "199ms must not start the next attempt");
+      t.mock.timers.tick(1);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(posts, attempt, "200ms starts the next attempt");
+    }
+    assert.equal(completed, true, "success and final failure must return without an extra delay");
+    assert.equal((await task).status, terminal.status);
+    t.mock.timers.tick(1000);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(posts, terminal.attempt, "no sixth or post-success request is sent");
+  }
+});
+
+test("analysis cancellation during the 200ms retry wait preserves reason and prevents another POST", async (t) => {
+  t.mock.timers.enable({apis:["setTimeout"]});
+  const controller = new AbortController();
+  const reason = new DOMException("navigation during retry wait", "AbortError");
+  let posts = 0;
+  const api = createApi("/api", async () => {
+    posts++;
+    return new Response(JSON.stringify({status:"failed",requirements:[],evidence:[],candidates:[],mascot_message:null}));
+  });
+  const task = api.analyzeUntilDone("a", {signal:controller.signal});
+  const rejected = assert.rejects(task, error => error === reason);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(posts, 1);
+  t.mock.timers.tick(100);
+  controller.abort(reason);
+  await rejected;
+  t.mock.timers.tick(1000);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(posts, 1);
 });

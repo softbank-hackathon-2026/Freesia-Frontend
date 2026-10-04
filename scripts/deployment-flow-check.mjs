@@ -254,7 +254,7 @@ try {
     await clean(page, state); record("resource tree stays hidden in analysis/reanalysis/choice/review/progress, restores inside whole configuration, and clears when switching apps");
   }
   {
-    const { page, state } = await scenario({ analysisFailures: 1, failedMessage: "Controlled server failure: Bedrock throttled" });
+    const { page, state } = await scenario({ analysisFailures: 5, failedMessage: "Controlled server failure: Bedrock throttled" });
     await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click();
     const failure = page.getByRole("alert");
     await failure.waitFor();
@@ -308,7 +308,7 @@ try {
   }
   for (const status of ["pending", "running"]) {
     const { page, state } = await scenario({ clock: true, analysisSnapshot: runningAnalysis(status) });
-    await page.getByText("코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.", { exact: true }).waitFor();
+    await page.getByText("코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.", { exact: true }).waitFor();
     await step(page, 1); assert.deepEqual(mutations(state), []);
     state.analysisSnapshot = analysis; await page.clock.fastForward(2100); await step(page, 2);
     assert.ok(state.analysisReads >= 2); assert.deepEqual(mutations(state), []);
@@ -329,16 +329,22 @@ try {
     await page.waitForFunction(() => !document.querySelector(".deployment-stage-actions button")?.disabled);
     // Paused virtual time freezes actionability animation frames; enabled state is checked above.
     await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click({ force: true });
-    await page.getByText("코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.", { exact: true }).waitFor();
+    await page.getByText("코드를 분석하고 있습니다.", { exact: true }).waitFor();
     await page.clock.fastForward(150_000);
     assert.equal(await page.getByRole("button", { name: "분석 상태 다시 확인", exact: true }).count(), 0, "analysis remains active past the former 150s deadline");
     await page.clock.fastForward(39_000);
-    await page.getByText("코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.", { exact: true }).waitFor();
+    await page.getByText("코드를 분석하고 있습니다.", { exact: true }).waitFor();
     const reads = state.analysisReads;
     state.analysisSnapshot = finalStatus === "done" ? analysis : { ...runningAnalysis(finalStatus), mascot_message: finalStatus === "failed" ? "Controlled final GET failure" : null };
+    if (finalStatus === "failed") state.postAnalysis = analysis;
     await page.clock.fastForward(2000);
     if (finalStatus === "done") await step(page, 2);
-    else if (finalStatus === "failed") { await step(page, 1); await page.getByText("Controlled final GET failure", { exact: true }).waitFor(); }
+    else if (finalStatus === "failed") {
+      // runFor executes the retry delay while allowing the final GET promise to settle.
+      await page.clock.runFor(500);
+      await step(page, 2);
+      assert.equal(await page.getByRole("alert").count(), 0, "confirmed final GET failure retries and succeeds without a transient alert");
+    }
     else {
       await step(page, 1); await page.getByText(/분석 대기 시간이 지나 자동 확인을 중단했습니다/).waitFor();
       assert.equal(await page.getByRole("button", { name: "다시 분석", exact: true }).isDisabled(), true, "known running server analysis cannot create a duplicate POST");
@@ -348,10 +354,10 @@ try {
       await page.getByRole("button", { name: "분석 상태 다시 확인", exact: true }).click({ force: true }); await step(page, 2);
     }
     assert.ok(state.analysisReads > reads, "190s deadline performs a final GET");
-    assert.equal(mutations(state).length, 1, "timeout recovery and retry never repeat POST");
+    assert.equal(mutations(state).length, finalStatus === "failed" ? 2 : 1, "only confirmed final GET failure retries POST; timeout and status recovery remain GET-only");
     await clean(page, state);
   }
-  record("190s deadline/final GET restores done or failed; still running stops and retries GET only");
+  record("190s final GET restores done, retries confirmed failure, or stops running state for GET-only recovery");
   {
     const { page, state } = await scenario({ holdAnalysisGet: true, analysisSnapshot: analysis, otherApp: true });
     while (!state.releaseAnalysisGet) await page.waitForTimeout(20);
@@ -434,7 +440,7 @@ try {
     await clean(page, state); record("happy flow, sticky/mobile/keyboard review, explicit confirmation, server progress/tree, monitoring and teardown preserved");
   }
   {
-    const { page, state } = await scenario({ analysisFailures: 1, planFailures: 1, deployFailures: 1 });
+    const { page, state } = await scenario({ analysisFailures: 5, planFailures: 1, deployFailures: 1 });
     await page.getByRole("button", { name: "코드 분석 시작", exact: true }).click();
     await page.getByText(/분석에 실패했습니다/).waitFor(); await step(page, 1);
     await page.getByRole("button", { name: "다시 분석", exact: true }).click(); await step(page, 2);
@@ -454,7 +460,7 @@ try {
     await visitStep(page, 4);
     await page.getByRole("button", { name: "설정값 확인 · 배포 재시도", exact: true }).click(); await step(page, 3);
     assert.equal(await page.getByLabel("설정값을 확인했습니다", { exact: true }).isChecked(), false);
-    assert.equal(state.calls.filter(call => call.method === "POST" && call.path.endsWith("/analysis")).length, 2);
+    assert.equal(state.calls.filter(call => call.method === "POST" && call.path.endsWith("/analysis")).length, 6, "five automatic attempts plus one successful manual retry");
     assert.equal(state.calls.filter(call => call.method === "POST" && call.path.endsWith("/plans")).length, 2);
     assert.equal(state.calls.filter(call => call.method === "POST" && call.path.endsWith("/deployments")).length, 2);
     await clean(page, state); record("analysis/config/deploy failures stay in their stage; explicit retries; failed terminal stays in progress with reason/retry and manual resource inspection");

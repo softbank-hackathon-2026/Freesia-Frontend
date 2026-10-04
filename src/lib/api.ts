@@ -105,6 +105,8 @@ export class ApiError extends Error {
     this.code = code;
   }
 }
+export const ANALYSIS_MAX_ATTEMPTS = 5;
+
 export function createApi(base: string, fetcher: typeof fetch = fetch) {
   const root = base.replace(/\/$/, "");
   async function request<T>(path: string, body?: unknown, method: "GET" | "POST" | "DELETE" = "GET", signal?: AbortSignal): Promise<T> {
@@ -179,7 +181,34 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
     createApp: (body:Omit<AppSpaceCreate, "infra_id"> & {infra_id?: string}, signal?:AbortSignal) => request<AppSpace>("/app-spaces",body,"POST",signal),
     analyze,
     analysis,
-    analyzeUntilDone: (id:string, options?:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>analyze(id,signal),signal=>analysis(id,signal),"분석",{...options, timeoutMs:options?.timeoutMs ?? 190_000}),
+    analyzeUntilDone: async (id:string, options:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;onAttempt?:(attempt:number)=>void;intervalMs?:number;timeoutMs?:number} = {}) => {
+      for (let attempt = 1; ; attempt++) {
+        options.signal?.throwIfAborted();
+        options.onAttempt?.(attempt);
+        options.signal?.throwIfAborted();
+        const onUpdate = (value:Analysis) => {
+          if (value.status !== "failed" || attempt === ANALYSIS_MAX_ATTEMPTS) options.onUpdate?.(value);
+        };
+        let value: Analysis;
+        try {
+          value = await pollUntilDone(signal=>analyze(id,signal),signal=>analysis(id,signal),"분석",{...options,onUpdate,timeoutMs:options.timeoutMs ?? 190_000});
+        } catch (error) {
+          options.signal?.throwIfAborted();
+          if (!(error instanceof ApiError) || error.status !== undefined || error.code !== "poll_timeout") throw error;
+          const timeout = AbortSignal.timeout(10_000);
+          value = await analysis(id,options.signal ? AbortSignal.any([options.signal,timeout]) : timeout);
+          onUpdate(value);
+        }
+        options.signal?.throwIfAborted();
+        if (value.status !== "failed" || attempt === ANALYSIS_MAX_ATTEMPTS) return value;
+        await new Promise<void>((resolve,reject) => {
+          const abort = () => {clearTimeout(timer);options.signal?.removeEventListener("abort",abort);reject(options.signal?.reason);};
+          const timer = setTimeout(() => {options.signal?.removeEventListener("abort",abort);resolve();},200);
+          options.signal?.addEventListener("abort",abort,{once:true});
+          if (options.signal?.aborted) abort();
+        });
+      }
+    },
     analysisUntilDone: (id:string, options?:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>analysis(id,signal),signal=>analysis(id,signal),"분석",{...options, timeoutMs:options?.timeoutMs ?? 190_000}),
     plansUntilDone: (id:string,compute:string,options?:{signal?:AbortSignal;onUpdate?:(value:PlanSet)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),signal=>request<PlanSet>(`${appPath(id)}/plans?compute=${encodeURIComponent(compute)}`,undefined,"GET",signal),"구성안",options),
     createPlans: (id:string,compute:string,signal?:AbortSignal) => request<PlanSet>(`${appPath(id)}/plans`,{compute},"POST",signal),

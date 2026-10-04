@@ -557,6 +557,18 @@ User explicitly requested removal of the repeated access/public/branch-unverifie
 
 Repository disclaimer removal verified: check66/type/lint/build and fullbrowser28 PASS; current commit/push/PR/main merge approved, Deploy excluded.
 
+## Analysis automatic retry — 2026-10-04
+User requested immediate retries after code-analysis failures and final failure only after five unsuccessful attempts. Implementation scope: five total attempts including the initial request, retry only confirmed Analysis.status=failed, suppress intermediate failure UI, expose current attempt, preserve final mascot_message/fallback, stop on success or navigation abort. GET-only restoration must not restart historical failures. Transport/HTTP/schema errors do not blindly restart analysis; timeout recovery reads existing status and only a confirmed failed result permits a new attempt. Existing analysis success navigation and deployment/plan behavior remain intact. Branch codex/analysis-auto-retry from main0dba04e. No commit/push/PR/deploy requested for this change.
+Owned units: API worker src/lib/api.ts + tests/api.test.ts; browser worker focused mocked regression script; root Applications.tsx + existing records. Verify RED/GREEN API and browser scenarios, required check/fullbrowser, independent diff review. No backend, dependency or infrastructure changes.
+User follow-up explicitly authorized direct main commit and push after verification. Local main fast-forwarded to origin/main0dba04e and active diff carried over unchanged; no PR or Deploy requested.
+
+User UI correction: do not display numeric attempt counters such as (2/5). Keep the five-attempt logic and plain analysis/retry status sentences. This supersedes the earlier counter-display proposal.
+
+
+## Silent analysis retry — 2026-10-04
+User correction: intermediate analysis failure/retry must be invisible. All active attempts show the same initial analysis sentence; only five total failures expose the last reason. One UI expression changes; retry cap, API, cancellation and historical restoration remain unchanged. Existing focused regression now checks identical text and no retry/failure/count status. Branch codex/silent-analysis-retry. Implementation only; no new Git publication requested.
+
+User follow-up: wait200ms between confirmed failed analysis attempts (no delay before the first request, after success, or after the fifth failure); waiting must abort on navigation. Keep every attempt visually identical with no retry/failure/count disclosure until final exhaustion. User explicitly authorized committing/pushing this combined change directly to main after verification.
 
 ## README and Archify architecture assets — approved 2026-10-04
 User requested README cleanup and reuse of existing Archify diagrams. Documentation-only scope: README.md, canonical image/standalone HTML exports under docs/architecture, and this record. Branch codex/readme-architecture from main0dba04e. README reflects PieckPick branding, current onboarding/API defaults, separate progress/tree/observation views, reviewed redeployment, logs search/pause/TXT, and manual frontend CD. Existing historical contracts/evaluations remain preserved. Diff/link/instruction and exported-asset portability/rendering checks are required; application checks are not rerun for this documentation-only change. No commit, push, PR, main merge, Deploy, Notion, backend or cloud changes authorized.

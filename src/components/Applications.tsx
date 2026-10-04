@@ -173,6 +173,7 @@ export default function Applications({
   const [failCI, setFailCI] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [analysisPending, setAnalysisPending] = useState(false);
+  const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const [analysisReadError, setAnalysisReadError] = useState("");
   const [reconnecting, setReconnecting] = useState(false);
   const [streamError, setStreamError] = useState("");
@@ -250,8 +251,11 @@ export default function Applications({
   const configurationReady = analysis?.status === "done" && (mode === "demo"
     ? reviewPlan?.status === "template_ready" && reviewPlan.compute === chosen
     : plans?.status === "done" && plans.compute === chosen && plans.plans.length > 0);
+  const analysisProgressMessage = analysisAttempt > 0
+    ? "코드를 분석하고 있습니다."
+    : "코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.";
   const analysisRunning = analysis?.status === "pending" || analysis?.status === "running";
-  const failedAnalysisMessage = analysis?.status === "failed"
+  const failedAnalysisMessage = !analysisPending && analysis?.status === "failed"
     ? analysis.mascot_message?.trim() ? analysis.mascot_message : "분석에 실패했습니다. 코드 분석을 다시 시작하세요."
     : "";
   const deploymentFinished = matchingDeployment && !!deployment && ["success", "failed"].includes(deployment.status);
@@ -712,16 +716,19 @@ export default function Applications({
   }, [appId]);
   async function waitForAnalysis(id: string, controller: AbortController, token: number, existing: boolean, preserveDeployment: boolean) {
     workflowRequest.current = controller;
-    setBusy(true); setAnalysisPending(true); setAnalysisReadError("");
+    setBusy(true); setAnalysisPending(true); setAnalysisAttempt(0); setAnalysisReadError("");
     const current = () => token === session.current && !controller.signal.aborted;
     try {
       const onUpdate = (value: Analysis) => { if (current()) setAnalysis(value); };
+      const onAttempt = (attempt: number) => {
+        if (current()) { setAnalysisAttempt(attempt); setAnalysis(null); }
+      };
       let result: Analysis;
       try {
-        result = mode === "demo" ? sampleAnalysis : await (existing ? api.analysisUntilDone : api.analyzeUntilDone)(id, { signal: controller.signal, onUpdate });
+        result = mode === "demo" ? sampleAnalysis : await (existing ? api.analysisUntilDone : api.analyzeUntilDone)(id, { signal: controller.signal, onUpdate, onAttempt });
       } catch (e) {
         if (!current()) return;
-        if (!(e instanceof ApiError) || e.code !== "poll_timeout") throw e;
+        if (!existing || !(e instanceof ApiError) || e.status !== undefined || e.code !== "poll_timeout") throw e;
         // A polling deadline stops this client wait; it does not cancel the server analysis.
         result = await api.analysis(id, AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]));
       }
@@ -958,7 +965,7 @@ export default function Applications({
         {analysisReadError}
         <button disabled={busy || discarding || analysisPending} onClick={refreshAnalysis}>분석 상태 다시 확인</button>
       </div>}
-      {selected && analysisPending && viewStep !== 0 && <p className="notice" role="status">코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
+      {selected && analysisPending && viewStep !== 0 && <p className="notice" role="status">{analysisProgressMessage}</p>}
       {mode === "api" && repositoryError && <div className="error" role="alert">{repositoryError}<button onClick={onRefresh}>Repository 다시 조회</button></div>}
       {creating && mode === "api" && repositoryLoading ? <p role="status">Repository 불러오는 중…</p> : creating && !registered.length ? (
         <section className="panel detail">
@@ -1131,7 +1138,7 @@ export default function Applications({
                       </div>
                       <p className="muted">{mode === "demo" ? "고정 샘플 분석입니다. 저장소 코드를 읽거나 AI를 호출하지 않습니다." : "서버가 반환한 요구사항·근거·실행 환경 후보입니다. 추천과 현재 배포 지원 여부를 구분해 확인하세요."}</p>
                       {hasDeploymentHistory && <p className="notice">{mode === "demo" ? "재분석은 별도 샘플 구성 선택 과정입니다. 기존 성공 설정이 바뀔 수 있습니다." : "재분석은 AI 분석과 새 구성 선택 과정이며 기존 설정이 바뀔 수 있습니다. 현재 서버에서 새 코드를 반영하려면 이 과정을 거쳐야 합니다."}</p>}
-                      {analysisPending && <p role="status">코드를 분석하고 있습니다. 완료까지 자동으로 다시 조회합니다.</p>}
+                      {analysisPending && <p role="status">{analysisProgressMessage}</p>}
                       {analysis?.status === "done" && <>
                         {mode === "demo" && <div
                           className="decision-tree"
