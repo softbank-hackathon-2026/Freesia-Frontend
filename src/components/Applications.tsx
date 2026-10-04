@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import DeploymentResources from "./DeploymentResources.tsx";
+import DeploymentDuration from "./DeploymentDuration.tsx";
 import ApplicationLogs from "./ApplicationLogs.tsx";
 import ApplicationMetrics from "./ApplicationMetrics.tsx";
 import { ApiError, createApi, watchDeployment } from "../lib/api.ts";
@@ -681,7 +682,7 @@ export default function Applications({
           if (value.app_space_id !== id || value.id !== fresh.latest_deployment_id) throw new Error("배포 응답이 현재 앱 또는 요청한 배포와 다릅니다.");
           setDeployment(value);
           showDeploymentStage(value);
-          setStreamId(value.id);
+          setStreamId(["success", "failed"].includes(value.status) ? "" : value.id);
         }
       } catch (e) {
         if (token === session.current && !controller.signal.aborted) {
@@ -1333,7 +1334,7 @@ export default function Applications({
                       {deployment.demo_pipeline && deployment.status === "failed" && <button onClick={()=>{setPlan(deployment.demo_pipeline!.plan);setChosen(deployment.compute);setReviewed(false);setFailCI(false);setViewStep(2);}}>실패 내용 확인 · 재시도 준비</button>}
                       {mode === "api" && deployment.status === "failed" && <button disabled={busy || discarding || !!streamId || teardownUnconfirmed} onClick={() => { setReviewed(false); setViewStep(configurationReady ? 2 : 0); }}>{configurationReady ? "설정값 확인 · 배포 재시도" : "구성 다시 확인 · 재시도 준비"}</button>}
                       <progress max={100} value={currentProgress} aria-label="배포 진행률"/>
-                      <p>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</p>
+                      <p className="deployment-progress-summary"><span>{currentProgress === undefined ? "현재 진행률 확인 중…" : `${currentProgress}%`}</span><DeploymentDuration key={deployment.id} deployment={deployment} event={event} mode={mode} apiBase={apiBase} onSnapshot={setEvent}/></p>
                       <p>실행 환경: {deployment.compute === "onprem" ? computeLabels.onprem : deployment.compute}</p>
                       {mode === "api" && <details className="break-word" aria-label="배포 버전과 설정">
                         <summary>배포 상세 정보</summary>
