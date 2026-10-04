@@ -836,7 +836,7 @@ test("onprem unsupported metrics preserve the server explanation and null measur
   }
 });
 
-test("analysis retries confirmed failures immediately and stops on early or fifth success", async () => {
+test("analysis retries confirmed failures and stops on early or fifth success", async () => {
   for (const successAttempt of [1, 2, 5]) {
     const methods: string[] = [];
     const attempts: number[] = [];
@@ -968,4 +968,57 @@ test("analysis does not recover or retry an HTTP error carrying the poll_timeout
   });
   await assert.rejects(api.analyzeUntilDone("a"), {status:504,code:"poll_timeout",message:"upstream deadline"});
   assert.deepEqual(methods, ["POST"]);
+});
+
+
+test("analysis waits exactly 200ms only between confirmed failures, including the fifth-attempt boundary", async (t) => {
+  t.mock.timers.enable({apis:["setTimeout"]});
+  for (const terminal of [{attempt:1,status:"done"}, {attempt:3,status:"done"}, {attempt:5,status:"failed"}]) {
+    let posts = 0;
+    let completed = false;
+    const api = createApi("/api", async (_url, init) => {
+      assert.equal(init!.method, "POST");
+      posts++;
+      return new Response(JSON.stringify({status:posts === terminal.attempt ? terminal.status : "failed",requirements:[],evidence:[],candidates:[],mascot_message:null}));
+    });
+    const task = api.analyzeUntilDone("a").then(value => {completed = true; return value;});
+    assert.equal(posts, 1, "the first POST must start without a delay");
+    await new Promise<void>(resolve => setImmediate(resolve));
+    for (let attempt = 2; attempt <= terminal.attempt; attempt++) {
+      assert.equal(posts, attempt - 1);
+      assert.equal(completed, false);
+      t.mock.timers.tick(199);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(posts, attempt - 1, "199ms must not start the next attempt");
+      t.mock.timers.tick(1);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(posts, attempt, "200ms starts the next attempt");
+    }
+    assert.equal(completed, true, "success and final failure must return without an extra delay");
+    assert.equal((await task).status, terminal.status);
+    t.mock.timers.tick(1000);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(posts, terminal.attempt, "no sixth or post-success request is sent");
+  }
+});
+
+test("analysis cancellation during the 200ms retry wait preserves reason and prevents another POST", async (t) => {
+  t.mock.timers.enable({apis:["setTimeout"]});
+  const controller = new AbortController();
+  const reason = new DOMException("navigation during retry wait", "AbortError");
+  let posts = 0;
+  const api = createApi("/api", async () => {
+    posts++;
+    return new Response(JSON.stringify({status:"failed",requirements:[],evidence:[],candidates:[],mascot_message:null}));
+  });
+  const task = api.analyzeUntilDone("a", {signal:controller.signal});
+  const rejected = assert.rejects(task, error => error === reason);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(posts, 1);
+  t.mock.timers.tick(100);
+  controller.abort(reason);
+  await rejected;
+  t.mock.timers.tick(1000);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(posts, 1);
 });

@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import assert from "node:assert/strict";
+import { performance } from "node:perf_hooks";
 
 // Every API response is a local fixture; this harness cannot mutate a live backend.
 const port = process.env.ANALYSIS_RETRY_PORT || "15246";
@@ -26,7 +27,7 @@ async function atStage(page, label) {
 async function scenario(options = {}) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   page.setDefaultTimeout(9000);
-  const state = { posts: 0, reads: 0, failures: 0, snapshot: null, holdPosts: new Set(), releases: new Map(), holdPoll: false, releasePoll: null, response: done, httpError: false, errors: [], unexpected: [], ...options };
+  const state = { posts: 0, postTimes: [], failureTimes: [], reads: 0, failures: 0, snapshot: null, holdPosts: new Set(), releases: new Map(), holdPoll: false, releasePoll: null, response: done, httpError: false, errors: [], unexpected: [], ...options };
   page.on("pageerror", error => state.errors.push(error.message));
   await page.route("**/api/**", async route => {
     const request = route.request(), path = new URL(request.url()).pathname;
@@ -46,9 +47,11 @@ async function scenario(options = {}) {
       }
       assert.ok(path.includes("/" + app.id + "/"), "only explicitly selected app is analyzed");
       const attempt = ++state.posts;
+      state.postTimes.push(performance.now());
       if (state.holdPosts.has(attempt)) await new Promise(resolve => state.releases.set(attempt, resolve));
       if (state.httpError) return json({ message: "Controlled request outage" }, 503);
       state.snapshot = attempt <= state.failures ? failed(attempt) : state.response;
+      if (state.snapshot.status === "failed") state.failureTimes.push(performance.now());
       return json(state.snapshot);
     }
     state.unexpected.push(path);
@@ -101,9 +104,9 @@ try {
     await page.getByRole("status").filter({ hasText: "코드를 분석하고 있습니다." }).waitFor();
     state.releases.get(1)();
     await until(page, () => state.releasePoll);
-    await page.getByRole("status").filter({ hasText: "분석을 자동으로 재시도하고 있습니다." }).waitFor();
+    await page.getByRole("status").filter({ hasText: "코드를 분석하고 있습니다." }).waitFor();
     await atStage(page, "코드 분석"); await noFailure(page);
-    assert.doesNotMatch(await page.getByRole("status").allTextContents().then(values => values.join(" ")), /\([1-5]\/5\)/, "retry status hides numeric attempt counts");
+    assert.doesNotMatch(await page.getByRole("status").allTextContents().then(values => values.join(" ")), /재시도|실패|\([1-5]\/5\)/, "intermediate failure and retry stay invisible to the user");
     assert.equal(state.posts, 2);
     await page.screenshot({ path: "artifacts/analysis-auto-retry-desktop.png", fullPage: true });
     state.snapshot = done; state.holdPoll = false; state.releasePoll();
@@ -118,6 +121,7 @@ try {
     await atStage(page, "코드 분석");
     await page.waitForTimeout(2500);
     assert.equal(state.posts, 5, "five total attempts includes the initial POST; no sixth automatic POST");
+    for (let attempt = 1; attempt < 5; attempt++) assert.ok(state.postTimes[attempt] - state.failureTimes[attempt - 1] >= 100, "automatic retries respect a delay after each failed response");
     const failures = await page.evaluate(() => window.observedFailures);
     assert.ok(failures.length > 0);
     assert.ok(failures.every(text => text.includes("Fixture attempt 5 failed")), "only final reason can become visible");

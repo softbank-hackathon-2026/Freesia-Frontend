@@ -252,7 +252,7 @@ export default function Applications({
     ? reviewPlan?.status === "template_ready" && reviewPlan.compute === chosen
     : plans?.status === "done" && plans.compute === chosen && plans.plans.length > 0);
   const analysisProgressMessage = analysisAttempt > 0
-    ? analysisAttempt > 1 ? "분석을 자동으로 재시도하고 있습니다." : "코드를 분석하고 있습니다."
+    ? "코드를 분석하고 있습니다."
     : "코드 분석 상태를 확인하고 있습니다. 완료까지 자동으로 다시 조회합니다.";
   const analysisRunning = analysis?.status === "pending" || analysis?.status === "running";
   const failedAnalysisMessage = !analysisPending && analysis?.status === "failed"

@@ -563,3 +563,9 @@ Owned units: API worker src/lib/api.ts + tests/api.test.ts; browser worker focus
 User follow-up explicitly authorized direct main commit and push after verification. Local main fast-forwarded to origin/main0dba04e and active diff carried over unchanged; no PR or Deploy requested.
 
 User UI correction: do not display numeric attempt counters such as (2/5). Keep the five-attempt logic and plain analysis/retry status sentences. This supersedes the earlier counter-display proposal.
+
+
+## Silent analysis retry — 2026-10-04
+User correction: intermediate analysis failure/retry must be invisible. All active attempts show the same initial analysis sentence; only five total failures expose the last reason. One UI expression changes; retry cap, API, cancellation and historical restoration remain unchanged. Existing focused regression now checks identical text and no retry/failure/count status. Branch codex/silent-analysis-retry. Implementation only; no new Git publication requested.
+
+User follow-up: wait200ms between confirmed failed analysis attempts (no delay before the first request, after success, or after the fifth failure); waiting must abort on navigation. Keep every attempt visually identical with no retry/failure/count disclosure until final exhaustion. User explicitly authorized committing/pushing this combined change directly to main after verification.

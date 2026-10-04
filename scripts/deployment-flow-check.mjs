@@ -339,7 +339,12 @@ try {
     if (finalStatus === "failed") state.postAnalysis = analysis;
     await page.clock.fastForward(2000);
     if (finalStatus === "done") await step(page, 2);
-    else if (finalStatus === "failed") { await step(page, 2); assert.equal(await page.getByRole("alert").count(), 0, "confirmed final GET failure retries and succeeds without a transient alert"); }
+    else if (finalStatus === "failed") {
+      // runFor executes the retry delay while allowing the final GET promise to settle.
+      await page.clock.runFor(500);
+      await step(page, 2);
+      assert.equal(await page.getByRole("alert").count(), 0, "confirmed final GET failure retries and succeeds without a transient alert");
+    }
     else {
       await step(page, 1); await page.getByText(/분석 대기 시간이 지나 자동 확인을 중단했습니다/).waitFor();
       assert.equal(await page.getByRole("button", { name: "다시 분석", exact: true }).isDisabled(), true, "known running server analysis cannot create a duplicate POST");

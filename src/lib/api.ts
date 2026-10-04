@@ -201,6 +201,12 @@ export function createApi(base: string, fetcher: typeof fetch = fetch) {
         }
         options.signal?.throwIfAborted();
         if (value.status !== "failed" || attempt === ANALYSIS_MAX_ATTEMPTS) return value;
+        await new Promise<void>((resolve,reject) => {
+          const abort = () => {clearTimeout(timer);options.signal?.removeEventListener("abort",abort);reject(options.signal?.reason);};
+          const timer = setTimeout(() => {options.signal?.removeEventListener("abort",abort);resolve();},200);
+          options.signal?.addEventListener("abort",abort,{once:true});
+          if (options.signal?.aborted) abort();
+        });
       }
     },
     analysisUntilDone: (id:string, options?:{signal?:AbortSignal;onUpdate?:(value:Analysis)=>void;intervalMs?:number;timeoutMs?:number}) => pollUntilDone(signal=>analysis(id,signal),signal=>analysis(id,signal),"분석",{...options, timeoutMs:options?.timeoutMs ?? 190_000}),
