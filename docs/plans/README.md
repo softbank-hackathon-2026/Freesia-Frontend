@@ -550,3 +550,9 @@ Implementation: a small isolated timer component avoids parent-wide renders ever
 - Deployment duration completed locally: focused12/check66/fullbrowser28/flow19/tree/source+visual PASS; bounded terminal replay preserves selected stage and action availability. Branch codex/deployment-duration; no publication or operational deployment.
 
 User-approved publication follow-up (2026-10-04): commit and push the verified current deployment-duration diff on codex/deployment-duration. Product source is unchanged since focused12/check66/browser28/flow19/tree and independent reviews passed. No PR/main merge or operational deployment requested. Exact commit/remote match recorded in canonical wiki and session INDEX after publication.
+
+
+## Repository list disclaimer removal — approved 2026-10-04
+User explicitly requested removal of the repeated access/public/branch-unverified small text from integration repository rows, followed by commit, feature-branch push, PR and main merge. Remove only that small element in GitHubIntegration.tsx; preserve repository name/branch/URL, actions, registration form and API behavior. Branch codex/remove-repository-disclaimer from maindaca013. Required check and original full browser suite before publication; no new test needed for this one-line copy removal. Operational Deploy not requested.
+
+Repository disclaimer removal verified: check66/type/lint/build and fullbrowser28 PASS; current commit/push/PR/main merge approved, Deploy excluded.
